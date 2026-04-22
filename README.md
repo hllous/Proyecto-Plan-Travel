@@ -1,17 +1,14 @@
-# Plan Travel MVP
+# Plan Travel 
 
-MVP Android app built with Kotlin, Jetpack Compose, Room, and Hilt.
+- Creacion e invitaciones de grupos (Codigos, QR)
+- Recomendaciones de destinos
+- Divisor de gastos
 
-## Implemented in this stage
+## Integrantes
 
-- Travel groups with roles (admin/user)
-- Member invitations via code, link, and QR
-- In-app QR camera scan flow
-- Argentina destination recommendations by region
-- BallRoom expense split by consumed item quantity per member
-- Leftover amount assigned to group admin
-
-## Run
-
-Use Android Studio to sync and run `app` on an emulator/device.
+- Llousas, Nicolas Facundo
+- Marolda, Guido
+- Casais, Nicolas
+- Ortiz Mejia, Tobias
+- Xu, Valentín Ezequiel
 
