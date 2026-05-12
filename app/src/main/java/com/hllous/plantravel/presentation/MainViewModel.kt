@@ -117,6 +117,12 @@ class MainViewModel @Inject constructor(
         _currentMemberId.value = memberId
     }
 
+    fun leaveSelectedGroupForDebug() {
+        _selectedGroupId.value = null
+        _currentMemberId.value = null
+        _settlements.value = emptyList()
+    }
+
     fun clearMessage() {
         _message.value = null
     }
@@ -236,7 +242,6 @@ class MainViewModel @Inject constructor(
                 return@launch
             }
             addExpenseItemUseCase(groupId, name, totalCents, quantity)
-            _message.value = "Item agregado"
             recalculateSettlementSilently(groupId)
         }
     }
@@ -249,7 +254,6 @@ class MainViewModel @Inject constructor(
                 return@launch
             }
             assignItemToMemberUseCase(itemId, memberId, quantity)
-            _message.value = "Consumo actualizado"
             val groupId = _selectedGroupId.value
             if (groupId != null) {
                 recalculateSettlementSilently(groupId)
@@ -260,7 +264,6 @@ class MainViewModel @Inject constructor(
     fun deleteExpenseItem(itemId: Long) {
         viewModelScope.launch {
             deleteExpenseItemUseCase(itemId)
-            _message.value = "Item eliminado"
             val groupId = _selectedGroupId.value
             if (groupId != null) {
                 recalculateSettlementSilently(groupId)

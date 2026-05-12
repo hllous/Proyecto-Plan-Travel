@@ -201,7 +201,6 @@ class TravelRepositoryImpl @Inject constructor(
     }
 
     override suspend fun calculateSettlement(groupId: Long): List<MemberSettlement> {
-        val group = dao.getGroup(groupId) ?: return emptyList()
         val members = dao.getMembers(groupId)
         if (members.isEmpty()) return emptyList()
 
@@ -211,18 +210,32 @@ class TravelRepositoryImpl @Inject constructor(
 
         for (item in items) {
             val itemAssignments = details[item.id].orEmpty()
-            var allocated = 0L
-            for (assignment in itemAssignments) {
-                if (assignment.quantity <= 0 || assignment.itemQuantity <= 0) continue
-                val share = (item.totalPriceCents * assignment.quantity) / assignment.itemQuantity
-                allocated += share
-                debts[assignment.memberId] = debts.getOrDefault(assignment.memberId, 0L) + share
+            val validAssignments = itemAssignments
+                .filter { it.quantity > 0 && it.itemQuantity > 0 }
+
+            if (validAssignments.isEmpty()) continue
+
+            val shares = validAssignments.map { assignment ->
+                val rawAmount = item.totalPriceCents * assignment.quantity
+                val baseShare = rawAmount / assignment.itemQuantity
+                val remainder = rawAmount % assignment.itemQuantity
+                Triple(assignment.memberId, baseShare, remainder)
             }
 
-            val remainder = item.totalPriceCents - allocated
-            val adminId = group.adminMemberId
-            if (adminId != null && remainder > 0) {
-                debts[adminId] = debts.getOrDefault(adminId, 0L) + remainder
+            val allocated = shares.sumOf { it.second }
+            val leftoverCents = (item.totalPriceCents - allocated).coerceAtLeast(0L)
+            val bonusByMember = shares
+                .sortedWith(
+                    compareByDescending<Triple<Long, Long, Long>> { it.third }
+                        .thenBy { it.first }
+                )
+                .take(leftoverCents.toInt())
+                .groupingBy { it.first }
+                .eachCount()
+
+            shares.forEach { (memberId, baseShare, _) ->
+                val finalShare = baseShare + (bonusByMember[memberId] ?: 0)
+                debts[memberId] = debts.getOrDefault(memberId, 0L) + finalShare
             }
         }
 
