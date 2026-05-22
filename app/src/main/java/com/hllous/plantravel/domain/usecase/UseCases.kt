@@ -2,6 +2,7 @@ package com.hllous.plantravel.domain.usecase
 
 import com.hllous.plantravel.domain.model.MemberRole
 import com.hllous.plantravel.domain.repository.TravelRepository
+import com.hllous.plantravel.domain.settlement.AssignmentOutcome
 import javax.inject.Inject
 
 class CreateGroupUseCase @Inject constructor(
@@ -75,7 +76,7 @@ class AddExpenseItemUseCase @Inject constructor(
 class AssignItemToMemberUseCase @Inject constructor(
     private val repository: TravelRepository
 ) {
-    suspend operator fun invoke(itemId: Long, memberId: Long, quantity: Int): Result<Unit> {
+    suspend operator fun invoke(itemId: Long, memberId: Long, quantity: Int): AssignmentOutcome {
         return repository.assignItemToMember(itemId, memberId, quantity)
     }
 }

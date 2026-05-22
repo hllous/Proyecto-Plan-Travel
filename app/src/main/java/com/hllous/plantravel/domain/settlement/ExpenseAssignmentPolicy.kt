@@ -8,9 +8,9 @@ enum class AssignmentRejectionReason {
     OVER_ASSIGNED
 }
 
-sealed class AssignmentValidationResult {
-    data object Accepted : AssignmentValidationResult()
-    data class Rejected(val reason: AssignmentRejectionReason) : AssignmentValidationResult()
+sealed class AssignmentOutcome {
+    data object Accepted : AssignmentOutcome()
+    data class Rejected(val reason: AssignmentRejectionReason) : AssignmentOutcome()
 }
 
 class ExpenseAssignmentPolicy {
@@ -19,9 +19,9 @@ class ExpenseAssignmentPolicy {
         currentAssignments: List<ItemAssignment>,
         memberId: Long,
         requestedQuantity: Int
-    ): AssignmentValidationResult {
+    ): AssignmentOutcome {
         if (requestedQuantity < 0) {
-            return AssignmentValidationResult.Rejected(AssignmentRejectionReason.NEGATIVE_QUANTITY)
+            return AssignmentOutcome.Rejected(AssignmentRejectionReason.NEGATIVE_QUANTITY)
         }
 
         val assignedToOthers = currentAssignments
@@ -30,9 +30,9 @@ class ExpenseAssignmentPolicy {
         val requestedTotal = assignedToOthers + requestedQuantity
 
         return if (requestedTotal > item.quantity) {
-            AssignmentValidationResult.Rejected(AssignmentRejectionReason.OVER_ASSIGNED)
+            AssignmentOutcome.Rejected(AssignmentRejectionReason.OVER_ASSIGNED)
         } else {
-            AssignmentValidationResult.Accepted
+            AssignmentOutcome.Accepted
         }
     }
 }

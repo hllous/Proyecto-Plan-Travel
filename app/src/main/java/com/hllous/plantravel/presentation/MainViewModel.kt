@@ -12,6 +12,8 @@ import com.hllous.plantravel.domain.model.SettlementResult
 import com.hllous.plantravel.domain.model.SettlementWarning
 import com.hllous.plantravel.domain.model.TravelGroup
 import com.hllous.plantravel.domain.repository.TravelRepository
+import com.hllous.plantravel.domain.settlement.AssignmentOutcome
+import com.hllous.plantravel.domain.settlement.AssignmentRejectionReason
 import com.hllous.plantravel.domain.usecase.AddExpenseItemUseCase
 import com.hllous.plantravel.domain.usecase.AddMemberUseCase
 import com.hllous.plantravel.domain.usecase.AssignItemToMemberUseCase
@@ -268,14 +270,21 @@ class MainViewModel @Inject constructor(
                 _message.value = "Cantidad invalida"
                 return@launch
             }
-            val result = assignItemToMemberUseCase(itemId, memberId, quantity)
-            if (result.isFailure) {
-                _message.value = assignmentFailureMessage(result.exceptionOrNull()?.message)
+            val outcome = try {
+                assignItemToMemberUseCase(itemId, memberId, quantity)
+            } catch (e: IllegalStateException) {
+                _message.value = "El item ya no existe"
                 return@launch
             }
-            val groupId = _selectedGroupId.value
-            if (groupId != null) {
-                recalculateSettlementSilently(groupId)
+            when (outcome) {
+                AssignmentOutcome.Accepted -> {
+                    val groupId = _selectedGroupId.value
+                    if (groupId != null) recalculateSettlementSilently(groupId)
+                }
+                is AssignmentOutcome.Rejected -> _message.value = when (outcome.reason) {
+                    AssignmentRejectionReason.OVER_ASSIGNED -> "La cantidad asignada supera la cantidad del item"
+                    AssignmentRejectionReason.NEGATIVE_QUANTITY -> "Cantidad invalida"
+                }
             }
         }
     }
@@ -316,15 +325,6 @@ class MainViewModel @Inject constructor(
     private fun updateSettlement(result: SettlementResult) {
         _settlements.value = result.memberSettlements
         _settlementWarnings.value = result.warnings
-    }
-
-    private fun assignmentFailureMessage(reason: String?): String {
-        return when (reason) {
-            "OVER_ASSIGNED" -> "La cantidad asignada supera la cantidad del item"
-            "NEGATIVE_QUANTITY" -> "Cantidad invalida"
-            "ITEM_NOT_FOUND" -> "Item no encontrado"
-            else -> "No se pudo actualizar el consumo"
-        }
     }
 
     private fun parsePriceToCents(value: String): Long {

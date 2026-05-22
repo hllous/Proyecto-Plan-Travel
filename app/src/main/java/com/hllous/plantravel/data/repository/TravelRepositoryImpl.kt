@@ -16,7 +16,7 @@ import com.hllous.plantravel.domain.model.MemberRole
 import com.hllous.plantravel.domain.model.SettlementResult
 import com.hllous.plantravel.domain.model.TravelGroup
 import com.hllous.plantravel.domain.repository.TravelRepository
-import com.hllous.plantravel.domain.settlement.AssignmentValidationResult
+import com.hllous.plantravel.domain.settlement.AssignmentOutcome
 import com.hllous.plantravel.domain.settlement.ExpenseAssignmentPolicy
 import com.hllous.plantravel.domain.settlement.ExpenseSettlementCalculator
 import java.util.Locale
@@ -191,7 +191,7 @@ class TravelRepositoryImpl @Inject constructor(
         )
     }
 
-    override suspend fun assignItemToMember(itemId: Long, memberId: Long, quantity: Int): Result<Unit> {
+    override suspend fun assignItemToMember(itemId: Long, memberId: Long, quantity: Int): AssignmentOutcome {
         val item = dao.getExpenseItem(itemId)?.let {
             ExpenseItem(
                 id = it.id,
@@ -200,26 +200,22 @@ class TravelRepositoryImpl @Inject constructor(
                 totalPriceCents = it.totalPriceCents,
                 quantity = it.quantity
             )
-        } ?: return Result.failure(IllegalArgumentException("ITEM_NOT_FOUND"))
+        } ?: error("Expense item $itemId not found — this is a programming error")
         val assignments = dao.getAssignmentsForItem(itemId).map {
             ItemAssignment(itemId = it.itemId, memberId = it.memberId, quantity = it.quantity)
         }
 
-        when (val validation = assignmentPolicy.validate(item, assignments, memberId, quantity)) {
-            AssignmentValidationResult.Accepted -> Unit
-            is AssignmentValidationResult.Rejected -> return Result.failure(
-                IllegalArgumentException(validation.reason.name)
+        val outcome = assignmentPolicy.validate(item, assignments, memberId, quantity)
+        if (outcome is AssignmentOutcome.Accepted) {
+            dao.upsertAssignment(
+                ItemAssignmentEntity(
+                    itemId = itemId,
+                    memberId = memberId,
+                    quantity = quantity
+                )
             )
         }
-
-        dao.upsertAssignment(
-            ItemAssignmentEntity(
-                itemId = itemId,
-                memberId = memberId,
-                quantity = quantity
-            )
-        )
-        return Result.success(Unit)
+        return outcome
     }
 
     override suspend fun deleteExpenseItem(itemId: Long) {

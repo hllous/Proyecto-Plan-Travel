@@ -18,7 +18,7 @@ class ExpenseAssignmentPolicyTest {
             requestedQuantity = 2
         )
 
-        assertTrue(result is AssignmentValidationResult.Accepted)
+        assertTrue(result is AssignmentOutcome.Accepted)
     }
 
     @Test
@@ -31,7 +31,7 @@ class ExpenseAssignmentPolicyTest {
         )
 
         assertEquals(
-            AssignmentValidationResult.Rejected(AssignmentRejectionReason.OVER_ASSIGNED),
+            AssignmentOutcome.Rejected(AssignmentRejectionReason.OVER_ASSIGNED),
             result
         )
     }
@@ -46,7 +46,7 @@ class ExpenseAssignmentPolicyTest {
         )
 
         assertEquals(
-            AssignmentValidationResult.Rejected(AssignmentRejectionReason.NEGATIVE_QUANTITY),
+            AssignmentOutcome.Rejected(AssignmentRejectionReason.NEGATIVE_QUANTITY),
             result
         )
     }
@@ -63,7 +63,7 @@ class ExpenseAssignmentPolicyTest {
             requestedQuantity = 2
         )
 
-        assertTrue(result is AssignmentValidationResult.Accepted)
+        assertTrue(result is AssignmentOutcome.Accepted)
     }
 
     private fun item(quantity: Int) =

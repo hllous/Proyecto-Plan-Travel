@@ -28,6 +28,10 @@ _Avoid_: Balance, bill
 Structured information about an Expense Item that cannot be fully settled, such as an Unassigned Quantity and its unassigned amount. UI text is derived from this warning outside the domain.
 _Avoid_: Error message, snackbar text
 
+**Assignment Outcome**:
+The typed result of an attempt to set an Assigned Quantity for a group member. Either `Accepted` (the assignment was valid and persisted) or `Rejected` with a typed reason (`OverAssigned` or `NegativeQuantity`). Data-integrity failures (e.g. item not found) are not Assignment Outcomes — they are programming errors surfaced as unchecked exceptions.
+_Avoid_: assignment result, validation result, error code
+
 ## Example Dialogue
 
 Planner: "This Expense Item has six tickets, but only four are assigned."
