@@ -85,11 +85,17 @@ interface TravelDao {
     @Query("SELECT * FROM expense_items WHERE groupId = :groupId")
     suspend fun getExpenseItems(groupId: Long): List<ExpenseItemEntity>
 
+    @Query("SELECT * FROM expense_items WHERE id = :itemId LIMIT 1")
+    suspend fun getExpenseItem(itemId: Long): ExpenseItemEntity?
+
     @Query("DELETE FROM expense_items WHERE groupId = :groupId")
     suspend fun deleteExpenseItemsByGroup(groupId: Long)
 
     @Query("DELETE FROM item_assignments WHERE itemId = :itemId")
     suspend fun deleteAssignmentsForItem(itemId: Long)
+
+    @Query("DELETE FROM item_assignments WHERE memberId = :memberId")
+    suspend fun deleteAssignmentsForMember(memberId: Long)
 
     @Query("DELETE FROM item_assignments WHERE itemId IN (SELECT id FROM expense_items WHERE groupId = :groupId)")
     suspend fun deleteAssignmentsForGroup(groupId: Long)
@@ -99,6 +105,9 @@ interface TravelDao {
 
     @Upsert
     suspend fun upsertAssignment(assignment: ItemAssignmentEntity)
+
+    @Query("SELECT * FROM item_assignments WHERE itemId = :itemId")
+    suspend fun getAssignmentsForItem(itemId: Long): List<ItemAssignmentEntity>
 
     @Query(
         """

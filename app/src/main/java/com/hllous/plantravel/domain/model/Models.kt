@@ -51,3 +51,15 @@ data class MemberSettlement(
     val amountCents: Long
 )
 
+data class SettlementWarning(
+    val itemId: Long,
+    val itemName: String,
+    val unassignedQuantity: Int,
+    val unassignedAmountCents: Long
+)
+
+data class SettlementResult(
+    val memberSettlements: List<MemberSettlement>,
+    val warnings: List<SettlementWarning>
+)
+

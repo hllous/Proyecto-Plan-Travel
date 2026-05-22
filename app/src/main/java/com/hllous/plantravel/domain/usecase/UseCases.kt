@@ -75,8 +75,8 @@ class AddExpenseItemUseCase @Inject constructor(
 class AssignItemToMemberUseCase @Inject constructor(
     private val repository: TravelRepository
 ) {
-    suspend operator fun invoke(itemId: Long, memberId: Long, quantity: Int) {
-        repository.assignItemToMember(itemId, memberId, quantity)
+    suspend operator fun invoke(itemId: Long, memberId: Long, quantity: Int): Result<Unit> {
+        return repository.assignItemToMember(itemId, memberId, quantity)
     }
 }
 

@@ -115,6 +115,7 @@ import com.hllous.plantravel.domain.model.ExpenseItem
 import com.hllous.plantravel.domain.model.GroupMember
 import com.hllous.plantravel.domain.model.ItemAssignment
 import com.hllous.plantravel.domain.model.MemberSettlement
+import com.hllous.plantravel.domain.model.SettlementWarning
 import com.hllous.plantravel.domain.model.TravelGroup
 import com.hllous.plantravel.presentation.MainViewModel
 import com.hllous.plantravel.ui.theme.ProyectoPlanTravelTheme
@@ -1021,6 +1022,10 @@ private fun calculatePendingCents(
     }
 }
 
+private fun calculatePendingCents(warnings: List<SettlementWarning>): Long {
+    return warnings.sumOf { it.unassignedAmountCents }
+}
+
 @Composable
 private fun ExpenseOverviewCard(
     selectedGroup: TravelGroup?,
@@ -1257,13 +1262,41 @@ private fun ExpenseItemCard(
                             IconButton(onClick = { onAssignQuantity((myAssigned - 1).coerceAtLeast(0)) }) {
                                 Icon(Icons.Default.ArrowDropDown, contentDescription = "Quitar")
                             }
-                            IconButton(onClick = { onAssignQuantity(myAssigned + 1) }) {
+                            IconButton(
+                                enabled = remaining > 0,
+                                onClick = { onAssignQuantity(myAssigned + 1) }
+                            ) {
                                 Icon(Icons.Default.ArrowDropUp, contentDescription = "Agregar")
                             }
                         }
                     }
                 }
             }
+        }
+    }
+}
+
+@Composable
+private fun SettlementWarningCard(warning: SettlementWarning) {
+    Card(
+        modifier = Modifier.fillMaxWidth(),
+        colors = CardDefaults.cardColors(containerColor = MaterialTheme.colorScheme.errorContainer)
+    ) {
+        Column(
+            modifier = Modifier.padding(14.dp),
+            verticalArrangement = Arrangement.spacedBy(4.dp)
+        ) {
+            Text(
+                warning.itemName,
+                style = MaterialTheme.typography.titleSmall,
+                color = MaterialTheme.colorScheme.onErrorContainer,
+                fontWeight = FontWeight.SemiBold
+            )
+            Text(
+                "Quedan ${warning.unassignedQuantity} uds sin asignar por ${formatCurrency(warning.unassignedAmountCents)}",
+                style = MaterialTheme.typography.bodySmall,
+                color = MaterialTheme.colorScheme.onErrorContainer
+            )
         }
     }
 }
@@ -1500,6 +1533,7 @@ fun BallroomScreen(viewModel: MainViewModel, navController: NavHostController) {
     val items by viewModel.expenseItems.collectAsState(initial = emptyList())
     val assignments by viewModel.assignments.collectAsState(initial = emptyList())
     val settlements by viewModel.settlements.collectAsState(initial = emptyList())
+    val settlementWarnings by viewModel.settlementWarnings.collectAsState(initial = emptyList())
     val selectedGroupId by viewModel.selectedGroupId.collectAsState(initial = null)
     val currentMemberId by viewModel.currentMemberId.collectAsState(initial = null)
     var itemName by rememberSaveable { mutableStateOf("") }
@@ -1525,7 +1559,7 @@ fun BallroomScreen(viewModel: MainViewModel, navController: NavHostController) {
     val bottomPanelHeightDp = with(density) { bottomPanelHeightPx.toDp() }
     val selectedGroup = groups.firstOrNull { it.id == selectedGroupId }
     val totalExpenseCents = items.sumOf { it.totalPriceCents }
-    val pendingCents = calculatePendingCents(items, assignments)
+    val pendingCents = calculatePendingCents(settlementWarnings)
     val mySettlementCents = settlements.firstOrNull { it.memberId == currentMemberId }?.amountCents ?: 0L
     val currentMember = members.firstOrNull { it.id == currentMemberId }
 
@@ -1635,6 +1669,18 @@ fun BallroomScreen(viewModel: MainViewModel, navController: NavHostController) {
                                 }
                             }
                         )
+                    }
+                }
+                if (settlementWarnings.isNotEmpty()) {
+                    item {
+                        Text(
+                            "Advertencias de division",
+                            style = MaterialTheme.typography.titleMedium,
+                            fontWeight = FontWeight.SemiBold
+                        )
+                    }
+                    items(settlementWarnings) { warning ->
+                        SettlementWarningCard(warning)
                     }
                 }
             }

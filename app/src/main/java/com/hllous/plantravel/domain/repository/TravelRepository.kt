@@ -6,7 +6,7 @@ import com.hllous.plantravel.domain.model.GroupMember
 import com.hllous.plantravel.domain.model.InviteToken
 import com.hllous.plantravel.domain.model.ItemAssignment
 import com.hllous.plantravel.domain.model.MemberRole
-import com.hllous.plantravel.domain.model.MemberSettlement
+import com.hllous.plantravel.domain.model.SettlementResult
 import com.hllous.plantravel.domain.model.TravelGroup
 import kotlinx.coroutines.flow.Flow
 
@@ -30,8 +30,8 @@ interface TravelRepository {
     fun observeExpenseItems(groupId: Long): Flow<List<ExpenseItem>>
     fun observeAssignments(groupId: Long): Flow<List<ItemAssignment>>
     suspend fun addExpenseItem(groupId: Long, itemName: String, totalPriceCents: Long, quantity: Int): Long
-    suspend fun assignItemToMember(itemId: Long, memberId: Long, quantity: Int)
+    suspend fun assignItemToMember(itemId: Long, memberId: Long, quantity: Int): Result<Unit>
     suspend fun deleteExpenseItem(itemId: Long)
-    suspend fun calculateSettlement(groupId: Long): List<MemberSettlement>
+    suspend fun calculateSettlement(groupId: Long): SettlementResult
 }
 

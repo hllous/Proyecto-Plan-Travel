@@ -13,9 +13,12 @@ import com.hllous.plantravel.domain.model.GroupMember
 import com.hllous.plantravel.domain.model.InviteToken
 import com.hllous.plantravel.domain.model.ItemAssignment
 import com.hllous.plantravel.domain.model.MemberRole
-import com.hllous.plantravel.domain.model.MemberSettlement
+import com.hllous.plantravel.domain.model.SettlementResult
 import com.hllous.plantravel.domain.model.TravelGroup
 import com.hllous.plantravel.domain.repository.TravelRepository
+import com.hllous.plantravel.domain.settlement.AssignmentValidationResult
+import com.hllous.plantravel.domain.settlement.ExpenseAssignmentPolicy
+import com.hllous.plantravel.domain.settlement.ExpenseSettlementCalculator
 import java.util.Locale
 import java.util.UUID
 import javax.inject.Inject
@@ -30,6 +33,8 @@ class TravelRepositoryImpl @Inject constructor(
 ) : TravelRepository {
 
     private var seedLoaded = false
+    private val settlementCalculator = ExpenseSettlementCalculator()
+    private val assignmentPolicy = ExpenseAssignmentPolicy()
 
     override fun observeGroups(): Flow<List<TravelGroup>> {
         return dao.observeGroups().map { groups ->
@@ -83,6 +88,7 @@ class TravelRepositoryImpl @Inject constructor(
     }
 
     override suspend fun deleteMember(memberId: Long) {
+        dao.deleteAssignmentsForMember(memberId)
         dao.deleteMember(memberId)
     }
 
@@ -185,14 +191,35 @@ class TravelRepositoryImpl @Inject constructor(
         )
     }
 
-    override suspend fun assignItemToMember(itemId: Long, memberId: Long, quantity: Int) {
+    override suspend fun assignItemToMember(itemId: Long, memberId: Long, quantity: Int): Result<Unit> {
+        val item = dao.getExpenseItem(itemId)?.let {
+            ExpenseItem(
+                id = it.id,
+                groupId = it.groupId,
+                name = it.name,
+                totalPriceCents = it.totalPriceCents,
+                quantity = it.quantity
+            )
+        } ?: return Result.failure(IllegalArgumentException("ITEM_NOT_FOUND"))
+        val assignments = dao.getAssignmentsForItem(itemId).map {
+            ItemAssignment(itemId = it.itemId, memberId = it.memberId, quantity = it.quantity)
+        }
+
+        when (val validation = assignmentPolicy.validate(item, assignments, memberId, quantity)) {
+            AssignmentValidationResult.Accepted -> Unit
+            is AssignmentValidationResult.Rejected -> return Result.failure(
+                IllegalArgumentException(validation.reason.name)
+            )
+        }
+
         dao.upsertAssignment(
             ItemAssignmentEntity(
                 itemId = itemId,
                 memberId = memberId,
-                quantity = max(0, quantity)
+                quantity = quantity
             )
         )
+        return Result.success(Unit)
     }
 
     override suspend fun deleteExpenseItem(itemId: Long) {
@@ -200,52 +227,33 @@ class TravelRepositoryImpl @Inject constructor(
         dao.deleteExpenseItem(itemId)
     }
 
-    override suspend fun calculateSettlement(groupId: Long): List<MemberSettlement> {
-        val members = dao.getMembers(groupId)
-        if (members.isEmpty()) return emptyList()
-
-        val debts = members.associate { it.id to 0L }.toMutableMap()
-        val items = dao.getExpenseItems(groupId)
-        val details = dao.getAssignmentDetails(groupId).groupBy { it.itemId }
-
-        for (item in items) {
-            val itemAssignments = details[item.id].orEmpty()
-            val validAssignments = itemAssignments
-                .filter { it.quantity > 0 && it.itemQuantity > 0 }
-
-            if (validAssignments.isEmpty()) continue
-
-            val shares = validAssignments.map { assignment ->
-                val rawAmount = item.totalPriceCents * assignment.quantity
-                val baseShare = rawAmount / assignment.itemQuantity
-                val remainder = rawAmount % assignment.itemQuantity
-                Triple(assignment.memberId, baseShare, remainder)
-            }
-
-            val allocated = shares.sumOf { it.second }
-            val leftoverCents = (item.totalPriceCents - allocated).coerceAtLeast(0L)
-            val bonusByMember = shares
-                .sortedWith(
-                    compareByDescending<Triple<Long, Long, Long>> { it.third }
-                        .thenBy { it.first }
-                )
-                .take(leftoverCents.toInt())
-                .groupingBy { it.first }
-                .eachCount()
-
-            shares.forEach { (memberId, baseShare, _) ->
-                val finalShare = baseShare + (bonusByMember[memberId] ?: 0)
-                debts[memberId] = debts.getOrDefault(memberId, 0L) + finalShare
-            }
-        }
-
-        return members.map {
-            MemberSettlement(
-                memberId = it.id,
-                memberName = it.name,
-                amountCents = debts.getOrDefault(it.id, 0L)
+    override suspend fun calculateSettlement(groupId: Long): SettlementResult {
+        val members = dao.getMembers(groupId).map {
+            GroupMember(
+                id = it.id,
+                groupId = it.groupId,
+                name = it.name,
+                role = if (it.role == MemberRole.ADMIN.name) MemberRole.ADMIN else MemberRole.USER
             )
         }
+        val items = dao.getExpenseItems(groupId).map {
+            ExpenseItem(
+                id = it.id,
+                groupId = it.groupId,
+                name = it.name,
+                totalPriceCents = it.totalPriceCents,
+                quantity = it.quantity
+            )
+        }
+        val assignments = dao.getAssignmentDetails(groupId).map {
+            ItemAssignment(itemId = it.itemId, memberId = it.memberId, quantity = it.quantity)
+        }
+
+        return settlementCalculator.calculate(
+            members = members,
+            items = items,
+            assignments = assignments
+        )
     }
 
     private suspend fun ensureSeedData() {

@@ -8,6 +8,8 @@ import com.hllous.plantravel.domain.model.GroupMember
 import com.hllous.plantravel.domain.model.InviteToken
 import com.hllous.plantravel.domain.model.ItemAssignment
 import com.hllous.plantravel.domain.model.MemberSettlement
+import com.hllous.plantravel.domain.model.SettlementResult
+import com.hllous.plantravel.domain.model.SettlementWarning
 import com.hllous.plantravel.domain.model.TravelGroup
 import com.hllous.plantravel.domain.repository.TravelRepository
 import com.hllous.plantravel.domain.usecase.AddExpenseItemUseCase
@@ -68,6 +70,9 @@ class MainViewModel @Inject constructor(
     private val _settlements = MutableStateFlow<List<MemberSettlement>>(emptyList())
     val settlements: StateFlow<List<MemberSettlement>> = _settlements
 
+    private val _settlementWarnings = MutableStateFlow<List<SettlementWarning>>(emptyList())
+    val settlementWarnings: StateFlow<List<SettlementWarning>> = _settlementWarnings
+
     private val _currentMemberId = MutableStateFlow<Long?>(null)
     val currentMemberId: StateFlow<Long?> = _currentMemberId
 
@@ -111,6 +116,7 @@ class MainViewModel @Inject constructor(
     fun selectGroup(groupId: Long) {
         _selectedGroupId.value = groupId
         _settlements.value = emptyList()
+        _settlementWarnings.value = emptyList()
     }
 
     fun setCurrentMember(memberId: Long) {
@@ -121,6 +127,7 @@ class MainViewModel @Inject constructor(
         _selectedGroupId.value = null
         _currentMemberId.value = null
         _settlements.value = emptyList()
+        _settlementWarnings.value = emptyList()
     }
 
     fun clearMessage() {
@@ -166,6 +173,13 @@ class MainViewModel @Inject constructor(
     fun deleteMember(memberId: Long) {
         viewModelScope.launch {
             deleteMemberUseCase(memberId)
+            if (_currentMemberId.value == memberId) {
+                _currentMemberId.value = null
+            }
+            val groupId = _selectedGroupId.value
+            if (groupId != null) {
+                recalculateSettlementSilently(groupId)
+            }
             _message.value = "Integrante eliminado"
         }
     }
@@ -181,6 +195,7 @@ class MainViewModel @Inject constructor(
             _selectedGroupId.value = null
             _currentMemberId.value = null
             _settlements.value = emptyList()
+            _settlementWarnings.value = emptyList()
             _message.value = "Grupo eliminado"
         }
     }
@@ -253,7 +268,11 @@ class MainViewModel @Inject constructor(
                 _message.value = "Cantidad invalida"
                 return@launch
             }
-            assignItemToMemberUseCase(itemId, memberId, quantity)
+            val result = assignItemToMemberUseCase(itemId, memberId, quantity)
+            if (result.isFailure) {
+                _message.value = assignmentFailureMessage(result.exceptionOrNull()?.message)
+                return@launch
+            }
             val groupId = _selectedGroupId.value
             if (groupId != null) {
                 recalculateSettlementSilently(groupId)
@@ -278,7 +297,7 @@ class MainViewModel @Inject constructor(
                 _message.value = "Selecciona un grupo"
                 return@launch
             }
-            _settlements.value = calculateSettlementUseCase(groupId)
+            updateSettlement(calculateSettlementUseCase(groupId))
             _message.value = "Division calculada"
         }
     }
@@ -286,12 +305,26 @@ class MainViewModel @Inject constructor(
     fun refreshSettlement() {
         viewModelScope.launch {
             val groupId = _selectedGroupId.value ?: return@launch
-            _settlements.value = calculateSettlementUseCase(groupId)
+            updateSettlement(calculateSettlementUseCase(groupId))
         }
     }
 
     private suspend fun recalculateSettlementSilently(groupId: Long) {
-        _settlements.value = calculateSettlementUseCase(groupId)
+        updateSettlement(calculateSettlementUseCase(groupId))
+    }
+
+    private fun updateSettlement(result: SettlementResult) {
+        _settlements.value = result.memberSettlements
+        _settlementWarnings.value = result.warnings
+    }
+
+    private fun assignmentFailureMessage(reason: String?): String {
+        return when (reason) {
+            "OVER_ASSIGNED" -> "La cantidad asignada supera la cantidad del item"
+            "NEGATIVE_QUANTITY" -> "Cantidad invalida"
+            "ITEM_NOT_FOUND" -> "Item no encontrado"
+            else -> "No se pudo actualizar el consumo"
+        }
     }
 
     private fun parsePriceToCents(value: String): Long {
