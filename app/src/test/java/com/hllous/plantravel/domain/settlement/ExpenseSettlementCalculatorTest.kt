@@ -102,6 +102,57 @@ class ExpenseSettlementCalculatorTest {
         assertEquals(2000, result.warnings.single().unassignedAmountCents)
     }
 
+    @Test
+    fun reducingAssignedQuantityCreatesOrIncreasesSettlementWarning() {
+        val member = member(id = 1, name = "Nico")
+        val expenseItem = item(id = 10, name = "Tickets", totalPriceCents = 6000, quantity = 6)
+
+        val fullResult = calculator.calculate(
+            members = listOf(member),
+            items = listOf(expenseItem),
+            assignments = listOf(ItemAssignment(itemId = expenseItem.id, memberId = member.id, quantity = 6))
+        )
+        assertTrue(fullResult.warnings.isEmpty())
+        assertEquals(6000, fullResult.memberSettlements.single().amountCents)
+
+        val reducedResult = calculator.calculate(
+            members = listOf(member),
+            items = listOf(expenseItem),
+            assignments = listOf(ItemAssignment(itemId = expenseItem.id, memberId = member.id, quantity = 4))
+        )
+        assertEquals(1, reducedResult.warnings.size)
+        assertEquals(2, reducedResult.warnings.single().unassignedQuantity)
+        assertEquals(4000, reducedResult.memberSettlements.single().amountCents)
+
+        val furtherReducedResult = calculator.calculate(
+            members = listOf(member),
+            items = listOf(expenseItem),
+            assignments = listOf(ItemAssignment(itemId = expenseItem.id, memberId = member.id, quantity = 2))
+        )
+        assertEquals(1, furtherReducedResult.warnings.size)
+        assertEquals(4, furtherReducedResult.warnings.single().unassignedQuantity)
+        assertEquals(2000, furtherReducedResult.memberSettlements.single().amountCents)
+    }
+
+    @Test
+    fun deletedExpenseItemIsRemovedFromSettlementCalculation() {
+        val member = member(id = 1, name = "Nico")
+        val deletedItem = item(id = 10, name = "Tickets", totalPriceCents = 6000, quantity = 6)
+        val remainingItem = item(id = 20, name = "Dinner", totalPriceCents = 3000, quantity = 3)
+
+        val result = calculator.calculate(
+            members = listOf(member),
+            items = listOf(remainingItem),
+            assignments = listOf(
+                ItemAssignment(itemId = deletedItem.id, memberId = member.id, quantity = 6),
+                ItemAssignment(itemId = remainingItem.id, memberId = member.id, quantity = 3)
+            )
+        )
+
+        assertEquals(3000, result.memberSettlements.single().amountCents)
+        assertTrue(result.warnings.isEmpty())
+    }
+
     private fun member(id: Long, name: String, role: MemberRole = MemberRole.USER) =
         GroupMember(id = id, groupId = 1, name = name, role = role)
 
