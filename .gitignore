@@ -13,3 +13,7 @@
 .externalNativeBuild
 .cxx
 local.properties
+.agents/
+.claude/
+app/release/
+package-lock.json

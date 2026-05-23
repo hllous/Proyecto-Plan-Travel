@@ -1,0 +1,16 @@
+version: "3.9"
+services:
+  android:
+    build: .
+    working_dir: /workspace
+    volumes:
+      - .:/workspace
+      - gradle-cache:/root/.gradle
+      - android-sdk:/opt/android-sdk
+    environment:
+      - ANDROID_SDK_ROOT=/opt/android-sdk
+      - ANDROID_HOME=/opt/android-sdk
+
+volumes:
+  gradle-cache:
+  android-sdk:
