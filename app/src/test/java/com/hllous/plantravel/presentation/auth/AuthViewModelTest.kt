@@ -153,6 +153,56 @@ class AuthViewModelTest {
         assertEquals(AuthState.Authenticated("user-123", "Ana"), vm.state.value)
     }
 
+    // --- loginWithGoogle ---
+
+    @Test
+    fun loginWithGoogle_stateRemainsUnauthenticatedSoBrowserCancelDoesNotDeadlock() {
+        // If Loading is set before the browser opens, a cancel leaves the UI permanently stuck.
+        // The correct behaviour: state stays Unauthenticated so the user can retry.
+        val repo = FakeAuthRepository()
+        val vm = viewModel(repo)
+        repo.userIdFlow.tryEmit(null)
+
+        vm.loginWithGoogle()
+
+        assertEquals(AuthState.Unauthenticated, vm.state.value)
+    }
+
+    @Test
+    fun loginWithGoogle_whenOAuthCompletesAndProfileExists_transitionsToAuthenticated() {
+        val repo = FakeAuthRepository(displayName = "Ana")
+        val vm = viewModel(repo)
+        repo.userIdFlow.tryEmit(null)
+
+        vm.loginWithGoogle()
+        repo.userIdFlow.tryEmit("user-123")
+
+        assertEquals(AuthState.Authenticated("user-123", "Ana"), vm.state.value)
+    }
+
+    @Test
+    fun loginWithGoogle_whenOAuthCompletesAndNoProfile_transitionsToNeedsProfileSetup() {
+        val repo = FakeAuthRepository(displayName = null)
+        val vm = viewModel(repo)
+        repo.userIdFlow.tryEmit(null)
+
+        vm.loginWithGoogle()
+        repo.userIdFlow.tryEmit("user-new")
+
+        assertEquals(AuthState.NeedsProfileSetup("user-new"), vm.state.value)
+    }
+
+    @Test
+    fun loginWithGoogle_onFailure_emitsError() {
+        val repo = FakeAuthRepository(loginWithGoogleResult = Result.failure(Exception("OAuth error")))
+        val vm = viewModel(repo)
+        repo.userIdFlow.tryEmit(null)
+
+        vm.loginWithGoogle()
+
+        assertEquals(AuthState.Error("OAuth error"), vm.state.value)
+    }
+
     @Test
     fun createProfile_calledTwiceForSameUser_doesNotEmitError() {
         // Simulates: profile setup shown again on re-login (Bug A); user submits again (Bug B)

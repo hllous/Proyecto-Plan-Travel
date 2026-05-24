@@ -1,11 +1,21 @@
 package com.hllous.plantravel
 
+import android.content.Intent
 import android.os.Bundle
 import androidx.activity.ComponentActivity
 import androidx.activity.compose.setContent
 import androidx.activity.enableEdgeToEdge
+import androidx.activity.viewModels
+import androidx.compose.foundation.background
+import androidx.compose.foundation.layout.Arrangement
+import androidx.compose.foundation.layout.Box
+import androidx.compose.foundation.layout.Column
+import androidx.compose.foundation.layout.fillMaxHeight
 import androidx.compose.foundation.layout.fillMaxSize
+import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.padding
+import androidx.compose.foundation.layout.width
+import androidx.compose.foundation.lazy.LazyColumn
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.filled.AccountBalanceWallet
 import androidx.compose.material.icons.filled.DarkMode
@@ -15,6 +25,7 @@ import androidx.compose.material.icons.filled.LocationOn
 import androidx.compose.material.icons.filled.Menu
 import androidx.compose.material.icons.filled.People
 import androidx.compose.material.icons.filled.QrCode
+import androidx.compose.material3.CircularProgressIndicator
 import androidx.compose.material3.DrawerValue
 import androidx.compose.material3.ExperimentalMaterial3Api
 import androidx.compose.material3.Icon
@@ -32,13 +43,6 @@ import androidx.compose.material3.Text
 import androidx.compose.material3.TopAppBar
 import androidx.compose.material3.TopAppBarDefaults
 import androidx.compose.material3.rememberDrawerState
-import androidx.compose.foundation.background
-import androidx.compose.foundation.layout.Arrangement
-import androidx.compose.foundation.layout.Column
-import androidx.compose.foundation.layout.fillMaxHeight
-import androidx.compose.foundation.layout.fillMaxWidth
-import androidx.compose.foundation.layout.width
-import androidx.compose.foundation.lazy.LazyColumn
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.collectAsState
@@ -58,19 +62,32 @@ import androidx.navigation.compose.composable
 import androidx.navigation.compose.currentBackStackEntryAsState
 import androidx.navigation.compose.rememberNavController
 import com.hllous.plantravel.presentation.MainViewModel
+import com.hllous.plantravel.presentation.auth.AuthState
+import com.hllous.plantravel.presentation.auth.AuthViewModel
+import io.github.jan.supabase.SupabaseClient
+import io.github.jan.supabase.auth.handleDeeplinks
+import javax.inject.Inject
 import com.hllous.plantravel.ui.screens.BallroomScreen
 import com.hllous.plantravel.ui.screens.DestinationScreen
 import com.hllous.plantravel.ui.screens.GroupsScreen
 import com.hllous.plantravel.ui.screens.HomeScreen
+import com.hllous.plantravel.ui.screens.LoginScreen
+import com.hllous.plantravel.ui.screens.ProfileSetupScreen
 import com.hllous.plantravel.ui.screens.QrScannerScreen
+import com.hllous.plantravel.ui.screens.RegisterScreen
 import com.hllous.plantravel.ui.theme.ProyectoPlanTravelTheme
 import dagger.hilt.android.AndroidEntryPoint
 import kotlinx.coroutines.launch
 
 @AndroidEntryPoint
 class MainActivity : ComponentActivity() {
+
+    @Inject lateinit var supabase: SupabaseClient
+    private val authViewModel: AuthViewModel by viewModels()
+
     override fun onCreate(savedInstanceState: Bundle?) {
         super.onCreate(savedInstanceState)
+        handleDeepLink(intent)
         enableEdgeToEdge()
         setContent {
             var isDarkTheme by rememberSaveable { mutableStateOf(false) }
@@ -79,17 +96,99 @@ class MainActivity : ComponentActivity() {
             }
         }
     }
+
+    override fun onNewIntent(intent: Intent) {
+        super.onNewIntent(intent)
+        handleDeepLink(intent)
+    }
+
+    private fun handleDeepLink(intent: Intent) {
+        val uri = intent.data ?: return
+        if (uri.scheme != "plantravel") return
+        when (uri.host) {
+            "auth" -> supabase.handleDeeplinks(intent)
+            "invite" -> {
+                val code = uri.lastPathSegment ?: return
+                authViewModel.setPendingInviteCode(code)
+            }
+        }
+    }
+}
+
+@Composable
+fun PlanTravelApp(isDarkTheme: Boolean, onThemeChange: (Boolean) -> Unit) {
+    val authViewModel = hiltViewModel<AuthViewModel>()
+    val authState by authViewModel.state.collectAsState()
+    val pendingInviteCode by authViewModel.pendingInviteCode.collectAsState()
+    val navController = rememberNavController()
+
+    LaunchedEffect(authState) {
+        when (authState) {
+            is AuthState.Unauthenticated, is AuthState.Error ->
+                navController.navigate("login") { popUpTo(0) { inclusive = true } }
+            is AuthState.NeedsProfileSetup ->
+                navController.navigate("profile_setup") { popUpTo(0) { inclusive = true } }
+            is AuthState.Authenticated ->
+                navController.navigate("main") { popUpTo(0) { inclusive = true } }
+            is AuthState.Loading -> Unit
+        }
+    }
+
+    NavHost(navController = navController, startDestination = "splash") {
+        composable("splash") {
+            Box(Modifier.fillMaxSize(), contentAlignment = Alignment.Center) {
+                CircularProgressIndicator()
+            }
+        }
+        composable("login") {
+            LoginScreen(
+                viewModel = authViewModel,
+                onNavigateToRegister = { navController.navigate("register") }
+            )
+        }
+        composable("register") {
+            RegisterScreen(
+                viewModel = authViewModel,
+                onNavigateToLogin = { navController.navigateUp() }
+            )
+        }
+        composable("profile_setup") {
+            ProfileSetupScreen(viewModel = authViewModel)
+        }
+        composable("main") {
+            MainAppContent(
+                isDarkTheme = isDarkTheme,
+                onThemeChange = onThemeChange,
+                onLogout = { authViewModel.logout() },
+                pendingInviteCode = pendingInviteCode,
+                onPendingInviteConsumed = { authViewModel.clearPendingInviteCode() }
+            )
+        }
+    }
 }
 
 @OptIn(ExperimentalMaterial3Api::class)
 @Composable
-fun PlanTravelApp(isDarkTheme: Boolean, onThemeChange: (Boolean) -> Unit) {
+fun MainAppContent(
+    isDarkTheme: Boolean,
+    onThemeChange: (Boolean) -> Unit,
+    onLogout: () -> Unit,
+    pendingInviteCode: String? = null,
+    onPendingInviteConsumed: () -> Unit = {}
+) {
     val viewModel = hiltViewModel<MainViewModel>()
     val navController = rememberNavController()
     val snackbarHostState = remember { SnackbarHostState() }
     val message by viewModel.message.collectAsState(initial = null)
     val drawerState = rememberDrawerState(initialValue = DrawerValue.Closed)
     val scope = rememberCoroutineScope()
+
+    LaunchedEffect(pendingInviteCode) {
+        val code = pendingInviteCode ?: return@LaunchedEffect
+        viewModel.consumeInvite(code)
+        onPendingInviteConsumed()
+    }
+
     LaunchedEffect(message) {
         val text = message
         if (!text.isNullOrBlank()) {
@@ -97,12 +196,14 @@ fun PlanTravelApp(isDarkTheme: Boolean, onThemeChange: (Boolean) -> Unit) {
             viewModel.clearMessage()
         }
     }
+
     ModalNavigationDrawer(
         drawerState = drawerState,
         drawerContent = {
             DrawerContent(
                 isDarkTheme = isDarkTheme,
                 onThemeChange = onThemeChange,
+                onLogout = onLogout,
                 onNavigate = { route ->
                     navController.navigate(route)
                     scope.launch { drawerState.close() }
@@ -173,6 +274,7 @@ fun PlanTravelApp(isDarkTheme: Boolean, onThemeChange: (Boolean) -> Unit) {
 fun DrawerContent(
     isDarkTheme: Boolean,
     onThemeChange: (Boolean) -> Unit,
+    onLogout: () -> Unit,
     onNavigate: (String) -> Unit
 ) {
     Surface(
@@ -212,6 +314,11 @@ fun DrawerContent(
                     label = { Text(if (isDarkTheme) "Modo claro" else "Modo oscuro") },
                     selected = false,
                     onClick = { onThemeChange(!isDarkTheme) }
+                )
+                NavigationDrawerItem(
+                    label = { Text("Cerrar sesión") },
+                    selected = false,
+                    onClick = onLogout
                 )
             }
         }

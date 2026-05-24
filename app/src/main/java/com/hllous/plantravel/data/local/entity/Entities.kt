@@ -16,7 +16,8 @@ data class MemberEntity(
     @PrimaryKey(autoGenerate = true) val id: Long = 0,
     val groupId: Long,
     val name: String,
-    val role: String
+    val role: String,
+    val userId: String? = null
 )
 
 @Entity(tableName = "invite_tokens", indices = [Index("groupId")])

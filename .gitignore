@@ -17,3 +17,6 @@ local.properties
 .claude/
 app/release/
 package-lock.json
+skills-lock.json
+.idea/discord.xml
+.idea/deploymentTargetSelector.xml

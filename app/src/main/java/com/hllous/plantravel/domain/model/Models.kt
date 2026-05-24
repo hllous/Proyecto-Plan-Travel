@@ -15,8 +15,15 @@ data class GroupMember(
     val id: Long,
     val groupId: Long,
     val name: String,
+    val userId: String?,
     val role: MemberRole
 )
+
+sealed class ConsumeInviteFailure : Exception() {
+    object Unauthenticated : ConsumeInviteFailure()
+    object Expired : ConsumeInviteFailure()
+    object AlreadyMember : ConsumeInviteFailure()
+}
 
 data class InviteToken(
     val code: String,

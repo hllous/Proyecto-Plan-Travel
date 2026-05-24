@@ -31,6 +31,9 @@ interface TravelDao {
     @Query("SELECT * FROM members WHERE groupId = :groupId ORDER BY id ASC")
     fun observeMembers(groupId: Long): Flow<List<MemberEntity>>
 
+    @Query("SELECT * FROM members WHERE groupId = :groupId AND userId = :userId LIMIT 1")
+    suspend fun getMemberByUserId(groupId: Long, userId: String): MemberEntity?
+
     @Query("SELECT * FROM members WHERE groupId = :groupId ORDER BY id ASC")
     suspend fun getMembers(groupId: Long): List<MemberEntity>
 

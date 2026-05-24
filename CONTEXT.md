@@ -15,7 +15,7 @@ The public-facing information a User shares across all Travel Groups they belong
 _Avoid_: Account details, settings, personal info
 
 **Group Member**:
-A User who has joined a specific Travel Group. Always linked to exactly one User. The role is either ADMIN (the creator) or USER.
+A User who has joined a specific Travel Group. Always linked to exactly one User via that User's UUID. The role is either ADMIN (the creator) or USER.
 _Avoid_: Participant, traveler, person
 
 ### Groups & Invites

@@ -62,7 +62,6 @@ fun GroupsScreen(viewModel: MainViewModel, navController: NavHostController) {
     val invites by viewModel.invites.collectAsState(initial = emptyList())
     var groupName by rememberSaveable { mutableStateOf("") }
     var adminName by rememberSaveable { mutableStateOf("") }
-    var joinName by rememberSaveable { mutableStateOf("") }
     var joinCode by rememberSaveable { mutableStateOf("") }
     var editableGroupName by rememberSaveable { mutableStateOf("") }
     var showCreateGroup by rememberSaveable { mutableStateOf(false) }
@@ -187,24 +186,16 @@ fun GroupsScreen(viewModel: MainViewModel, navController: NavHostController) {
             item {
                 SectionCard(title = "Unirse") {
                     OutlinedTextField(
-                        value = joinName,
-                        onValueChange = { joinName = it },
-                        label = { Text("Nombre") },
-                        modifier = Modifier.fillMaxWidth(),
-                        singleLine = true,
-                        colors = travelTextFieldColors()
-                    )
-                    OutlinedTextField(
                         value = joinCode,
                         onValueChange = { joinCode = it.uppercase() },
-                        label = { Text("Codigo") },
+                        label = { Text("Codigo de invitacion") },
                         modifier = Modifier.fillMaxWidth(),
                         singleLine = true,
                         colors = travelTextFieldColors()
                     )
                     Button(
                         onClick = {
-                            viewModel.consumeInvite(joinCode, joinName)
+                            viewModel.consumeInvite(joinCode)
                             joinCode = ""
                         },
                         modifier = Modifier.fillMaxWidth()

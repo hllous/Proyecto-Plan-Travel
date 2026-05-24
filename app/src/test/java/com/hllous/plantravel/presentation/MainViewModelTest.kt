@@ -1,11 +1,11 @@
 package com.hllous.plantravel.presentation
 
+import com.hllous.plantravel.FakeSessionProvider
 import com.hllous.plantravel.FakeTravelRepository
 import com.hllous.plantravel.MainDispatcherRule
 import com.hllous.plantravel.domain.settlement.AssignmentOutcome
 import com.hllous.plantravel.domain.settlement.AssignmentRejectionReason
 import com.hllous.plantravel.domain.usecase.AddExpenseItemUseCase
-import com.hllous.plantravel.domain.usecase.AddMemberUseCase
 import com.hllous.plantravel.domain.usecase.AssignItemToMemberUseCase
 import com.hllous.plantravel.domain.usecase.CalculateSettlementUseCase
 import com.hllous.plantravel.domain.usecase.ConsumeInviteUseCase
@@ -25,17 +25,20 @@ class MainViewModelTest {
     @get:Rule
     val mainDispatcherRule = MainDispatcherRule()
 
-    private fun viewModel(repo: FakeTravelRepository): MainViewModel {
+    private fun viewModel(
+        repo: FakeTravelRepository,
+        session: FakeSessionProvider = FakeSessionProvider(userId = "user-1", displayName = "Test")
+    ): MainViewModel {
         return MainViewModel(
             repository = repo,
+            sessionProvider = session,
             createGroupUseCase = CreateGroupUseCase(repo),
-            addMemberUseCase = AddMemberUseCase(repo),
             updateGroupNameUseCase = UpdateGroupNameUseCase(repo),
             deleteMemberUseCase = DeleteMemberUseCase(repo),
             deleteGroupUseCase = DeleteGroupUseCase(repo),
             generateInviteUseCase = GenerateInviteUseCase(repo),
             deleteInviteUseCase = DeleteInviteUseCase(repo),
-            consumeInviteUseCase = ConsumeInviteUseCase(repo),
+            consumeInviteUseCase = ConsumeInviteUseCase(repo, session),
             addExpenseItemUseCase = AddExpenseItemUseCase(repo),
             assignItemToMemberUseCase = AssignItemToMemberUseCase(repo),
             deleteExpenseItemUseCase = DeleteExpenseItemUseCase(repo),

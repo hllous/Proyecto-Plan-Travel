@@ -5,7 +5,6 @@ import com.hllous.plantravel.domain.model.ExpenseItem
 import com.hllous.plantravel.domain.model.GroupMember
 import com.hllous.plantravel.domain.model.InviteToken
 import com.hllous.plantravel.domain.model.ItemAssignment
-import com.hllous.plantravel.domain.model.MemberRole
 import com.hllous.plantravel.domain.model.SettlementResult
 import com.hllous.plantravel.domain.model.TravelGroup
 import com.hllous.plantravel.domain.settlement.AssignmentOutcome
@@ -18,12 +17,11 @@ interface TravelRepository {
 
     suspend fun createGroup(groupName: String, adminName: String): Long
     suspend fun updateGroupName(groupId: Long, name: String)
-    suspend fun addMember(groupId: Long, memberName: String, role: MemberRole = MemberRole.USER): Long
     suspend fun deleteMember(memberId: Long)
     suspend fun deleteGroup(groupId: Long)
     suspend fun generateInvite(groupId: Long): InviteToken
     suspend fun deleteInvite(code: String)
-    suspend fun consumeInvite(code: String, memberName: String): Result<Long>
+    suspend fun consumeInvite(code: String, userId: String, displayName: String): Result<Long>
 
     suspend fun getRegions(): List<String>
     suspend fun getRecommendationsByRegion(region: String): List<DestinationRecommendation>

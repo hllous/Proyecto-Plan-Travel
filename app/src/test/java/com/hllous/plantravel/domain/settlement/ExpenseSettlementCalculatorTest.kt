@@ -154,7 +154,7 @@ class ExpenseSettlementCalculatorTest {
     }
 
     private fun member(id: Long, name: String, role: MemberRole = MemberRole.USER) =
-        GroupMember(id = id, groupId = 1, name = name, role = role)
+        GroupMember(id = id, groupId = 1, name = name, userId = null, role = role)
 
     private fun item(id: Long, name: String, totalPriceCents: Long, quantity: Int) =
         ExpenseItem(id = id, groupId = 1, name = name, totalPriceCents = totalPriceCents, quantity = quantity)

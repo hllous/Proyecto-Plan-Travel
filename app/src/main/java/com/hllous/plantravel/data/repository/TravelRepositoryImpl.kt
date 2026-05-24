@@ -9,6 +9,7 @@ import com.hllous.plantravel.data.local.entity.ItemAssignmentEntity
 import com.hllous.plantravel.data.local.entity.MemberEntity
 import com.hllous.plantravel.domain.model.DestinationRecommendation
 import com.hllous.plantravel.domain.model.ExpenseItem
+import com.hllous.plantravel.domain.model.ConsumeInviteFailure
 import com.hllous.plantravel.domain.model.GroupMember
 import com.hllous.plantravel.domain.model.InviteToken
 import com.hllous.plantravel.domain.model.ItemAssignment
@@ -49,6 +50,7 @@ class TravelRepositoryImpl @Inject constructor(
                     id = it.id,
                     groupId = it.groupId,
                     name = it.name,
+                    userId = it.userId,
                     role = if (it.role == MemberRole.ADMIN.name) MemberRole.ADMIN else MemberRole.USER
                 )
             }
@@ -79,12 +81,6 @@ class TravelRepositoryImpl @Inject constructor(
 
     override suspend fun updateGroupName(groupId: Long, name: String) {
         dao.updateGroupName(groupId, name)
-    }
-
-    override suspend fun addMember(groupId: Long, memberName: String, role: MemberRole): Long {
-        return dao.insertMember(
-            MemberEntity(groupId = groupId, name = memberName, role = role.name)
-        )
     }
 
     override suspend fun deleteMember(memberId: Long) {
@@ -121,19 +117,24 @@ class TravelRepositoryImpl @Inject constructor(
         dao.deleteInvite(code)
     }
 
-    override suspend fun consumeInvite(code: String, memberName: String): Result<Long> {
+    override suspend fun consumeInvite(code: String, userId: String, displayName: String): Result<Long> {
         val invite = dao.getInviteByCode(code)
             ?: return Result.failure(IllegalArgumentException("Codigo de invitacion invalido"))
 
         if (invite.expiresAtMillis < System.currentTimeMillis()) {
-            return Result.failure(IllegalStateException("El codigo expiro"))
+            return Result.failure(ConsumeInviteFailure.Expired)
+        }
+
+        if (dao.getMemberByUserId(invite.groupId, userId) != null) {
+            return Result.failure(ConsumeInviteFailure.AlreadyMember)
         }
 
         val memberId = dao.insertMember(
             MemberEntity(
                 groupId = invite.groupId,
-                name = memberName,
-                role = MemberRole.USER.name
+                name = displayName,
+                role = MemberRole.USER.name,
+                userId = userId
             )
         )
 
@@ -229,6 +230,7 @@ class TravelRepositoryImpl @Inject constructor(
                 id = it.id,
                 groupId = it.groupId,
                 name = it.name,
+                userId = it.userId,
                 role = if (it.role == MemberRole.ADMIN.name) MemberRole.ADMIN else MemberRole.USER
             )
         }

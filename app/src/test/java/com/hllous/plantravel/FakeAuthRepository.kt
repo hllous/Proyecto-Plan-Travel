@@ -9,6 +9,7 @@ class FakeAuthRepository(
     var loginResult: Result<Unit> = Result.success(Unit),
     var registerResult: Result<Unit> = Result.success(Unit),
     var createProfileResult: Result<Unit> = Result.success(Unit),
+    var loginWithGoogleResult: Result<Unit> = Result.success(Unit),
     var displayName: String? = null,
 ) : AuthRepository {
 
@@ -23,6 +24,8 @@ class FakeAuthRepository(
     override suspend fun logout() {
         logoutCalled = true
     }
+
+    override suspend fun loginWithGoogle(): Result<Unit> = loginWithGoogleResult
 
     override suspend fun getDisplayName(userId: String): String? = displayName
 

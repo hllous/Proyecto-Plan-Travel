@@ -46,7 +46,6 @@ import com.journeyapps.barcodescanner.CompoundBarcodeView
 fun QrScannerScreen(viewModel: MainViewModel, onDone: () -> Unit, onBack: () -> Unit) {
     val context = LocalContext.current
     val scope = rememberCoroutineScope()
-    var memberName by rememberSaveable { mutableStateOf("") }
     var scannedText by rememberSaveable { mutableStateOf("") }
     var hasCameraPermission by remember {
         mutableStateOf(
@@ -74,7 +73,6 @@ fun QrScannerScreen(viewModel: MainViewModel, onDone: () -> Unit, onBack: () -> 
                 Icon(Icons.Default.Close, contentDescription = "Cerrar")
             }
         }
-        OutlinedTextField(value = memberName, onValueChange = { memberName = it }, label = { Text("Tu nombre") }, modifier = Modifier.fillMaxWidth(), colors = travelTextFieldColors())
         if (!hasCameraPermission) {
             Button(onClick = { permissionLauncher.launch(Manifest.permission.CAMERA) }, modifier = Modifier.fillMaxWidth()) {
                 Text("Permitir camara")
@@ -85,7 +83,7 @@ fun QrScannerScreen(viewModel: MainViewModel, onDone: () -> Unit, onBack: () -> 
                     if (scannedText.isNotBlank()) return@launch
                     scannedText = payload
                     val code = payload.removePrefix("PLANTRAVEL|").substringAfterLast("/")
-                    viewModel.consumeInvite(code = code, memberName = memberName)
+                    viewModel.consumeInvite(code)
                     onDone()
                 }
             })

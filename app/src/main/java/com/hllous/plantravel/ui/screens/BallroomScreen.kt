@@ -77,19 +77,14 @@ fun BallroomScreen(viewModel: MainViewModel, navController: NavHostController) {
     val settlements by viewModel.settlements.collectAsState(initial = emptyList())
     val settlementWarnings by viewModel.settlementWarnings.collectAsState(initial = emptyList())
     val selectedGroupId by viewModel.selectedGroupId.collectAsState(initial = null)
-    val currentMemberId by viewModel.currentMemberId.collectAsState(initial = null)
+    val currentMember by viewModel.currentMember.collectAsState(initial = null)
+    val currentMemberId = currentMember?.id
     var itemName by rememberSaveable { mutableStateOf("") }
     var price by rememberSaveable { mutableStateOf("") }
     var quantity by rememberSaveable { mutableStateOf("") }
     var groupsExpanded by rememberSaveable { mutableStateOf(true) }
     var settlementsExpanded by rememberSaveable { mutableStateOf(false) }
     var addItemExpanded by rememberSaveable { mutableStateOf(false) }
-
-    LaunchedEffect(members) {
-        if (members.isNotEmpty() && currentMemberId == null) {
-            viewModel.setCurrentMember(members.first().id)
-        }
-    }
     LaunchedEffect(selectedGroupId, items, assignments) {
         if (selectedGroupId != null) {
             viewModel.refreshSettlement()
@@ -103,7 +98,6 @@ fun BallroomScreen(viewModel: MainViewModel, navController: NavHostController) {
     val totalExpenseCents = items.sumOf { it.totalPriceCents }
     val pendingCents = calculatePendingCents(settlementWarnings)
     val mySettlementCents = settlements.firstOrNull { it.memberId == currentMemberId }?.amountCents ?: 0L
-    val currentMember = members.firstOrNull { it.id == currentMemberId }
 
     Box(modifier = Modifier.fillMaxSize()) {
         LazyColumn(
@@ -181,7 +175,7 @@ fun BallroomScreen(viewModel: MainViewModel, navController: NavHostController) {
                                     ProfileChip(
                                         member = member,
                                         selected = currentMemberId == member.id,
-                                        onClick = { viewModel.setCurrentMember(member.id) }
+                                        onClick = {}
                                     )
                                 }
                             }

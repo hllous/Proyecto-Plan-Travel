@@ -1,6 +1,7 @@
 package com.hllous.plantravel.domain.usecase
 
-import com.hllous.plantravel.domain.model.MemberRole
+import com.hllous.plantravel.domain.auth.SessionProvider
+import com.hllous.plantravel.domain.model.ConsumeInviteFailure
 import com.hllous.plantravel.domain.repository.TravelRepository
 import com.hllous.plantravel.domain.settlement.AssignmentOutcome
 import javax.inject.Inject
@@ -18,14 +19,6 @@ class UpdateGroupNameUseCase @Inject constructor(
 ) {
     suspend operator fun invoke(groupId: Long, name: String) {
         repository.updateGroupName(groupId, name.trim())
-    }
-}
-
-class AddMemberUseCase @Inject constructor(
-    private val repository: TravelRepository
-) {
-    suspend operator fun invoke(groupId: Long, memberName: String, role: MemberRole = MemberRole.USER): Long {
-        return repository.addMember(groupId, memberName.trim(), role)
     }
 }
 
@@ -60,9 +53,15 @@ class DeleteInviteUseCase @Inject constructor(
 }
 
 class ConsumeInviteUseCase @Inject constructor(
-    private val repository: TravelRepository
+    private val repository: TravelRepository,
+    private val sessionProvider: SessionProvider
 ) {
-    suspend operator fun invoke(code: String, memberName: String) = repository.consumeInvite(code.trim(), memberName.trim())
+    suspend operator fun invoke(code: String): Result<Long> {
+        val userId = sessionProvider.userId
+            ?: return Result.failure(ConsumeInviteFailure.Unauthenticated)
+        val displayName = sessionProvider.displayName.orEmpty()
+        return repository.consumeInvite(code.trim(), userId, displayName)
+    }
 }
 
 class AddExpenseItemUseCase @Inject constructor(

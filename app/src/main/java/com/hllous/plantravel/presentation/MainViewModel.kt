@@ -2,6 +2,7 @@ package com.hllous.plantravel.presentation
 
 import androidx.lifecycle.ViewModel
 import androidx.lifecycle.viewModelScope
+import com.hllous.plantravel.domain.auth.SessionProvider
 import com.hllous.plantravel.domain.model.DestinationRecommendation
 import com.hllous.plantravel.domain.model.ExpenseItem
 import com.hllous.plantravel.domain.model.GroupMember
@@ -15,7 +16,6 @@ import com.hllous.plantravel.domain.repository.TravelRepository
 import com.hllous.plantravel.domain.settlement.AssignmentOutcome
 import com.hllous.plantravel.domain.settlement.AssignmentRejectionReason
 import com.hllous.plantravel.domain.usecase.AddExpenseItemUseCase
-import com.hllous.plantravel.domain.usecase.AddMemberUseCase
 import com.hllous.plantravel.domain.usecase.AssignItemToMemberUseCase
 import com.hllous.plantravel.domain.usecase.CalculateSettlementUseCase
 import com.hllous.plantravel.domain.usecase.ConsumeInviteUseCase
@@ -33,6 +33,7 @@ import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.SharingStarted
 import kotlinx.coroutines.flow.StateFlow
 import kotlinx.coroutines.flow.flatMapLatest
+import kotlinx.coroutines.flow.map
 import kotlinx.coroutines.flow.stateIn
 import kotlinx.coroutines.launch
 
@@ -40,8 +41,8 @@ import kotlinx.coroutines.launch
 @OptIn(ExperimentalCoroutinesApi::class)
 class MainViewModel @Inject constructor(
     private val repository: TravelRepository,
+    private val sessionProvider: SessionProvider,
     private val createGroupUseCase: CreateGroupUseCase,
-    private val addMemberUseCase: AddMemberUseCase,
     private val updateGroupNameUseCase: UpdateGroupNameUseCase,
     private val deleteMemberUseCase: DeleteMemberUseCase,
     private val deleteGroupUseCase: DeleteGroupUseCase,
@@ -75,9 +76,6 @@ class MainViewModel @Inject constructor(
     private val _settlementWarnings = MutableStateFlow<List<SettlementWarning>>(emptyList())
     val settlementWarnings: StateFlow<List<SettlementWarning>> = _settlementWarnings
 
-    private val _currentMemberId = MutableStateFlow<Long?>(null)
-    val currentMemberId: StateFlow<Long?> = _currentMemberId
-
     val groups: StateFlow<List<TravelGroup>> = repository.observeGroups()
         .stateIn(viewModelScope, SharingStarted.WhileSubscribed(5000), emptyList())
 
@@ -87,6 +85,10 @@ class MainViewModel @Inject constructor(
             else repository.observeMembers(groupId)
         }
         .stateIn(viewModelScope, SharingStarted.WhileSubscribed(5000), emptyList())
+
+    val currentMember: StateFlow<GroupMember?> = members
+        .map { list -> list.firstOrNull { it.userId == sessionProvider.userId } }
+        .stateIn(viewModelScope, SharingStarted.WhileSubscribed(5000), null)
 
     val invites: StateFlow<List<InviteToken>> = selectedGroupId
         .flatMapLatest { groupId ->
@@ -121,13 +123,8 @@ class MainViewModel @Inject constructor(
         _settlementWarnings.value = emptyList()
     }
 
-    fun setCurrentMember(memberId: Long) {
-        _currentMemberId.value = memberId
-    }
-
     fun leaveSelectedGroupForDebug() {
         _selectedGroupId.value = null
-        _currentMemberId.value = null
         _settlements.value = emptyList()
         _settlementWarnings.value = emptyList()
     }
@@ -148,18 +145,6 @@ class MainViewModel @Inject constructor(
         }
     }
 
-    fun addMember(memberName: String) {
-        viewModelScope.launch {
-            val groupId = _selectedGroupId.value
-            if (groupId == null || memberName.isBlank()) {
-                _message.value = "Selecciona grupo y nombre valido"
-                return@launch
-            }
-            addMemberUseCase(groupId, memberName)
-            _message.value = "Integrante agregado"
-        }
-    }
-
     fun updateSelectedGroupName(name: String) {
         viewModelScope.launch {
             val groupId = _selectedGroupId.value
@@ -175,9 +160,6 @@ class MainViewModel @Inject constructor(
     fun deleteMember(memberId: Long) {
         viewModelScope.launch {
             deleteMemberUseCase(memberId)
-            if (_currentMemberId.value == memberId) {
-                _currentMemberId.value = null
-            }
             val groupId = _selectedGroupId.value
             if (groupId != null) {
                 recalculateSettlementSilently(groupId)
@@ -195,7 +177,6 @@ class MainViewModel @Inject constructor(
             }
             deleteGroupUseCase(groupId)
             _selectedGroupId.value = null
-            _currentMemberId.value = null
             _settlements.value = emptyList()
             _settlementWarnings.value = emptyList()
             _message.value = "Grupo eliminado"
@@ -221,14 +202,13 @@ class MainViewModel @Inject constructor(
         }
     }
 
-    fun consumeInvite(code: String, memberName: String) {
+    fun consumeInvite(code: String) {
         viewModelScope.launch {
-            if (code.isBlank() || memberName.isBlank()) {
-                _message.value = "Codigo y nombre son obligatorios"
+            if (code.isBlank()) {
+                _message.value = "Codigo de invitacion requerido"
                 return@launch
             }
-            val result = consumeInviteUseCase(code, memberName)
-            result.getOrNull()?.let { _currentMemberId.value = it }
+            val result = consumeInviteUseCase(code)
             _message.value = result.fold(
                 onSuccess = { "Te uniste al grupo" },
                 onFailure = { it.message ?: "No se pudo usar el QR" }
@@ -336,5 +316,3 @@ class MainViewModel @Inject constructor(
         return (integer * 100) + decimals
     }
 }
-
-

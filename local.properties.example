@@ -1,0 +1,14 @@
+## Copy this file to local.properties and fill in the values.
+## local.properties is excluded from version control.
+
+# Android SDK path (set automatically by Android Studio)
+sdk.dir=C\:\\Users\\YourName\\AppData\\Local\\Android\\Sdk
+
+# Supabase — find these in your project dashboard under Settings > API
+SUPABASE_URL=https://your-project-ref.supabase.co
+SUPABASE_PUBLISHABLE_KEY=sb_publishable_your_key_here
+
+# Google OAuth — create an OAuth 2.0 client ID (Android app type) in Google Cloud Console
+# Use the debug SHA-1 fingerprint and the applicationId com.hllous.plantravel
+# Then register the SHA-1 in the Supabase Auth > Google provider settings
+GOOGLE_OAUTH_CLIENT_ID=your-client-id.apps.googleusercontent.com

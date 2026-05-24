@@ -19,7 +19,7 @@ import com.hllous.plantravel.data.local.entity.MemberEntity
         ExpenseItemEntity::class,
         ItemAssignmentEntity::class
     ],
-    version = 1,
+    version = 2,
     exportSchema = false
 )
 abstract class PlanTravelDatabase : RoomDatabase() {
