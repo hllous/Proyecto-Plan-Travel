@@ -6,13 +6,22 @@ Complete feature timeline for Plan Travel, from MVP through future releases.
 
 Features that must ship for the app to be functional. Each has a full PRD as a GitHub issue.
 
-| Feature | GitHub Issue | Summary |
+| Feature | GitHub Issue | Status | Summary |
+|---|---|---|---|
+| **Auth & Identity** | [#9](https://github.com/hllous/Proyecto-Plan-Travel/issues/9) | 🟡 Partial | Email+password and Google OAuth login via Supabase Auth. Every GroupMember is a registered User linked by userId. Invite flow updated to link to real accounts. User Profile (display name, phone number, profile photo) set at registration and visible to all shared group members. |
+| **Backend Migration (Room → Supabase)** | [#10](https://github.com/hllous/Proyecto-Plan-Travel/issues/10) | ⬜ Not started | Remove Room entirely. Rewrite repository layer against Supabase Kotlin client. Supabase Realtime channels replace Flow-backed queries. Split MainViewModel into AuthViewModel, GroupViewModel, ExpenseViewModel, DestinationViewModel, ItineraryViewModel. Remove debug artifacts. |
+| **Expense Enhancements** | [#11](https://github.com/hllous/Proyecto-Plan-Travel/issues/11) | ⬜ Not started | Edit Expense Items (name, price, quantity) with domain guard rejecting quantity below total Assigned Quantity. Payment Status flag: member marks settlement as paid, ADMIN confirms. |
+| **Trip Planning Module** | [#12](https://github.com/hllous/Proyecto-Plan-Travel/issues/12) | ⬜ Not started | Trip Destination on TravelGroup. Google Places API for Place Recommendations. Open-Meteo for weather (free, no key). Shared Group Itinerary with Itinerary Events editable by all members in real time. |
+| **Trip Contacts** | [#13](https://github.com/hllous/Proyecto-Plan-Travel/issues/13) | ⬜ Not started | Group-level reference list for emergency numbers, accommodation, transport, and medical contacts. Name, phone, category, optional notes. Editable by any Group Member. |
+
+### #9 Auth & Identity — implementation detail
+
+| Sub-issue | Status | Notes |
 |---|---|---|
-| **Auth & Identity** | [#9](https://github.com/hllous/Proyecto-Plan-Travel/issues/9) | Email+password and Google OAuth login via Supabase Auth. Every GroupMember is a registered User linked by userId. Invite flow updated to link to real accounts. User Profile (display name, phone number, profile photo) set at registration and visible to all shared group members. |
-| **Backend Migration (Room → Supabase)** | [#10](https://github.com/hllous/Proyecto-Plan-Travel/issues/10) | Remove Room entirely. Rewrite repository layer against Supabase Kotlin client. Supabase Realtime channels replace Flow-backed queries. Split MainViewModel into AuthViewModel, GroupViewModel, ExpenseViewModel, DestinationViewModel, ItineraryViewModel. Remove debug artifacts. |
-| **Expense Enhancements** | [#11](https://github.com/hllous/Proyecto-Plan-Travel/issues/11) | Edit Expense Items (name, price, quantity) with domain guard rejecting quantity below total Assigned Quantity. Payment Status flag: member marks settlement as paid, ADMIN confirms. |
-| **Trip Planning Module** | [#12](https://github.com/hllous/Proyecto-Plan-Travel/issues/12) | Trip Destination on TravelGroup. Google Places API for Place Recommendations. Open-Meteo for weather (free, no key). Shared Group Itinerary with Itinerary Events editable by all members in real time. |
-| **Trip Contacts** | [#13](https://github.com/hllous/Proyecto-Plan-Travel/issues/13) | Group-level reference list for emergency numbers, accommodation, transport, and medical contacts. Name, phone, category, optional notes. Editable by any Group Member. |
+| [#14](https://github.com/hllous/Proyecto-Plan-Travel/issues/14) Supabase CLI + schema | ✅ Done | Migration applied to cloud. 6 tables with RLS. |
+| [#15](https://github.com/hllous/Proyecto-Plan-Travel/issues/15) Email/password auth + profile setup | ✅ Done | `AuthViewModel`, `AuthRepository`, `SupabaseAuthRepository`, `SessionProvider`, Login/Register/ProfileSetup screens, NavHost auth guard. Unit tested. Two bugs fixed post-implementation (see ADR-0005, `getDisplayName` DTO mismatch, `upsert` instead of `insert` in `createProfile`). |
+| [#16](https://github.com/hllous/Proyecto-Plan-Travel/issues/16) Google OAuth + deep link | 🔴 Blocked | Requires human to configure Google Cloud Console (SHA-1 fingerprint) and enable Google provider in Supabase Auth dashboard. Do not start until user gives the go-ahead. |
+| [#17](https://github.com/hllous/Proyecto-Plan-Travel/issues/17) Invite flow with real accounts | ⬜ Not started | Depends on #15 (done). Removes `AddMemberUseCase`, removes `currentMemberId` from `MainViewModel`, links `ConsumeInviteUseCase` to `SessionProvider`. |
 
 ## v2
 
