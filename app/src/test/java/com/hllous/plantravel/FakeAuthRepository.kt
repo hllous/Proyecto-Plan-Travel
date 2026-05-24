@@ -26,8 +26,10 @@ class FakeAuthRepository(
 
     override suspend fun getDisplayName(userId: String): String? = displayName
 
-    override suspend fun createProfile(userId: String, displayName: String, phone: String): Result<Unit> =
-        createProfileResult
+    override suspend fun createProfile(userId: String, displayName: String, phone: String): Result<Unit> {
+        if (createProfileResult.isSuccess) this.displayName = displayName
+        return createProfileResult
+    }
 
     suspend fun emitUserId(userId: String?) = userIdFlow.emit(userId)
 }

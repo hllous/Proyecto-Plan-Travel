@@ -128,4 +128,42 @@ class AuthViewModelTest {
 
         assertEquals(AuthState.Unauthenticated, vm.state.value)
     }
+
+    // --- regression: logout → login cycle ---
+
+    @Test
+    fun loginAfterProfileSetup_skipsProfileSetupAndEmitsAuthenticated() {
+        // Simulates: register → createProfile → logout → login again
+        // After createProfile succeeds, getDisplayName must return the saved name on re-login
+        val repo = FakeAuthRepository(displayName = null)
+        val vm = viewModel(repo)
+
+        // First login: no profile yet → NeedsProfileSetup
+        repo.userIdFlow.tryEmit("user-123")
+        assertEquals(AuthState.NeedsProfileSetup("user-123"), vm.state.value)
+
+        // User fills profile
+        vm.createProfile("Ana", "+5491100000000")
+        assertEquals(AuthState.Authenticated("user-123", "Ana"), vm.state.value)
+
+        // Logout → login again: profile now exists, must go straight to Authenticated
+        repo.userIdFlow.tryEmit(null)
+        repo.userIdFlow.tryEmit("user-123")
+
+        assertEquals(AuthState.Authenticated("user-123", "Ana"), vm.state.value)
+    }
+
+    @Test
+    fun createProfile_calledTwiceForSameUser_doesNotEmitError() {
+        // Simulates: profile setup shown again on re-login (Bug A); user submits again (Bug B)
+        // Even if the server is called twice, the ViewModel must not land on Error
+        val repo = FakeAuthRepository(displayName = null)
+        val vm = viewModel(repo)
+        repo.userIdFlow.tryEmit("user-123")
+
+        vm.createProfile("Ana", "+5491100000000") // first time: success
+        vm.createProfile("Ana", "+5491100000000") // second time: must also succeed (upsert)
+
+        assertEquals(AuthState.Authenticated("user-123", "Ana"), vm.state.value)
+    }
 }
