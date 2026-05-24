@@ -1,8 +1,62 @@
 # Plan Travel
 
-Plan Travel coordinates group travel planning, including group membership, destination recommendations, invitations, and expense splitting.
+Plan Travel coordinates group travel planning, including group membership, trip destination setting, itinerary planning, destination recommendations, invitations, expense splitting, and travel safety information.
 
 ## Language
+
+### Identity
+
+**User**:
+A registered account in Plan Travel, identified by email/password or Google OAuth. Every group participant must be a User — there are no anonymous or name-only members.
+_Avoid_: Account, player, participant
+
+**User Profile**:
+The public-facing information a User shares across all Travel Groups they belong to: display name, phone number, and profile photo. Set once; visible to all Group Members in any shared group.
+_Avoid_: Account details, settings, personal info
+
+**Group Member**:
+A User who has joined a specific Travel Group. Always linked to exactly one User. The role is either ADMIN (the creator) or USER.
+_Avoid_: Participant, traveler, person
+
+### Groups & Invites
+
+**Travel Group**:
+A named collection of Group Members organized around a single trip. Has one ADMIN and zero or more USER members. Always has a single currency (ARS in MVP).
+_Avoid_: Trip, team, party
+
+**Invite Token**:
+A time-limited code that allows a User to join a Travel Group as a Group Member. Consumed once; invalidated on use or expiry.
+_Avoid_: Join code, link, QR
+
+### Trip Planning
+
+**Trip Destination**:
+The physical location a Travel Group is traveling to. Set by the ADMIN at group creation or later. Used as the anchor for destination recommendations, Place Recommendations, and weather data.
+_Avoid_: Location, place, city
+
+**Place Recommendation**:
+A point of interest (landmark, activity, restaurant, etc.) suggested for the Trip Destination, sourced from an external places API (Google Places primary; OpenTripMap / Foursquare as fallback).
+_Avoid_: Activity, suggestion, result
+
+**Group Itinerary**:
+The ordered collection of Itinerary Events for a Travel Group. Shared and editable by all Group Members.
+_Avoid_: Schedule, plan, agenda
+
+**Itinerary Event**:
+A single scheduled activity or milestone in the Group Itinerary, with a date, optional time, name, and optional description.
+_Avoid_: Activity, appointment, event (too generic)
+
+### Safety & Documents
+
+**Trip Contact**:
+A group-level reference entry for emergency or logistical use during the trip: a name, phone number, category (Emergency, Accommodation, Transport, Medical, Other), and optional notes. Belongs to the Travel Group, visible to all Group Members, and editable by any Group Member.
+_Avoid_: Emergency contact, phone book, directory
+
+**Travel Document**:
+A personal credential stored by a Group Member for their own reference during travel: a document type (DNI, Passport, Travel Insurance, Health Insurance, Driver's License, Vaccination Certificate, or custom), a number or ID, an expiry date, optional notes, and an optional photo attachment. Private by default; the owner can explicitly share it with all members of a specific Travel Group.
+_Avoid_: File, attachment, record
+
+### Expenses & Settlement
 
 **Expense Item**:
 A shared purchase or planned cost inside a travel group, with a total price and an item quantity.
@@ -31,6 +85,10 @@ _Avoid_: Error message, snackbar text
 **Assignment Outcome**:
 The typed result of an attempt to set an Assigned Quantity for a group member. Either `Accepted` (the assignment was valid and persisted) or `Rejected` with a typed reason (`OverAssigned` or `NegativeQuantity`). Data-integrity failures (e.g. item not found) are not Assignment Outcomes — they are programming errors surfaced as unchecked exceptions.
 _Avoid_: assignment result, validation result, error code
+
+**Payment Status**:
+Whether a Group Member has marked their Member Settlement as paid. Set by the member themselves; confirmed by the group ADMIN. Does not represent a real money transfer — it is a shared acknowledgement only.
+_Avoid_: Paid flag, balance status, settlement state
 
 ## Example Dialogue
 
