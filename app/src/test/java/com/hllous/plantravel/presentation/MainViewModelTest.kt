@@ -3,13 +3,9 @@ package com.hllous.plantravel.presentation
 import com.hllous.plantravel.FakeSessionProvider
 import com.hllous.plantravel.FakeTravelRepository
 import com.hllous.plantravel.MainDispatcherRule
-import com.hllous.plantravel.domain.settlement.AssignmentOutcome
-import com.hllous.plantravel.domain.settlement.AssignmentRejectionReason
-import com.hllous.plantravel.domain.usecase.AddExpenseItemUseCase
-import com.hllous.plantravel.domain.usecase.AssignItemToMemberUseCase
-import com.hllous.plantravel.domain.usecase.CalculateSettlementUseCase
+import com.hllous.plantravel.domain.model.ConsumeInviteFailure
 import com.hllous.plantravel.domain.usecase.ConsumeInviteUseCase
-import com.hllous.plantravel.domain.usecase.DeleteExpenseItemUseCase
+
 import com.hllous.plantravel.domain.usecase.DeleteInviteUseCase
 import com.hllous.plantravel.domain.usecase.GenerateInviteUseCase
 import com.hllous.plantravel.presentation.group.SelectedGroupHolder
@@ -29,41 +25,39 @@ class MainViewModelTest {
     ): MainViewModel {
         return MainViewModel(
             repository = repo,
-            sessionProvider = session,
             selectedGroupHolder = holder,
             generateInviteUseCase = GenerateInviteUseCase(repo),
             deleteInviteUseCase = DeleteInviteUseCase(repo),
             consumeInviteUseCase = ConsumeInviteUseCase(repo, session),
-            addExpenseItemUseCase = AddExpenseItemUseCase(repo),
-            assignItemToMemberUseCase = AssignItemToMemberUseCase(repo),
-            deleteExpenseItemUseCase = DeleteExpenseItemUseCase(repo),
-            calculateSettlementUseCase = CalculateSettlementUseCase(repo)
         )
     }
 
     @Test
-    fun assignItemSetsOverAssignedMessageWhenAssignmentIsRejected() {
-        val repo = FakeTravelRepository(
-            assignOutcome = AssignmentOutcome.Rejected(AssignmentRejectionReason.OVER_ASSIGNED)
-        )
-        val holder = SelectedGroupHolder().also { it.selectedGroupId.value = "group-1" }
-        val vm = viewModel(repo = repo, holder = holder)
+    fun consumeInviteShowsSuccessMessageOnJoin() {
+        val repo = FakeTravelRepository(consumeInviteResult = Result.success("group-1"))
+        val vm = viewModel(repo = repo)
 
-        vm.assignItem(itemId = "item-10", memberId = "member-1", quantityText = "5")
+        vm.consumeInvite("VALIDCODE")
 
-        assertEquals("La cantidad asignada supera la cantidad del item", vm.message.value)
+        assertEquals("Te uniste al grupo", vm.message.value)
     }
 
     @Test
-    fun assignItemSetsNegativeQuantityMessageWhenAssignmentIsRejected() {
-        val repo = FakeTravelRepository(
-            assignOutcome = AssignmentOutcome.Rejected(AssignmentRejectionReason.NEGATIVE_QUANTITY)
-        )
-        val holder = SelectedGroupHolder().also { it.selectedGroupId.value = "group-1" }
-        val vm = viewModel(repo = repo, holder = holder)
+    fun consumeInviteShowsFallbackMessageWhenExpired() {
+        val repo = FakeTravelRepository(consumeInviteResult = Result.failure(ConsumeInviteFailure.Expired))
+        val vm = viewModel(repo = repo)
 
-        vm.assignItem(itemId = "item-10", memberId = "member-1", quantityText = "2")
+        vm.consumeInvite("EXPIREDCODE")
 
-        assertEquals("Cantidad invalida", vm.message.value)
+        assertEquals("No se pudo usar el QR", vm.message.value)
+    }
+
+    @Test
+    fun consumeInviteWithBlankCodeShowsRequiredMessage() {
+        val vm = viewModel()
+
+        vm.consumeInvite("  ")
+
+        assertEquals("Codigo de invitacion requerido", vm.message.value)
     }
 }

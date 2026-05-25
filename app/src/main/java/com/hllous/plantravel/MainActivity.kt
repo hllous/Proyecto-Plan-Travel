@@ -63,8 +63,9 @@ import androidx.navigation.compose.currentBackStackEntryAsState
 import androidx.navigation.compose.rememberNavController
 import com.hllous.plantravel.presentation.MainViewModel
 import com.hllous.plantravel.presentation.auth.AuthState
-import com.hllous.plantravel.presentation.group.GroupViewModel
 import com.hllous.plantravel.presentation.auth.AuthViewModel
+import com.hllous.plantravel.presentation.expense.ExpenseViewModel
+import com.hllous.plantravel.presentation.group.GroupViewModel
 import io.github.jan.supabase.SupabaseClient
 import io.github.jan.supabase.auth.handleDeeplinks
 import javax.inject.Inject
@@ -179,6 +180,7 @@ fun MainAppContent(
 ) {
     val viewModel = hiltViewModel<MainViewModel>()
     val groupViewModel = hiltViewModel<GroupViewModel>()
+    val expenseViewModel = hiltViewModel<ExpenseViewModel>()
     val navController = rememberNavController()
     val snackbarHostState = remember { SnackbarHostState() }
     val message by viewModel.message.collectAsState(initial = null)
@@ -259,7 +261,7 @@ fun MainAppContent(
                 composable("home") { HomeScreen(navController = navController) }
                 composable("groups") { GroupsScreen(groupViewModel = groupViewModel, mainViewModel = viewModel, navController = navController) }
                 composable("destinations") { DestinationScreen(viewModel = viewModel, navController = navController) }
-                composable("gastos") { BallroomScreen(viewModel = viewModel, navController = navController) }
+                composable("gastos") { BallroomScreen(viewModel = expenseViewModel, navController = navController) }
                 composable("qr_scanner") {
                     QrScannerScreen(
                         viewModel = viewModel,

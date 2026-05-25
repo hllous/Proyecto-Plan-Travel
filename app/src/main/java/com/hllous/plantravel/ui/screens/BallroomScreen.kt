@@ -59,7 +59,7 @@ import com.hllous.plantravel.domain.model.ItemAssignment
 import com.hllous.plantravel.domain.model.MemberSettlement
 import com.hllous.plantravel.domain.model.SettlementWarning
 import com.hllous.plantravel.domain.model.TravelGroup
-import com.hllous.plantravel.presentation.MainViewModel
+import com.hllous.plantravel.presentation.expense.ExpenseViewModel
 import com.hllous.plantravel.ui.components.CollapsibleHeader
 import com.hllous.plantravel.ui.components.SectionCard
 import com.hllous.plantravel.ui.components.travelTextFieldColors
@@ -69,7 +69,7 @@ import com.hllous.plantravel.ui.utils.memberInitial
 
 @Suppress("UNUSED_PARAMETER")
 @Composable
-fun BallroomScreen(viewModel: MainViewModel, navController: NavHostController) {
+fun BallroomScreen(viewModel: ExpenseViewModel, navController: NavHostController) {
     val groups by viewModel.groups.collectAsState(initial = emptyList())
     val members by viewModel.members.collectAsState(initial = emptyList())
     val items by viewModel.expenseItems.collectAsState(initial = emptyList())

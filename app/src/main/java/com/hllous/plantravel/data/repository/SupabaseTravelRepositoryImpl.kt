@@ -19,6 +19,8 @@ import io.github.jan.supabase.realtime.PostgresAction
 import io.github.jan.supabase.realtime.channel
 import io.github.jan.supabase.realtime.postgresChangeFlow
 import io.github.jan.supabase.realtime.realtime
+import com.hllous.plantravel.domain.settlement.ExpenseAssignmentPolicy
+import com.hllous.plantravel.domain.settlement.ExpenseSettlementCalculator
 import java.time.Instant
 import java.time.OffsetDateTime
 import java.time.ZoneOffset
@@ -114,7 +116,67 @@ class SupabaseTravelRepositoryImpl @Inject constructor(
     @Serializable
     private data class MembershipCheckDto(@SerialName("group_id") val groupId: String)
 
+    @Serializable
+    private data class ExpenseItemDto(
+        val id: String,
+        @SerialName("group_id") val groupId: String,
+        val name: String,
+        @SerialName("total_price_cents") val totalPriceCents: Long,
+        val quantity: Int
+    ) {
+        fun toDomain() = ExpenseItem(id = id, groupId = groupId, name = name, totalPriceCents = totalPriceCents, quantity = quantity)
+    }
+
+    @Serializable
+    private data class InsertExpenseItemDto(
+        @SerialName("group_id") val groupId: String,
+        val name: String,
+        @SerialName("total_price_cents") val totalPriceCents: Long,
+        val quantity: Int
+    )
+
+    @Serializable
+    private data class ItemAssignmentDto(
+        @SerialName("item_id") val itemId: String,
+        @SerialName("member_id") val memberId: String,
+        val quantity: Int
+    ) {
+        fun toDomain() = ItemAssignment(itemId = itemId, memberId = memberId, quantity = quantity)
+    }
+
+    @Serializable
+    private data class UpsertAssignmentDto(
+        @SerialName("item_id") val itemId: String,
+        @SerialName("member_id") val memberId: String,
+        val quantity: Int
+    )
+
     // ─── Fetch helpers ───────────────────────────────────────────────────────
+
+    private val settlementCalculator = ExpenseSettlementCalculator()
+    private val assignmentPolicy = ExpenseAssignmentPolicy()
+
+    private suspend fun fetchExpenseItems(groupId: String): List<ExpenseItem> =
+        supabase.from("expense_items")
+            .select { filter { eq("group_id", groupId) } }
+            .decodeList<ExpenseItemDto>()
+            .map { it.toDomain() }
+
+    private suspend fun fetchAssignments(groupId: String): List<ItemAssignment> {
+        val items = fetchExpenseItems(groupId)
+        if (items.isEmpty()) return emptyList()
+        val itemIds = items.map { it.id }
+        return supabase.from("item_assignments")
+            .select { filter { isIn("item_id", itemIds) } }
+            .decodeList<ItemAssignmentDto>()
+            .map { it.toDomain() }
+    }
+
+    private suspend fun fetchAssignmentsForItem(itemId: String): List<ItemAssignment> =
+        supabase.from("item_assignments")
+            .select { filter { eq("item_id", itemId) } }
+            .decodeList<ItemAssignmentDto>()
+            .map { it.toDomain() }
 
     private suspend fun fetchGroupsForUser(userId: String): List<TravelGroup> {
         val memberships = supabase.from("group_members")
@@ -296,21 +358,84 @@ class SupabaseTravelRepositoryImpl @Inject constructor(
     override suspend fun getRecommendationsByRegion(region: String): List<DestinationRecommendation> =
         throw NotImplementedError("getRecommendationsByRegion not yet implemented — see #12")
 
-    override fun observeExpenseItems(groupId: String): Flow<List<ExpenseItem>> =
-        flow { throw NotImplementedError("observeExpenseItems not yet implemented — see #23") }
+    override fun observeExpenseItems(groupId: String): Flow<List<ExpenseItem>> = channelFlow {
+        send(fetchExpenseItems(groupId))
 
-    override fun observeAssignments(groupId: String): Flow<List<ItemAssignment>> =
-        flow { throw NotImplementedError("observeAssignments not yet implemented — see #23") }
+        val channel = supabase.channel("expense-items-$groupId")
+        val changes = channel.postgresChangeFlow<PostgresAction>(schema = "public") {
+            table = "expense_items"
+        }
+        channel.subscribe(blockUntilSubscribed = true)
 
-    override suspend fun addExpenseItem(groupId: String, itemName: String, totalPriceCents: Long, quantity: Int): String =
-        throw NotImplementedError("addExpenseItem not yet implemented — see #23")
+        try {
+            changes.collect { send(fetchExpenseItems(groupId)) }
+        } finally {
+            supabase.realtime.removeChannel(channel)
+        }
+    }
 
-    override suspend fun assignItemToMember(itemId: String, memberId: String, quantity: Int): AssignmentOutcome =
-        throw NotImplementedError("assignItemToMember not yet implemented — see #23")
+    override fun observeAssignments(groupId: String): Flow<List<ItemAssignment>> = channelFlow {
+        send(fetchAssignments(groupId))
 
-    override suspend fun deleteExpenseItem(itemId: String) =
-        throw NotImplementedError("deleteExpenseItem not yet implemented — see #23")
+        val channel = supabase.channel("assignments-$groupId")
+        val changes = channel.postgresChangeFlow<PostgresAction>(schema = "public") {
+            table = "item_assignments"
+        }
+        channel.subscribe(blockUntilSubscribed = true)
 
-    override suspend fun calculateSettlement(groupId: String): SettlementResult =
-        throw NotImplementedError("calculateSettlement not yet implemented — see #23")
+        try {
+            changes.collect { send(fetchAssignments(groupId)) }
+        } finally {
+            supabase.realtime.removeChannel(channel)
+        }
+    }
+
+    override suspend fun addExpenseItem(groupId: String, itemName: String, totalPriceCents: Long, quantity: Int): String {
+        val dto = supabase.from("expense_items")
+            .insert(InsertExpenseItemDto(groupId = groupId, name = itemName, totalPriceCents = totalPriceCents, quantity = quantity)) {
+                select()
+            }
+            .decodeSingle<ExpenseItemDto>()
+        return dto.id
+    }
+
+    override suspend fun assignItemToMember(itemId: String, memberId: String, quantity: Int): AssignmentOutcome {
+        val item = supabase.from("expense_items")
+            .select { filter { eq("id", itemId) } }
+            .decodeList<ExpenseItemDto>()
+            .firstOrNull()?.toDomain()
+            ?: throw IllegalStateException("Expense item $itemId not found")
+
+        val currentAssignments = fetchAssignmentsForItem(itemId)
+        val outcome = assignmentPolicy.validate(item, currentAssignments, memberId, quantity)
+        if (outcome is AssignmentOutcome.Rejected) return outcome
+
+        if (quantity == 0) {
+            supabase.from("item_assignments").delete {
+                filter {
+                    eq("item_id", itemId)
+                    eq("member_id", memberId)
+                }
+            }
+        } else {
+            supabase.from("item_assignments")
+                .upsert(UpsertAssignmentDto(itemId = itemId, memberId = memberId, quantity = quantity)) {
+                    onConflict = "item_id,member_id"
+                }
+        }
+        return AssignmentOutcome.Accepted
+    }
+
+    override suspend fun deleteExpenseItem(itemId: String) {
+        supabase.from("expense_items").delete {
+            filter { eq("id", itemId) }
+        }
+    }
+
+    override suspend fun calculateSettlement(groupId: String): SettlementResult {
+        val members = fetchMembers(groupId)
+        val items = fetchExpenseItems(groupId)
+        val assignments = fetchAssignments(groupId)
+        return settlementCalculator.calculate(members = members, items = items, assignments = assignments)
+    }
 }
