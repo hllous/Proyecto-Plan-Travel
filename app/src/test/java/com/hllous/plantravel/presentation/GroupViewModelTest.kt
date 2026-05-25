@@ -1,6 +1,5 @@
 package com.hllous.plantravel.presentation
 
-import com.hllous.plantravel.FakeSessionProvider
 import com.hllous.plantravel.FakeTravelRepository
 import com.hllous.plantravel.MainDispatcherRule
 import com.hllous.plantravel.domain.model.GroupMember
@@ -16,7 +15,7 @@ import kotlinx.coroutines.ExperimentalCoroutinesApi
 import kotlinx.coroutines.launch
 import kotlinx.coroutines.test.UnconfinedTestDispatcher
 import org.junit.Assert.assertEquals
-import org.junit.Assert.assertTrue
+import org.junit.Assert.assertNull
 import org.junit.Rule
 import org.junit.Test
 
@@ -28,11 +27,9 @@ class GroupViewModelTest {
 
     private fun viewModel(
         repo: FakeTravelRepository = FakeTravelRepository(),
-        session: FakeSessionProvider = FakeSessionProvider(userId = "user-1"),
         holder: SelectedGroupHolder = SelectedGroupHolder()
     ) = GroupViewModel(
         repository = repo,
-        sessionProvider = session,
         selectedGroupHolder = holder,
         createGroupUseCase = CreateGroupUseCase(repo),
         updateGroupNameUseCase = UpdateGroupNameUseCase(repo),
@@ -55,12 +52,27 @@ class GroupViewModelTest {
     }
 
     @Test
+    fun createGroupWithBlankNameShowsErrorMessage() {
+        val vm = viewModel()
+        vm.createGroup("   ")
+        assertEquals("Completa el nombre del grupo", vm.message.value)
+        assertNull(vm.selectedGroupId.value)
+    }
+
+    @Test
     fun deleteSelectedGroupClearsSelectedGroupId() {
         val holder = SelectedGroupHolder()
         holder.selectedGroupId.value = "group-10"
         val vm = viewModel(holder = holder)
         vm.deleteSelectedGroup()
-        assertEquals(null, vm.selectedGroupId.value)
+        assertNull(vm.selectedGroupId.value)
+    }
+
+    @Test
+    fun deleteSelectedGroupWithNoSelectionShowsErrorMessage() {
+        val vm = viewModel()
+        vm.deleteSelectedGroup()
+        assertEquals("Selecciona un grupo", vm.message.value)
     }
 
     @Test
@@ -71,12 +83,29 @@ class GroupViewModelTest {
     }
 
     @Test
+    fun updateSelectedGroupNameWithValidNameShowsSuccessMessage() {
+        val holder = SelectedGroupHolder()
+        holder.selectedGroupId.value = "group-1"
+        val vm = viewModel(holder = holder)
+        vm.updateSelectedGroupName("Nuevo Nombre")
+        assertEquals("Nombre del grupo actualizado", vm.message.value)
+    }
+
+    @Test
+    fun updateSelectedGroupNameWithBlankNameShowsErrorMessage() {
+        val holder = SelectedGroupHolder()
+        holder.selectedGroupId.value = "group-1"
+        val vm = viewModel(holder = holder)
+        vm.updateSelectedGroupName("   ")
+        assertEquals("Selecciona grupo y nombre valido", vm.message.value)
+    }
+
+    @Test
     fun selectingGroupUpdatesMemberList() {
         val members = listOf(GroupMember(id = "m1", groupId = "group-1", name = "Nico", userId = "user-1", role = MemberRole.ADMIN))
         val repo = FakeTravelRepository(initialMembers = mapOf("group-1" to members))
         val holder = SelectedGroupHolder()
         val vm = viewModel(repo = repo, holder = holder)
-        // Subscribe to members so stateIn(WhileSubscribed) starts the upstream
         val scope = CoroutineScope(UnconfinedTestDispatcher())
         val job = scope.launch { vm.members.collect { } }
 
@@ -87,22 +116,12 @@ class GroupViewModelTest {
     }
 
     @Test
-    fun generatingInviteProducesTokenWithCode() {
-        val repo = FakeTravelRepository()
-        val vm = viewModel(repo = repo)
-        vm.selectGroup("group-42")
-
-        // Pre-condition satisfied: group is selected. generateInvite (in MainViewModel) can proceed.
-        assertEquals("group-42", vm.selectedGroupId.value)
-    }
-
-    @Test
-    fun consumeInviteAddsCurrentUserAsMember() {
+    fun membersStateUpdatesAfterConsumeInvite() {
         val groupId = "group-1"
         val userId = "user-1"
         val repo = FakeTravelRepository(consumeInviteResult = Result.success(groupId))
         val holder = SelectedGroupHolder().also { it.selectedGroupId.value = groupId }
-        val vm = viewModel(repo = repo, session = FakeSessionProvider(userId = userId, displayName = "Nico"), holder = holder)
+        val vm = viewModel(repo = repo, holder = holder)
         val scope = CoroutineScope(UnconfinedTestDispatcher())
         val job = scope.launch { vm.members.collect { } }
 

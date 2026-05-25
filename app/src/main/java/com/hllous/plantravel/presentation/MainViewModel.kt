@@ -72,6 +72,7 @@ class MainViewModel @Inject constructor(
                 return@launch
             }
             val result = consumeInviteUseCase(code)
+            result.onSuccess { groupId -> selectedGroupHolder.selectedGroupId.value = groupId }
             _message.value = result.fold(
                 onSuccess = { "Te uniste al grupo" },
                 onFailure = { it.message ?: "No se pudo usar el QR" }

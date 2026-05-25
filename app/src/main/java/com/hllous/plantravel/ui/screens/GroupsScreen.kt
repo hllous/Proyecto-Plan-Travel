@@ -49,6 +49,7 @@ import com.google.zxing.BarcodeFormat
 import com.google.zxing.MultiFormatWriter
 import com.google.zxing.common.BitMatrix
 import com.hllous.plantravel.presentation.MainViewModel
+import com.hllous.plantravel.domain.model.MemberRole
 import com.hllous.plantravel.presentation.UiState
 import com.hllous.plantravel.presentation.group.GroupViewModel
 import com.hllous.plantravel.ui.components.ErrorCard
@@ -317,7 +318,7 @@ fun GroupsScreen(
                                         Text(member.role.name, style = MaterialTheme.typography.labelSmall, color = MaterialTheme.colorScheme.onSurfaceVariant)
                                     }
                                 }
-                                if (member.role.name != "ADMIN") {
+                                if (member.role != MemberRole.ADMIN) {
                                     IconButton(onClick = { groupViewModel.deleteMember(member.id) }) {
                                         Icon(Icons.Default.Delete, contentDescription = "Eliminar integrante", tint = MaterialTheme.colorScheme.error)
                                     }

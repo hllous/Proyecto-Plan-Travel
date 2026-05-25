@@ -2,7 +2,6 @@ package com.hllous.plantravel.presentation.group
 
 import androidx.lifecycle.ViewModel
 import androidx.lifecycle.viewModelScope
-import com.hllous.plantravel.domain.auth.SessionProvider
 import com.hllous.plantravel.domain.model.GroupMember
 import com.hllous.plantravel.domain.model.TravelGroup
 import com.hllous.plantravel.domain.repository.TravelRepository
@@ -29,7 +28,6 @@ import kotlinx.coroutines.launch
 @OptIn(ExperimentalCoroutinesApi::class)
 class GroupViewModel @Inject constructor(
     private val repository: TravelRepository,
-    private val sessionProvider: SessionProvider,
     private val selectedGroupHolder: SelectedGroupHolder,
     private val createGroupUseCase: CreateGroupUseCase,
     private val updateGroupNameUseCase: UpdateGroupNameUseCase,
@@ -59,10 +57,6 @@ class GroupViewModel @Inject constructor(
             else repository.observeMembers(groupId)
         }
         .stateIn(viewModelScope, SharingStarted.WhileSubscribed(5000), emptyList())
-
-    val currentMember: StateFlow<GroupMember?> = members
-        .map { list -> list.firstOrNull { it.userId == sessionProvider.userId } }
-        .stateIn(viewModelScope, SharingStarted.WhileSubscribed(5000), null)
 
     private val _message = MutableStateFlow<String?>(null)
     val message: StateFlow<String?> = _message
@@ -102,8 +96,9 @@ class GroupViewModel @Inject constructor(
                 _message.value = "Selecciona grupo y nombre valido"
                 return@launch
             }
-            updateGroupNameUseCase(groupId, name)
-            _message.value = "Nombre del grupo actualizado"
+            runCatching { updateGroupNameUseCase(groupId, name) }
+                .onSuccess { _message.value = "Nombre del grupo actualizado" }
+                .onFailure { _message.value = "Error al actualizar nombre" }
         }
     }
 
@@ -113,16 +108,20 @@ class GroupViewModel @Inject constructor(
                 _message.value = "Selecciona un grupo"
                 return@launch
             }
-            deleteGroupUseCase(groupId)
-            selectedGroupHolder.selectedGroupId.value = null
-            _message.value = "Grupo eliminado"
+            runCatching { deleteGroupUseCase(groupId) }
+                .onSuccess {
+                    selectedGroupHolder.selectedGroupId.value = null
+                    _message.value = "Grupo eliminado"
+                }
+                .onFailure { _message.value = "Error al eliminar grupo" }
         }
     }
 
     fun deleteMember(memberId: String) {
         viewModelScope.launch {
-            deleteMemberUseCase(memberId)
-            _message.value = "Integrante eliminado"
+            runCatching { deleteMemberUseCase(memberId) }
+                .onSuccess { _message.value = "Integrante eliminado" }
+                .onFailure { _message.value = "Error al eliminar integrante" }
         }
     }
 }
