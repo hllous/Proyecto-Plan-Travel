@@ -1,6 +1,6 @@
 package com.hllous.plantravel.di
 
-import com.hllous.plantravel.data.repository.TravelRepositoryImpl
+import com.hllous.plantravel.data.repository.SupabaseTravelRepositoryImpl
 import com.hllous.plantravel.domain.repository.TravelRepository
 import dagger.Binds
 import dagger.Module
@@ -14,6 +14,6 @@ abstract class RepositoryModule {
 
     @Binds
     @Singleton
-    abstract fun bindTravelRepository(impl: TravelRepositoryImpl): TravelRepository
+    abstract fun bindTravelRepository(impl: SupabaseTravelRepositoryImpl): TravelRepository
 }
 
