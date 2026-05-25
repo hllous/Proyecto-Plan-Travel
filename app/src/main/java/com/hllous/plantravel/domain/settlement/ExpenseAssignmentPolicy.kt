@@ -17,7 +17,7 @@ class ExpenseAssignmentPolicy {
     fun validate(
         item: ExpenseItem,
         currentAssignments: List<ItemAssignment>,
-        memberId: Long,
+        memberId: String,
         requestedQuantity: Int
     ): AssignmentOutcome {
         if (requestedQuantity < 0) {

@@ -6,16 +6,16 @@ enum class MemberRole {
 }
 
 data class TravelGroup(
-    val id: Long,
+    val id: String,
     val name: String,
-    val adminMemberId: Long?
+    val adminUserId: String? = null
 )
 
 data class GroupMember(
-    val id: Long,
-    val groupId: Long,
+    val id: String,
+    val groupId: String,
     val name: String,
-    val userId: String?,
+    val userId: String,
     val role: MemberRole
 )
 
@@ -27,7 +27,7 @@ sealed class ConsumeInviteFailure : Exception() {
 
 data class InviteToken(
     val code: String,
-    val groupId: Long,
+    val groupId: String,
     val link: String,
     val expiresAtMillis: Long
 )
@@ -39,27 +39,27 @@ data class DestinationRecommendation(
 )
 
 data class ExpenseItem(
-    val id: Long,
-    val groupId: Long,
+    val id: String,
+    val groupId: String,
     val name: String,
     val totalPriceCents: Long,
     val quantity: Int
 )
 
 data class ItemAssignment(
-    val itemId: Long,
-    val memberId: Long,
+    val itemId: String,
+    val memberId: String,
     val quantity: Int
 )
 
 data class MemberSettlement(
-    val memberId: Long,
+    val memberId: String,
     val memberName: String,
     val amountCents: Long
 )
 
 data class SettlementWarning(
-    val itemId: Long,
+    val itemId: String,
     val itemName: String,
     val unassignedQuantity: Int,
     val unassignedAmountCents: Long
@@ -69,4 +69,3 @@ data class SettlementResult(
     val memberSettlements: List<MemberSettlement>,
     val warnings: List<SettlementWarning>
 )
-

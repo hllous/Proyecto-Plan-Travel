@@ -19,20 +19,19 @@ import com.hllous.plantravel.domain.usecase.AddExpenseItemUseCase
 import com.hllous.plantravel.domain.usecase.AssignItemToMemberUseCase
 import com.hllous.plantravel.domain.usecase.CalculateSettlementUseCase
 import com.hllous.plantravel.domain.usecase.ConsumeInviteUseCase
-import com.hllous.plantravel.domain.usecase.CreateGroupUseCase
-import com.hllous.plantravel.domain.usecase.DeleteGroupUseCase
 import com.hllous.plantravel.domain.usecase.DeleteExpenseItemUseCase
 import com.hllous.plantravel.domain.usecase.DeleteInviteUseCase
-import com.hllous.plantravel.domain.usecase.DeleteMemberUseCase
 import com.hllous.plantravel.domain.usecase.GenerateInviteUseCase
-import com.hllous.plantravel.domain.usecase.UpdateGroupNameUseCase
+import com.hllous.plantravel.presentation.group.SelectedGroupHolder
 import dagger.hilt.android.lifecycle.HiltViewModel
 import javax.inject.Inject
 import kotlinx.coroutines.ExperimentalCoroutinesApi
 import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.SharingStarted
 import kotlinx.coroutines.flow.StateFlow
+import kotlinx.coroutines.flow.asStateFlow
 import kotlinx.coroutines.flow.flatMapLatest
+import kotlinx.coroutines.flow.flowOf
 import kotlinx.coroutines.flow.map
 import kotlinx.coroutines.flow.stateIn
 import kotlinx.coroutines.launch
@@ -42,10 +41,7 @@ import kotlinx.coroutines.launch
 class MainViewModel @Inject constructor(
     private val repository: TravelRepository,
     private val sessionProvider: SessionProvider,
-    private val createGroupUseCase: CreateGroupUseCase,
-    private val updateGroupNameUseCase: UpdateGroupNameUseCase,
-    private val deleteMemberUseCase: DeleteMemberUseCase,
-    private val deleteGroupUseCase: DeleteGroupUseCase,
+    private val selectedGroupHolder: SelectedGroupHolder,
     private val generateInviteUseCase: GenerateInviteUseCase,
     private val deleteInviteUseCase: DeleteInviteUseCase,
     private val consumeInviteUseCase: ConsumeInviteUseCase,
@@ -55,8 +51,7 @@ class MainViewModel @Inject constructor(
     private val calculateSettlementUseCase: CalculateSettlementUseCase
 ) : ViewModel() {
 
-    private val _selectedGroupId = MutableStateFlow<Long?>(null)
-    val selectedGroupId: StateFlow<Long?> = _selectedGroupId
+    val selectedGroupId: StateFlow<String?> = selectedGroupHolder.selectedGroupId.asStateFlow()
 
     private val _message = MutableStateFlow<String?>(null)
     val message: StateFlow<String?> = _message
@@ -76,12 +71,13 @@ class MainViewModel @Inject constructor(
     private val _settlementWarnings = MutableStateFlow<List<SettlementWarning>>(emptyList())
     val settlementWarnings: StateFlow<List<SettlementWarning>> = _settlementWarnings
 
+    // groups and members observed here so BallroomScreen continues to work until #23/24
     val groups: StateFlow<List<TravelGroup>> = repository.observeGroups()
         .stateIn(viewModelScope, SharingStarted.WhileSubscribed(5000), emptyList())
 
-    val members: StateFlow<List<GroupMember>> = selectedGroupId
+    val members: StateFlow<List<GroupMember>> = selectedGroupHolder.selectedGroupId
         .flatMapLatest { groupId ->
-            if (groupId == null) kotlinx.coroutines.flow.flowOf(emptyList())
+            if (groupId == null) flowOf(emptyList())
             else repository.observeMembers(groupId)
         }
         .stateIn(viewModelScope, SharingStarted.WhileSubscribed(5000), emptyList())
@@ -90,116 +86,26 @@ class MainViewModel @Inject constructor(
         .map { list -> list.firstOrNull { it.userId == sessionProvider.userId } }
         .stateIn(viewModelScope, SharingStarted.WhileSubscribed(5000), null)
 
-    val invites: StateFlow<List<InviteToken>> = selectedGroupId
-        .flatMapLatest { groupId ->
-            if (groupId == null) kotlinx.coroutines.flow.flowOf(emptyList())
-            else repository.observeInvites(groupId)
-        }
-        .stateIn(viewModelScope, SharingStarted.WhileSubscribed(5000), emptyList())
+    // Placeholder until #22 implements observeInvites in repository
+    val invites: StateFlow<List<InviteToken>> = MutableStateFlow(emptyList<InviteToken>()).asStateFlow()
 
-    val expenseItems: StateFlow<List<ExpenseItem>> = selectedGroupId
-        .flatMapLatest { groupId ->
-            if (groupId == null) kotlinx.coroutines.flow.flowOf(emptyList())
-            else repository.observeExpenseItems(groupId)
-        }
-        .stateIn(viewModelScope, SharingStarted.WhileSubscribed(5000), emptyList())
-
-    val assignments: StateFlow<List<ItemAssignment>> = selectedGroupId
-        .flatMapLatest { groupId ->
-            if (groupId == null) kotlinx.coroutines.flow.flowOf(emptyList())
-            else repository.observeAssignments(groupId)
-        }
-        .stateIn(viewModelScope, SharingStarted.WhileSubscribed(5000), emptyList())
+    // Placeholder until #23 implements observeExpenseItems in repository
+    val expenseItems: StateFlow<List<ExpenseItem>> = MutableStateFlow(emptyList<ExpenseItem>()).asStateFlow()
+    val assignments: StateFlow<List<ItemAssignment>> = MutableStateFlow(emptyList<ItemAssignment>()).asStateFlow()
 
     init {
         viewModelScope.launch {
-            _regions.value = repository.getRegions()
+            runCatching { _regions.value = repository.getRegions() }
         }
     }
 
-    fun selectGroup(groupId: Long) {
-        _selectedGroupId.value = groupId
-        _settlements.value = emptyList()
-        _settlementWarnings.value = emptyList()
-    }
-
-    fun leaveSelectedGroupForDebug() {
-        _selectedGroupId.value = null
-        _settlements.value = emptyList()
-        _settlementWarnings.value = emptyList()
+    // forwarding method so existing call sites (BallroomScreen, QrScannerScreen) continue to work
+    fun selectGroup(groupId: String) {
+        selectedGroupHolder.selectedGroupId.value = groupId
     }
 
     fun clearMessage() {
         _message.value = null
-    }
-
-    fun createGroup(groupName: String, adminName: String) {
-        viewModelScope.launch {
-            if (groupName.isBlank() || adminName.isBlank()) {
-                _message.value = "Completa nombre del grupo y administrador"
-                return@launch
-            }
-            val groupId = createGroupUseCase(groupName, adminName)
-            _message.value = "Grupo creado"
-            _selectedGroupId.value = groupId
-        }
-    }
-
-    fun updateSelectedGroupName(name: String) {
-        viewModelScope.launch {
-            val groupId = _selectedGroupId.value
-            if (groupId == null || name.isBlank()) {
-                _message.value = "Selecciona grupo y nombre valido"
-                return@launch
-            }
-            updateGroupNameUseCase(groupId, name)
-            _message.value = "Nombre del grupo actualizado"
-        }
-    }
-
-    fun deleteMember(memberId: Long) {
-        viewModelScope.launch {
-            deleteMemberUseCase(memberId)
-            val groupId = _selectedGroupId.value
-            if (groupId != null) {
-                recalculateSettlementSilently(groupId)
-            }
-            _message.value = "Integrante eliminado"
-        }
-    }
-
-    fun deleteSelectedGroup() {
-        viewModelScope.launch {
-            val groupId = _selectedGroupId.value
-            if (groupId == null) {
-                _message.value = "Selecciona un grupo"
-                return@launch
-            }
-            deleteGroupUseCase(groupId)
-            _selectedGroupId.value = null
-            _settlements.value = emptyList()
-            _settlementWarnings.value = emptyList()
-            _message.value = "Grupo eliminado"
-        }
-    }
-
-    fun generateInvite() {
-        viewModelScope.launch {
-            val groupId = _selectedGroupId.value
-            if (groupId == null) {
-                _message.value = "Selecciona un grupo"
-                return@launch
-            }
-            generateInviteUseCase(groupId)
-            _message.value = "Invitacion generada"
-        }
-    }
-
-    fun deleteInvite(code: String) {
-        viewModelScope.launch {
-            deleteInviteUseCase(code)
-            _message.value = "Invitacion eliminada"
-        }
     }
 
     fun consumeInvite(code: String) {
@@ -216,21 +122,37 @@ class MainViewModel @Inject constructor(
         }
     }
 
+    fun generateInvite() {
+        viewModelScope.launch {
+            val groupId = selectedGroupHolder.selectedGroupId.value ?: run {
+                _message.value = "Selecciona un grupo"
+                return@launch
+            }
+            generateInviteUseCase(groupId)
+            _message.value = "Invitacion generada"
+        }
+    }
+
+    fun deleteInvite(code: String) {
+        viewModelScope.launch {
+            deleteInviteUseCase(code)
+            _message.value = "Invitacion eliminada"
+        }
+    }
+
     fun selectRegion(region: String) {
         _selectedRegion.value = region
         viewModelScope.launch {
-            _recommendations.value = repository.getRecommendationsByRegion(region)
+            runCatching { _recommendations.value = repository.getRecommendationsByRegion(region) }
         }
     }
 
     fun addExpenseItem(name: String, unitPriceText: String, quantityText: String) {
         viewModelScope.launch {
-            val groupId = _selectedGroupId.value
-            if (groupId == null) {
+            val groupId = selectedGroupHolder.selectedGroupId.value ?: run {
                 _message.value = "Selecciona un grupo"
                 return@launch
             }
-
             val unitCents = parsePriceToCents(unitPriceText)
             val quantity = quantityText.toIntOrNull() ?: 0
             val totalCents = unitCents * quantity
@@ -243,7 +165,7 @@ class MainViewModel @Inject constructor(
         }
     }
 
-    fun assignItem(itemId: Long, memberId: Long, quantityText: String) {
+    fun assignItem(itemId: String, memberId: String, quantityText: String) {
         viewModelScope.launch {
             val quantity = quantityText.toIntOrNull() ?: -1
             if (quantity < 0) {
@@ -258,7 +180,7 @@ class MainViewModel @Inject constructor(
             }
             when (outcome) {
                 AssignmentOutcome.Accepted -> {
-                    val groupId = _selectedGroupId.value
+                    val groupId = selectedGroupHolder.selectedGroupId.value
                     if (groupId != null) recalculateSettlementSilently(groupId)
                 }
                 is AssignmentOutcome.Rejected -> _message.value = when (outcome.reason) {
@@ -269,20 +191,17 @@ class MainViewModel @Inject constructor(
         }
     }
 
-    fun deleteExpenseItem(itemId: Long) {
+    fun deleteExpenseItem(itemId: String) {
         viewModelScope.launch {
             deleteExpenseItemUseCase(itemId)
-            val groupId = _selectedGroupId.value
-            if (groupId != null) {
-                recalculateSettlementSilently(groupId)
-            }
+            val groupId = selectedGroupHolder.selectedGroupId.value
+            if (groupId != null) recalculateSettlementSilently(groupId)
         }
     }
 
     fun calculateSettlement() {
         viewModelScope.launch {
-            val groupId = _selectedGroupId.value
-            if (groupId == null) {
+            val groupId = selectedGroupHolder.selectedGroupId.value ?: run {
                 _message.value = "Selecciona un grupo"
                 return@launch
             }
@@ -293,12 +212,12 @@ class MainViewModel @Inject constructor(
 
     fun refreshSettlement() {
         viewModelScope.launch {
-            val groupId = _selectedGroupId.value ?: return@launch
+            val groupId = selectedGroupHolder.selectedGroupId.value ?: return@launch
             updateSettlement(calculateSettlementUseCase(groupId))
         }
     }
 
-    private suspend fun recalculateSettlementSilently(groupId: Long) {
+    private suspend fun recalculateSettlementSilently(groupId: String) {
         updateSettlement(calculateSettlementUseCase(groupId))
     }
 

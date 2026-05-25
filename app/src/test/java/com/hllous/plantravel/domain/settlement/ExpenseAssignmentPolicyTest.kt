@@ -13,8 +13,8 @@ class ExpenseAssignmentPolicyTest {
     fun acceptsAssignmentWithinItemQuantity() {
         val result = policy.validate(
             item = item(quantity = 3),
-            currentAssignments = listOf(ItemAssignment(itemId = 10, memberId = 1, quantity = 1)),
-            memberId = 2,
+            currentAssignments = listOf(ItemAssignment(itemId = "item-10", memberId = "member-1", quantity = 1)),
+            memberId = "member-2",
             requestedQuantity = 2
         )
 
@@ -25,8 +25,8 @@ class ExpenseAssignmentPolicyTest {
     fun rejectsOverAssignedExpenseItem() {
         val result = policy.validate(
             item = item(quantity = 3),
-            currentAssignments = listOf(ItemAssignment(itemId = 10, memberId = 1, quantity = 2)),
-            memberId = 2,
+            currentAssignments = listOf(ItemAssignment(itemId = "item-10", memberId = "member-1", quantity = 2)),
+            memberId = "member-2",
             requestedQuantity = 2
         )
 
@@ -41,7 +41,7 @@ class ExpenseAssignmentPolicyTest {
         val result = policy.validate(
             item = item(quantity = 3),
             currentAssignments = emptyList(),
-            memberId = 1,
+            memberId = "member-1",
             requestedQuantity = -1
         )
 
@@ -56,10 +56,10 @@ class ExpenseAssignmentPolicyTest {
         val result = policy.validate(
             item = item(quantity = 3),
             currentAssignments = listOf(
-                ItemAssignment(itemId = 99, memberId = 1, quantity = 99),
-                ItemAssignment(itemId = 10, memberId = 1, quantity = 1)
+                ItemAssignment(itemId = "item-99", memberId = "member-1", quantity = 99),
+                ItemAssignment(itemId = "item-10", memberId = "member-1", quantity = 1)
             ),
-            memberId = 2,
+            memberId = "member-2",
             requestedQuantity = 2
         )
 
@@ -67,5 +67,5 @@ class ExpenseAssignmentPolicyTest {
     }
 
     private fun item(quantity: Int) =
-        ExpenseItem(id = 10, groupId = 1, name = "Tickets", totalPriceCents = 3000, quantity = quantity)
+        ExpenseItem(id = "item-10", groupId = "group-1", name = "Tickets", totalPriceCents = 3000, quantity = quantity)
 }

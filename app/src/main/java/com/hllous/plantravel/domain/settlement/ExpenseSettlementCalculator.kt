@@ -57,7 +57,7 @@ class ExpenseSettlementCalculator {
     private fun allocateAssignedAmount(
         item: ExpenseItem,
         assignments: List<ItemAssignment>,
-        debts: MutableMap<Long, Long>
+        debts: MutableMap<String, Long>
     ): Long {
         if (assignments.isEmpty()) return 0L
 

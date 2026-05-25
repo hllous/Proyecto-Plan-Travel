@@ -78,7 +78,7 @@ fun BallroomScreen(viewModel: MainViewModel, navController: NavHostController) {
     val settlementWarnings by viewModel.settlementWarnings.collectAsState(initial = emptyList())
     val selectedGroupId by viewModel.selectedGroupId.collectAsState(initial = null)
     val currentMember by viewModel.currentMember.collectAsState(initial = null)
-    val currentMemberId = currentMember?.id
+    val currentMemberId: String? = currentMember?.id
     var itemName by rememberSaveable { mutableStateOf("") }
     var price by rememberSaveable { mutableStateOf("") }
     var quantity by rememberSaveable { mutableStateOf("") }
@@ -365,7 +365,7 @@ private fun ExpenseItemCard(
     item: ExpenseItem,
     members: List<GroupMember>,
     itemAssignments: List<ItemAssignment>,
-    currentMemberId: Long?,
+    currentMemberId: String?,
     onDelete: () -> Unit,
     onAssignQuantity: (Int) -> Unit
 ) {
@@ -590,7 +590,7 @@ private fun ExpenseBottomPanel(
     onDismissAddItem: () -> Unit,
     onConfirmAddItem: () -> Unit
 ) {
-    val accent = memberColor(member?.id ?: 0)
+    val accent = memberColor(member?.id ?: "")
     Surface(
         tonalElevation = 10.dp,
         shadowElevation = 12.dp,

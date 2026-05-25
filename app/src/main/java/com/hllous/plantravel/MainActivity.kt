@@ -63,6 +63,7 @@ import androidx.navigation.compose.currentBackStackEntryAsState
 import androidx.navigation.compose.rememberNavController
 import com.hllous.plantravel.presentation.MainViewModel
 import com.hllous.plantravel.presentation.auth.AuthState
+import com.hllous.plantravel.presentation.group.GroupViewModel
 import com.hllous.plantravel.presentation.auth.AuthViewModel
 import io.github.jan.supabase.SupabaseClient
 import io.github.jan.supabase.auth.handleDeeplinks
@@ -177,6 +178,7 @@ fun MainAppContent(
     onPendingInviteConsumed: () -> Unit = {}
 ) {
     val viewModel = hiltViewModel<MainViewModel>()
+    val groupViewModel = hiltViewModel<GroupViewModel>()
     val navController = rememberNavController()
     val snackbarHostState = remember { SnackbarHostState() }
     val message by viewModel.message.collectAsState(initial = null)
@@ -255,7 +257,7 @@ fun MainAppContent(
                     .padding(innerPadding)
             ) {
                 composable("home") { HomeScreen(navController = navController) }
-                composable("groups") { GroupsScreen(viewModel = viewModel, navController = navController) }
+                composable("groups") { GroupsScreen(groupViewModel = groupViewModel, mainViewModel = viewModel, navController = navController) }
                 composable("destinations") { DestinationScreen(viewModel = viewModel, navController = navController) }
                 composable("gastos") { BallroomScreen(viewModel = viewModel, navController = navController) }
                 composable("qr_scanner") {

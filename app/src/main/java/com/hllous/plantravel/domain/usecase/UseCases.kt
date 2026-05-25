@@ -9,7 +9,7 @@ import javax.inject.Inject
 class CreateGroupUseCase @Inject constructor(
     private val repository: TravelRepository
 ) {
-    suspend operator fun invoke(groupName: String, adminName: String): Long {
+    suspend operator fun invoke(groupName: String, adminName: String): String {
         return repository.createGroup(groupName.trim(), adminName.trim())
     }
 }
@@ -17,7 +17,7 @@ class CreateGroupUseCase @Inject constructor(
 class UpdateGroupNameUseCase @Inject constructor(
     private val repository: TravelRepository
 ) {
-    suspend operator fun invoke(groupId: Long, name: String) {
+    suspend operator fun invoke(groupId: String, name: String) {
         repository.updateGroupName(groupId, name.trim())
     }
 }
@@ -25,7 +25,7 @@ class UpdateGroupNameUseCase @Inject constructor(
 class DeleteMemberUseCase @Inject constructor(
     private val repository: TravelRepository
 ) {
-    suspend operator fun invoke(memberId: Long) {
+    suspend operator fun invoke(memberId: String) {
         repository.deleteMember(memberId)
     }
 }
@@ -33,7 +33,7 @@ class DeleteMemberUseCase @Inject constructor(
 class DeleteGroupUseCase @Inject constructor(
     private val repository: TravelRepository
 ) {
-    suspend operator fun invoke(groupId: Long) {
+    suspend operator fun invoke(groupId: String) {
         repository.deleteGroup(groupId)
     }
 }
@@ -41,7 +41,7 @@ class DeleteGroupUseCase @Inject constructor(
 class GenerateInviteUseCase @Inject constructor(
     private val repository: TravelRepository
 ) {
-    suspend operator fun invoke(groupId: Long) = repository.generateInvite(groupId)
+    suspend operator fun invoke(groupId: String) = repository.generateInvite(groupId)
 }
 
 class DeleteInviteUseCase @Inject constructor(
@@ -56,7 +56,7 @@ class ConsumeInviteUseCase @Inject constructor(
     private val repository: TravelRepository,
     private val sessionProvider: SessionProvider
 ) {
-    suspend operator fun invoke(code: String): Result<Long> {
+    suspend operator fun invoke(code: String): Result<String> {
         val userId = sessionProvider.userId
             ?: return Result.failure(ConsumeInviteFailure.Unauthenticated)
         val displayName = sessionProvider.displayName.orEmpty()
@@ -67,7 +67,7 @@ class ConsumeInviteUseCase @Inject constructor(
 class AddExpenseItemUseCase @Inject constructor(
     private val repository: TravelRepository
 ) {
-    suspend operator fun invoke(groupId: Long, itemName: String, totalPriceCents: Long, quantity: Int): Long {
+    suspend operator fun invoke(groupId: String, itemName: String, totalPriceCents: Long, quantity: Int): String {
         return repository.addExpenseItem(groupId, itemName.trim(), totalPriceCents, quantity)
     }
 }
@@ -75,7 +75,7 @@ class AddExpenseItemUseCase @Inject constructor(
 class AssignItemToMemberUseCase @Inject constructor(
     private val repository: TravelRepository
 ) {
-    suspend operator fun invoke(itemId: Long, memberId: Long, quantity: Int): AssignmentOutcome {
+    suspend operator fun invoke(itemId: String, memberId: String, quantity: Int): AssignmentOutcome {
         return repository.assignItemToMember(itemId, memberId, quantity)
     }
 }
@@ -83,7 +83,7 @@ class AssignItemToMemberUseCase @Inject constructor(
 class DeleteExpenseItemUseCase @Inject constructor(
     private val repository: TravelRepository
 ) {
-    suspend operator fun invoke(itemId: Long) {
+    suspend operator fun invoke(itemId: String) {
         repository.deleteExpenseItem(itemId)
     }
 }
@@ -91,6 +91,5 @@ class DeleteExpenseItemUseCase @Inject constructor(
 class CalculateSettlementUseCase @Inject constructor(
     private val repository: TravelRepository
 ) {
-    suspend operator fun invoke(groupId: Long) = repository.calculateSettlement(groupId)
+    suspend operator fun invoke(groupId: String) = repository.calculateSettlement(groupId)
 }
-

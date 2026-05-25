@@ -13,9 +13,9 @@ class ExpenseSettlementCalculatorTest {
 
     @Test
     fun unassignedQuantityCreatesWarningAndDoesNotChargeAdmin() {
-        val admin = member(id = 1, name = "Admin", role = MemberRole.ADMIN)
-        val member = member(id = 2, name = "Nico")
-        val item = item(id = 10, name = "Tickets", totalPriceCents = 6000, quantity = 6)
+        val admin = member(id = "1", name = "Admin", role = MemberRole.ADMIN)
+        val member = member(id = "2", name = "Nico")
+        val item = item(id = "10", name = "Tickets", totalPriceCents = 6000, quantity = 6)
 
         val result = calculator.calculate(
             members = listOf(admin, member),
@@ -32,9 +32,9 @@ class ExpenseSettlementCalculatorTest {
 
     @Test
     fun fullyAssignedExpenseItemHasNoSettlementWarning() {
-        val first = member(id = 1, name = "Nico")
-        val second = member(id = 2, name = "Juli")
-        val item = item(id = 10, name = "Dinner", totalPriceCents = 9000, quantity = 3)
+        val first = member(id = "1", name = "Nico")
+        val second = member(id = "2", name = "Juli")
+        val item = item(id = "10", name = "Dinner", totalPriceCents = 9000, quantity = 3)
 
         val result = calculator.calculate(
             members = listOf(first, second),
@@ -52,10 +52,10 @@ class ExpenseSettlementCalculatorTest {
 
     @Test
     fun roundingCentsAreSpreadByAscendingMemberId() {
-        val lowerId = member(id = 1, name = "Nico")
-        val middleId = member(id = 2, name = "Juli")
-        val higherId = member(id = 3, name = "Ana")
-        val item = item(id = 10, name = "Taxi", totalPriceCents = 100, quantity = 3)
+        val lowerId = member(id = "1", name = "Nico")
+        val middleId = member(id = "2", name = "Juli")
+        val higherId = member(id = "3", name = "Ana")
+        val item = item(id = "10", name = "Taxi", totalPriceCents = 100, quantity = 3)
 
         val result = calculator.calculate(
             members = listOf(higherId, lowerId, middleId),
@@ -87,13 +87,13 @@ class ExpenseSettlementCalculatorTest {
 
     @Test
     fun assignmentsForMissingMembersDoNotCreateStaleMemberSettlements() {
-        val remainingMember = member(id = 1, name = "Nico")
-        val item = item(id = 10, name = "Tickets", totalPriceCents = 2000, quantity = 2)
+        val remainingMember = member(id = "1", name = "Nico")
+        val item = item(id = "10", name = "Tickets", totalPriceCents = 2000, quantity = 2)
 
         val result = calculator.calculate(
             members = listOf(remainingMember),
             items = listOf(item),
-            assignments = listOf(ItemAssignment(itemId = item.id, memberId = 99, quantity = 1))
+            assignments = listOf(ItemAssignment(itemId = item.id, memberId = "99", quantity = 1))
         )
 
         assertEquals(listOf(remainingMember.id), result.memberSettlements.map { it.memberId })
@@ -104,8 +104,8 @@ class ExpenseSettlementCalculatorTest {
 
     @Test
     fun reducingAssignedQuantityCreatesOrIncreasesSettlementWarning() {
-        val member = member(id = 1, name = "Nico")
-        val expenseItem = item(id = 10, name = "Tickets", totalPriceCents = 6000, quantity = 6)
+        val member = member(id = "1", name = "Nico")
+        val expenseItem = item(id = "10", name = "Tickets", totalPriceCents = 6000, quantity = 6)
 
         val fullResult = calculator.calculate(
             members = listOf(member),
@@ -136,9 +136,9 @@ class ExpenseSettlementCalculatorTest {
 
     @Test
     fun deletedExpenseItemIsRemovedFromSettlementCalculation() {
-        val member = member(id = 1, name = "Nico")
-        val deletedItem = item(id = 10, name = "Tickets", totalPriceCents = 6000, quantity = 6)
-        val remainingItem = item(id = 20, name = "Dinner", totalPriceCents = 3000, quantity = 3)
+        val member = member(id = "1", name = "Nico")
+        val deletedItem = item(id = "10", name = "Tickets", totalPriceCents = 6000, quantity = 6)
+        val remainingItem = item(id = "20", name = "Dinner", totalPriceCents = 3000, quantity = 3)
 
         val result = calculator.calculate(
             members = listOf(member),
@@ -153,9 +153,9 @@ class ExpenseSettlementCalculatorTest {
         assertTrue(result.warnings.isEmpty())
     }
 
-    private fun member(id: Long, name: String, role: MemberRole = MemberRole.USER) =
-        GroupMember(id = id, groupId = 1, name = name, userId = null, role = role)
+    private fun member(id: String, name: String, role: MemberRole = MemberRole.USER) =
+        GroupMember(id = id, groupId = "group-1", name = name, userId = "user-$id", role = role)
 
-    private fun item(id: Long, name: String, totalPriceCents: Long, quantity: Int) =
-        ExpenseItem(id = id, groupId = 1, name = name, totalPriceCents = totalPriceCents, quantity = quantity)
+    private fun item(id: String, name: String, totalPriceCents: Long, quantity: Int) =
+        ExpenseItem(id = id, groupId = "group-1", name = name, totalPriceCents = totalPriceCents, quantity = quantity)
 }

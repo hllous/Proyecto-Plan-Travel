@@ -13,8 +13,8 @@ import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.width
 import androidx.compose.foundation.lazy.LazyColumn
 import androidx.compose.material.icons.Icons
-import androidx.compose.material.icons.filled.ArrowBack
-import androidx.compose.material.icons.filled.ArrowForward
+import androidx.compose.material.icons.automirrored.filled.ArrowBack
+import androidx.compose.material.icons.automirrored.filled.ArrowForward
 import androidx.compose.material.icons.filled.ContentCopy
 import androidx.compose.material.icons.filled.Delete
 import androidx.compose.material.icons.filled.Edit
@@ -49,17 +49,22 @@ import com.google.zxing.BarcodeFormat
 import com.google.zxing.MultiFormatWriter
 import com.google.zxing.common.BitMatrix
 import com.hllous.plantravel.presentation.MainViewModel
+import com.hllous.plantravel.presentation.group.GroupViewModel
 import com.hllous.plantravel.ui.components.SectionCard
 import com.hllous.plantravel.ui.components.travelTextFieldColors
 import com.hllous.plantravel.ui.utils.memberColor
 import com.hllous.plantravel.ui.utils.memberInitial
 
 @Composable
-fun GroupsScreen(viewModel: MainViewModel, navController: NavHostController) {
-    val groups by viewModel.groups.collectAsState(initial = emptyList())
-    val selectedGroupId by viewModel.selectedGroupId.collectAsState(initial = null)
-    val members by viewModel.members.collectAsState(initial = emptyList())
-    val invites by viewModel.invites.collectAsState(initial = emptyList())
+fun GroupsScreen(
+    groupViewModel: GroupViewModel,
+    mainViewModel: MainViewModel,
+    navController: NavHostController
+) {
+    val groups by groupViewModel.groups.collectAsState(initial = emptyList())
+    val selectedGroupId by groupViewModel.selectedGroupId.collectAsState(initial = null)
+    val members by groupViewModel.members.collectAsState(initial = emptyList())
+    val invites by mainViewModel.invites.collectAsState(initial = emptyList())
     var groupName by rememberSaveable { mutableStateOf("") }
     var adminName by rememberSaveable { mutableStateOf("") }
     var joinCode by rememberSaveable { mutableStateOf("") }
@@ -97,9 +102,9 @@ fun GroupsScreen(viewModel: MainViewModel, navController: NavHostController) {
                         ) {
                             Text("Grupos", style = MaterialTheme.typography.headlineSmall)
                             if (availableGroup != null) {
-                                OutlinedButton(onClick = { viewModel.selectGroup(availableGroup.id) }) {
+                                OutlinedButton(onClick = { groupViewModel.selectGroup(availableGroup.id) }) {
                                     Text("Grupos")
-                                    Icon(Icons.Default.ArrowForward, contentDescription = null)
+                                    Icon(Icons.AutoMirrored.Filled.ArrowForward, contentDescription = null)
                                 }
                             }
                         }
@@ -170,7 +175,7 @@ fun GroupsScreen(viewModel: MainViewModel, navController: NavHostController) {
                             }
                             Button(
                                 onClick = {
-                                    viewModel.createGroup(groupName, adminName)
+                                    groupViewModel.createGroup(groupName, adminName)
                                     groupName = ""
                                     adminName = ""
                                     showCreateGroup = false
@@ -195,7 +200,7 @@ fun GroupsScreen(viewModel: MainViewModel, navController: NavHostController) {
                     )
                     Button(
                         onClick = {
-                            viewModel.consumeInvite(joinCode)
+                            mainViewModel.consumeInvite(joinCode)
                             joinCode = ""
                         },
                         modifier = Modifier.fillMaxWidth()
@@ -219,8 +224,8 @@ fun GroupsScreen(viewModel: MainViewModel, navController: NavHostController) {
                         horizontalArrangement = Arrangement.SpaceBetween,
                         verticalAlignment = Alignment.CenterVertically
                     ) {
-                        IconButton(onClick = { viewModel.leaveSelectedGroupForDebug() }) {
-                            Icon(Icons.Default.ArrowBack, contentDescription = "Volver")
+                        IconButton(onClick = { groupViewModel.clearSelectedGroup() }) {
+                            Icon(Icons.AutoMirrored.Filled.ArrowBack, contentDescription = "Volver")
                         }
                         Column(modifier = Modifier.weight(1f)) {
                             Text(selectedGroup?.name ?: "Grupo", style = MaterialTheme.typography.headlineSmall)
@@ -241,13 +246,13 @@ fun GroupsScreen(viewModel: MainViewModel, navController: NavHostController) {
                     )
                     Row(horizontalArrangement = Arrangement.spacedBy(10.dp)) {
                         Button(
-                            onClick = { viewModel.updateSelectedGroupName(editableGroupName) },
+                            onClick = { groupViewModel.updateSelectedGroupName(editableGroupName) },
                             modifier = Modifier.weight(1f)
                         ) {
                             Text("Guardar")
                         }
                         Button(
-                            onClick = { viewModel.deleteSelectedGroup() },
+                            onClick = { groupViewModel.deleteSelectedGroup() },
                             modifier = Modifier.weight(1f),
                             colors = ButtonDefaults.buttonColors(containerColor = MaterialTheme.colorScheme.error)
                         ) {
@@ -262,7 +267,7 @@ fun GroupsScreen(viewModel: MainViewModel, navController: NavHostController) {
                 SectionCard(title = "Invitaciones") {
                     Row(horizontalArrangement = Arrangement.spacedBy(10.dp)) {
                         Button(
-                            onClick = { viewModel.generateInvite() },
+                            onClick = { mainViewModel.generateInvite() },
                             modifier = Modifier.weight(1f)
                         ) {
                             Icon(Icons.Default.Edit, contentDescription = null)
@@ -312,7 +317,7 @@ fun GroupsScreen(viewModel: MainViewModel, navController: NavHostController) {
                                     }
                                 }
                                 if (member.role.name != "ADMIN") {
-                                    IconButton(onClick = { viewModel.deleteMember(member.id) }) {
+                                    IconButton(onClick = { groupViewModel.deleteMember(member.id) }) {
                                         Icon(Icons.Default.Delete, contentDescription = "Eliminar integrante", tint = MaterialTheme.colorScheme.error)
                                     }
                                 }
@@ -330,7 +335,7 @@ fun GroupsScreen(viewModel: MainViewModel, navController: NavHostController) {
                             InviteCard(
                                 inviteCode = invite.code,
                                 inviteLink = invite.link,
-                                onDelete = { viewModel.deleteInvite(invite.code) }
+                                onDelete = { mainViewModel.deleteInvite(invite.code) }
                             )
                             Spacer(Modifier.height(8.dp))
                         }

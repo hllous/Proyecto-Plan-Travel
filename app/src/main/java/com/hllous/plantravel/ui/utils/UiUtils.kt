@@ -4,7 +4,7 @@ import androidx.compose.ui.graphics.Color
 
 fun memberInitial(name: String): String = name.trim().firstOrNull()?.uppercase() ?: "?"
 
-fun memberColor(memberId: Long): Color {
+fun memberColor(memberId: String): Color {
     val palette = listOf(
         Color(0xFF1D4ED8),
         Color(0xFF7C3AED),
@@ -15,8 +15,8 @@ fun memberColor(memberId: Long): Color {
         Color(0xFF15803D),
         Color(0xFFB45309)
     )
-    val index = ((memberId % palette.size) + palette.size) % palette.size
-    return palette[index.toInt()]
+    val index = ((memberId.hashCode() % palette.size) + palette.size) % palette.size
+    return palette[index]
 }
 
 fun formatCurrency(cents: Long): String = "$${"%.2f".format(cents / 100.0)}"
