@@ -3,6 +3,9 @@ package com.hllous.plantravel.presentation
 import com.hllous.plantravel.FakeSessionProvider
 import com.hllous.plantravel.FakeTravelRepository
 import com.hllous.plantravel.MainDispatcherRule
+import com.hllous.plantravel.domain.model.ExpenseItem
+import com.hllous.plantravel.domain.model.MemberSettlement
+import com.hllous.plantravel.domain.model.SettlementResult
 import com.hllous.plantravel.domain.settlement.AssignmentOutcome
 import com.hllous.plantravel.domain.settlement.AssignmentRejectionReason
 import com.hllous.plantravel.domain.usecase.AddExpenseItemUseCase
@@ -12,6 +15,7 @@ import com.hllous.plantravel.domain.usecase.DeleteExpenseItemUseCase
 import com.hllous.plantravel.presentation.expense.ExpenseViewModel
 import com.hllous.plantravel.presentation.group.SelectedGroupHolder
 import org.junit.Assert.assertEquals
+import org.junit.Assert.assertTrue
 import org.junit.Rule
 import org.junit.Test
 
@@ -68,5 +72,35 @@ class ExpenseViewModelTest {
         vm.addExpenseItem(name = "  ", unitPriceText = "100", quantityText = "2")
 
         assertEquals("Carga item, precio unitario y cantidad validos", vm.message.value)
+    }
+
+    @Test
+    fun addingItemTriggersSettlementRecalculation() {
+        val expectedSettlement = SettlementResult(
+            memberSettlements = listOf(MemberSettlement(memberId = "m1", memberName = "Nico", amountCents = 5000)),
+            warnings = emptyList()
+        )
+        val holder = SelectedGroupHolder().also { it.selectedGroupId.value = "group-1" }
+        val repo = FakeTravelRepository(settlementResult = expectedSettlement)
+        val vm = viewModel(repo = repo, holder = holder)
+
+        vm.addExpenseItem(name = "Taxi", unitPriceText = "50", quantityText = "1")
+
+        assertEquals(expectedSettlement.memberSettlements, vm.settlements.value)
+        assertTrue(repo.calculateSettlementCallCount >= 1)
+    }
+
+    @Test
+    fun deletingItemTriggersSettlementRecalculation() {
+        val holder = SelectedGroupHolder().also { it.selectedGroupId.value = "group-1" }
+        val repo = FakeTravelRepository(
+            settlementResult = SettlementResult(emptyList(), emptyList())
+        )
+        val vm = viewModel(repo = repo, holder = holder)
+
+        vm.deleteExpenseItem("item-10")
+
+        assertTrue(repo.calculateSettlementCallCount >= 1)
+        assertTrue(vm.settlements.value.isEmpty())
     }
 }

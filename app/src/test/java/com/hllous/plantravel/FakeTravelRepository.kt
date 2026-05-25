@@ -5,42 +5,86 @@ import com.hllous.plantravel.domain.model.ExpenseItem
 import com.hllous.plantravel.domain.model.GroupMember
 import com.hllous.plantravel.domain.model.InviteToken
 import com.hllous.plantravel.domain.model.ItemAssignment
+import com.hllous.plantravel.domain.model.MemberRole
+import com.hllous.plantravel.domain.model.MemberSettlement
 import com.hllous.plantravel.domain.model.SettlementResult
 import com.hllous.plantravel.domain.model.TravelGroup
 import com.hllous.plantravel.domain.repository.TravelRepository
 import com.hllous.plantravel.domain.settlement.AssignmentOutcome
 import kotlinx.coroutines.flow.Flow
+import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.flowOf
+import kotlinx.coroutines.flow.map
 
 class FakeTravelRepository(
     var assignOutcome: AssignmentOutcome = AssignmentOutcome.Accepted,
-    var consumeInviteResult: Result<String> = Result.success("fake-member-id")
+    var consumeInviteResult: Result<String> = Result.success("fake-member-id"),
+    var settlementResult: SettlementResult = SettlementResult(emptyList(), emptyList()),
+    initialGroups: List<TravelGroup> = emptyList(),
+    initialMembers: Map<String, List<GroupMember>> = emptyMap(),
+    initialExpenseItems: Map<String, List<ExpenseItem>> = emptyMap(),
 ) : TravelRepository {
 
-    var lastConsumeUserId: String? = null
+    private val _groups = MutableStateFlow(initialGroups)
+    private val _membersByGroup = MutableStateFlow(initialMembers)
+    private val _itemsByGroup = MutableStateFlow(initialExpenseItems)
 
-    override fun observeGroups(): Flow<List<TravelGroup>> = flowOf(emptyList())
-    override fun observeMembers(groupId: String): Flow<List<GroupMember>> = flowOf(emptyList())
+    var lastConsumeUserId: String? = null
+    var calculateSettlementCallCount = 0
+
+    override fun observeGroups(): Flow<List<TravelGroup>> = _groups
+    override fun observeMembers(groupId: String): Flow<List<GroupMember>> =
+        _membersByGroup.map { it[groupId] ?: emptyList() }
     override fun observeInvites(groupId: String): Flow<List<InviteToken>> = flowOf(emptyList())
-    override fun observeExpenseItems(groupId: String): Flow<List<ExpenseItem>> = flowOf(emptyList())
+    override fun observeExpenseItems(groupId: String): Flow<List<ExpenseItem>> =
+        _itemsByGroup.map { it[groupId] ?: emptyList() }
     override fun observeAssignments(groupId: String): Flow<List<ItemAssignment>> = flowOf(emptyList())
 
-    override suspend fun createGroup(groupName: String, adminName: String): String = "fake-group-id"
+    override suspend fun createGroup(groupName: String, adminName: String): String {
+        val newGroup = TravelGroup(id = "fake-group-id", name = groupName)
+        _groups.value = _groups.value + newGroup
+        return newGroup.id
+    }
+
     override suspend fun updateGroupName(groupId: String, name: String) = Unit
     override suspend fun deleteMember(memberId: String) = Unit
-    override suspend fun deleteGroup(groupId: String) = Unit
-    override suspend fun generateInvite(groupId: String): InviteToken = error("not needed in tests")
+    override suspend fun deleteGroup(groupId: String) {
+        _groups.value = _groups.value.filter { it.id != groupId }
+    }
+    override suspend fun generateInvite(groupId: String): InviteToken =
+        InviteToken(code = "FAKECODE", groupId = groupId, link = "plantravel://invite/FAKECODE", expiresAtMillis = Long.MAX_VALUE)
     override suspend fun deleteInvite(code: String) = Unit
     override suspend fun consumeInvite(code: String, userId: String, displayName: String): Result<String> {
         lastConsumeUserId = userId
+        if (consumeInviteResult.isSuccess) {
+            val groupId = consumeInviteResult.getOrThrow()
+            val newMember = GroupMember(id = "new-member-id", groupId = groupId, name = displayName, userId = userId, role = MemberRole.USER)
+            val current = _membersByGroup.value.toMutableMap()
+            current[groupId] = (current[groupId] ?: emptyList()) + newMember
+            _membersByGroup.value = current
+        }
         return consumeInviteResult
     }
 
     override suspend fun getRegions(): List<String> = emptyList()
     override suspend fun getRecommendationsByRegion(region: String): List<DestinationRecommendation> = emptyList()
 
-    override suspend fun addExpenseItem(groupId: String, itemName: String, totalPriceCents: Long, quantity: Int): String = "fake-item-id"
+    override suspend fun addExpenseItem(groupId: String, itemName: String, totalPriceCents: Long, quantity: Int): String {
+        val item = ExpenseItem(id = "fake-item-id", groupId = groupId, name = itemName, totalPriceCents = totalPriceCents, quantity = quantity)
+        val current = _itemsByGroup.value.toMutableMap()
+        current[groupId] = (current[groupId] ?: emptyList()) + item
+        _itemsByGroup.value = current
+        return item.id
+    }
+
     override suspend fun assignItemToMember(itemId: String, memberId: String, quantity: Int): AssignmentOutcome = assignOutcome
-    override suspend fun deleteExpenseItem(itemId: String) = Unit
-    override suspend fun calculateSettlement(groupId: String): SettlementResult = SettlementResult(emptyList(), emptyList())
+    override suspend fun deleteExpenseItem(itemId: String) {
+        val current = _itemsByGroup.value.toMutableMap()
+        _itemsByGroup.value = current.mapValues { (_, items) -> items.filter { it.id != itemId } }
+    }
+
+    override suspend fun calculateSettlement(groupId: String): SettlementResult {
+        calculateSettlementCallCount++
+        return settlementResult
+    }
 }
