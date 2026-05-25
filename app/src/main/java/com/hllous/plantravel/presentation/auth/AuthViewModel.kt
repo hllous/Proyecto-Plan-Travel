@@ -28,7 +28,7 @@ class AuthViewModel @Inject constructor(
     val state: StateFlow<AuthState> = _state
 
     val userEmail: StateFlow<String?> = authRepository.observeUserEmail()
-        .stateIn(viewModelScope, SharingStarted.WhileSubscribed(5000L), null)
+        .stateIn(viewModelScope, SharingStarted.Eagerly, null)
 
     private val _pendingInviteCode = MutableStateFlow<String?>(null)
     val pendingInviteCode: StateFlow<String?> = _pendingInviteCode
@@ -58,10 +58,10 @@ class AuthViewModel @Inject constructor(
         }
     }
 
-    fun register(email: String, password: String) {
+    fun register(email: String, password: String, displayName: String) {
         _state.value = AuthState.Loading
         viewModelScope.launch {
-            authRepository.register(email, password)
+            authRepository.register(email, password, displayName)
                 .onFailure { _state.value = AuthState.Error(it.message ?: "Error al registrarse") }
         }
     }

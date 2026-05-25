@@ -22,7 +22,10 @@ class FakeAuthRepository(
 
     override suspend fun login(email: String, password: String): Result<Unit> = loginResult
 
-    override suspend fun register(email: String, password: String): Result<Unit> = registerResult
+    override suspend fun register(email: String, password: String, displayName: String): Result<Unit> {
+        if (registerResult.isSuccess) this.displayName = displayName
+        return registerResult
+    }
 
     override suspend fun logout() {
         logoutCalled = true

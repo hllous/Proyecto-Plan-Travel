@@ -43,11 +43,16 @@ class SupabaseAuthRepository(private val supabase: SupabaseClient) : AuthReposit
         .filter { it is SessionStatus.Authenticated || it is SessionStatus.NotAuthenticated }
         .map { status -> (status as? SessionStatus.Authenticated)?.session?.user?.email }
 
-    override suspend fun register(email: String, password: String): Result<Unit> = safeResult {
+    override suspend fun register(email: String, password: String, displayName: String): Result<Unit> = safeResult {
         supabase.auth.signUpWith(Email) {
             this.email = email
             this.password = password
         }
+        val userId = supabase.auth.currentUserOrNull()?.id
+            ?: error("Registro exitoso pero sin sesión de usuario")
+        supabase.from("profiles").upsert(
+            ProfileDto(id = userId, displayName = displayName, phone = null)
+        )
     }
 
     override suspend fun login(email: String, password: String): Result<Unit> = safeResult {

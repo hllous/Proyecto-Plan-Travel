@@ -64,9 +64,21 @@ class AuthViewModelTest {
         val repo = FakeAuthRepository(registerResult = Result.failure(Exception("Email ya registrado")))
         val vm = viewModel(repo)
 
-        vm.register("a@b.com", "pass")
+        vm.register("a@b.com", "pass", "Ana")
 
         assertEquals(AuthState.Error("Email ya registrado"), vm.state.value)
+    }
+
+    @Test
+    fun register_onSuccess_setsDisplayNameAndTransitionsToAuthenticated() {
+        val repo = FakeAuthRepository(registerResult = Result.success(Unit))
+        val vm = viewModel(repo)
+
+        vm.register("a@b.com", "pass", "Ana")
+        // Fake sets displayName="Ana" on success, so observeUserId → Authenticated directly
+        repo.userIdFlow.tryEmit("user-123")
+
+        assertEquals(AuthState.Authenticated("user-123", "Ana"), vm.state.value)
     }
 
     // --- createProfile ---
