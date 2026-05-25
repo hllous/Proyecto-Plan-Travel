@@ -6,7 +6,6 @@ import com.hllous.plantravel.domain.model.GroupMember
 import com.hllous.plantravel.domain.model.InviteToken
 import com.hllous.plantravel.domain.model.ItemAssignment
 import com.hllous.plantravel.domain.model.MemberRole
-import com.hllous.plantravel.domain.model.MemberSettlement
 import com.hllous.plantravel.domain.model.SettlementResult
 import com.hllous.plantravel.domain.model.TravelGroup
 import com.hllous.plantravel.domain.repository.TravelRepository

@@ -3,7 +3,6 @@ package com.hllous.plantravel.presentation
 import com.hllous.plantravel.FakeSessionProvider
 import com.hllous.plantravel.FakeTravelRepository
 import com.hllous.plantravel.MainDispatcherRule
-import com.hllous.plantravel.domain.model.ExpenseItem
 import com.hllous.plantravel.domain.model.MemberSettlement
 import com.hllous.plantravel.domain.model.SettlementResult
 import com.hllous.plantravel.domain.settlement.AssignmentOutcome
