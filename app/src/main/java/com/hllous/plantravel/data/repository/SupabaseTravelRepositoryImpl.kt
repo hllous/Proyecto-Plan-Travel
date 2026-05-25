@@ -57,12 +57,12 @@ class SupabaseTravelRepositoryImpl @Inject constructor(
         @SerialName("group_id") val groupId: String,
         @SerialName("user_id") val userId: String,
         val role: String,
-        val profiles: ProfileDto
+        val profiles: ProfileDto? = null
     ) {
         fun toDomain() = GroupMember(
             id = id,
             groupId = groupId,
-            name = profiles.displayName,
+            name = profiles?.displayName ?: "Usuario",
             userId = userId,
             role = if (role == MemberRole.ADMIN.name) MemberRole.ADMIN else MemberRole.USER
         )
@@ -219,7 +219,7 @@ class SupabaseTravelRepositoryImpl @Inject constructor(
 
         send(fetchGroupsForUser(userId))
 
-        val channel = supabase.channel("groups-for-$userId")
+        val channel = supabase.channel("groups-for-$userId-${UUID.randomUUID()}")
         val memberChanges = channel.postgresChangeFlow<PostgresAction>(schema = "public") {
             table = "group_members"
         }
@@ -238,7 +238,7 @@ class SupabaseTravelRepositoryImpl @Inject constructor(
     override fun observeMembers(groupId: String): Flow<List<GroupMember>> = channelFlow {
         send(fetchMembers(groupId))
 
-        val channel = supabase.channel("members-$groupId")
+        val channel = supabase.channel("members-$groupId-${UUID.randomUUID()}")
         val changes = channel.postgresChangeFlow<PostgresAction>(schema = "public") {
             table = "group_members"
         }
@@ -253,7 +253,7 @@ class SupabaseTravelRepositoryImpl @Inject constructor(
 
     // ─── Group CRUD ──────────────────────────────────────────────────────────
 
-    override suspend fun createGroup(groupName: String, adminName: String): String {
+    override suspend fun createGroup(groupName: String): String {
         val userId = supabase.auth.currentUserOrNull()?.id
             ?: error("User must be authenticated to create a group")
         val group = supabase.from("travel_groups")
@@ -290,7 +290,7 @@ class SupabaseTravelRepositoryImpl @Inject constructor(
     override fun observeInvites(groupId: String): Flow<List<InviteToken>> = channelFlow {
         send(fetchInvites(groupId))
 
-        val channel = supabase.channel("invites-$groupId")
+        val channel = supabase.channel("invites-$groupId-${UUID.randomUUID()}")
         val changes = channel.postgresChangeFlow<PostgresAction>(schema = "public") {
             table = "invite_tokens"
         }
@@ -361,7 +361,7 @@ class SupabaseTravelRepositoryImpl @Inject constructor(
     override fun observeExpenseItems(groupId: String): Flow<List<ExpenseItem>> = channelFlow {
         send(fetchExpenseItems(groupId))
 
-        val channel = supabase.channel("expense-items-$groupId")
+        val channel = supabase.channel("expense-items-$groupId-${UUID.randomUUID()}")
         val changes = channel.postgresChangeFlow<PostgresAction>(schema = "public") {
             table = "expense_items"
         }
@@ -377,7 +377,7 @@ class SupabaseTravelRepositoryImpl @Inject constructor(
     override fun observeAssignments(groupId: String): Flow<List<ItemAssignment>> = channelFlow {
         send(fetchAssignments(groupId))
 
-        val channel = supabase.channel("assignments-$groupId")
+        val channel = supabase.channel("assignments-$groupId-${UUID.randomUUID()}")
         val changes = channel.postgresChangeFlow<PostgresAction>(schema = "public") {
             table = "item_assignments"
         }

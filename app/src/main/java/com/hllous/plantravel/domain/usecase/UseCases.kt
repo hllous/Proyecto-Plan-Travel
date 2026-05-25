@@ -9,8 +9,8 @@ import javax.inject.Inject
 class CreateGroupUseCase @Inject constructor(
     private val repository: TravelRepository
 ) {
-    suspend operator fun invoke(groupName: String, adminName: String): String {
-        return repository.createGroup(groupName.trim(), adminName.trim())
+    suspend operator fun invoke(groupName: String): String {
+        return repository.createGroup(groupName.trim())
     }
 }
 

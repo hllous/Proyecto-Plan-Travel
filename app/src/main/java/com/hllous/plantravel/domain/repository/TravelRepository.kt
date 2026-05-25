@@ -15,7 +15,7 @@ interface TravelRepository {
     fun observeMembers(groupId: String): Flow<List<GroupMember>>
     fun observeInvites(groupId: String): Flow<List<InviteToken>>
 
-    suspend fun createGroup(groupName: String, adminName: String): String
+    suspend fun createGroup(groupName: String): String
     suspend fun updateGroupName(groupId: String, name: String)
     suspend fun deleteMember(memberId: String)
     suspend fun deleteGroup(groupId: String)

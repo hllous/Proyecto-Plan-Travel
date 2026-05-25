@@ -50,7 +50,7 @@ class GroupViewModelTest {
     @Test
     fun createGroupSelectsTheNewGroup() {
         val vm = viewModel()
-        vm.createGroup("Viaje Mendoza", "Nico")
+        vm.createGroup("Viaje Mendoza")
         assertEquals("fake-group-id", vm.selectedGroupId.value)
     }
 

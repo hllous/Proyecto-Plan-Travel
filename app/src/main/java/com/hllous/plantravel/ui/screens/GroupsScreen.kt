@@ -69,7 +69,6 @@ fun GroupsScreen(
     val members by groupViewModel.members.collectAsState(initial = emptyList())
     val invites by mainViewModel.invites.collectAsState(initial = emptyList())
     var groupName by rememberSaveable { mutableStateOf("") }
-    var adminName by rememberSaveable { mutableStateOf("") }
     var joinCode by rememberSaveable { mutableStateOf("") }
     var editableGroupName by rememberSaveable { mutableStateOf("") }
     var showCreateGroup by rememberSaveable { mutableStateOf(false) }
@@ -169,14 +168,6 @@ fun GroupsScreen(
                             singleLine = true,
                             colors = travelTextFieldColors()
                         )
-                        OutlinedTextField(
-                            value = adminName,
-                            onValueChange = { adminName = it },
-                            label = { Text("Tu nombre") },
-                            modifier = Modifier.fillMaxWidth(),
-                            singleLine = true,
-                            colors = travelTextFieldColors()
-                        )
                         Row(horizontalArrangement = Arrangement.spacedBy(10.dp)) {
                             OutlinedButton(
                                 onClick = { showCreateGroup = false },
@@ -186,9 +177,8 @@ fun GroupsScreen(
                             }
                             Button(
                                 onClick = {
-                                    groupViewModel.createGroup(groupName, adminName)
+                                    groupViewModel.createGroup(groupName)
                                     groupName = ""
-                                    adminName = ""
                                     showCreateGroup = false
                                 },
                                 modifier = Modifier.weight(1f)

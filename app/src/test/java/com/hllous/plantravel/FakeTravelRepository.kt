@@ -40,7 +40,7 @@ class FakeTravelRepository(
         _itemsByGroup.map { it[groupId] ?: emptyList() }
     override fun observeAssignments(groupId: String): Flow<List<ItemAssignment>> = flowOf(emptyList())
 
-    override suspend fun createGroup(groupName: String, adminName: String): String {
+    override suspend fun createGroup(groupName: String): String {
         val newGroup = TravelGroup(id = "fake-group-id", name = groupName)
         _groups.value = _groups.value + newGroup
         return newGroup.id

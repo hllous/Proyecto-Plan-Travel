@@ -83,13 +83,13 @@ class GroupViewModel @Inject constructor(
         _message.value = null
     }
 
-    fun createGroup(groupName: String, adminName: String) {
+    fun createGroup(groupName: String) {
         viewModelScope.launch {
-            if (groupName.isBlank() || adminName.isBlank()) {
-                _message.value = "Completa nombre del grupo y administrador"
+            if (groupName.isBlank()) {
+                _message.value = "Completa el nombre del grupo"
                 return@launch
             }
-            val groupId = createGroupUseCase(groupName, adminName)
+            val groupId = createGroupUseCase(groupName)
             selectedGroupHolder.selectedGroupId.value = groupId
             _message.value = "Grupo creado"
         }
