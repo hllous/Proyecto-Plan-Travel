@@ -351,7 +351,7 @@ fun GroupsScreen(
 @Composable
 private fun InviteCard(inviteCode: String, inviteLink: String, onDelete: () -> Unit) {
     val context = LocalContext.current
-    val payload = "PLANTRAVEL|$inviteCode"
+    val payload = inviteLink
     Card(modifier = Modifier.fillMaxWidth()) {
         Column(modifier = Modifier.padding(12.dp), verticalArrangement = Arrangement.spacedBy(6.dp)) {
             Row(modifier = Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.SpaceBetween, verticalAlignment = Alignment.CenterVertically) {

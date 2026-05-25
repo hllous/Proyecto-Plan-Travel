@@ -170,6 +170,7 @@ class ExpenseViewModel @Inject constructor(
             val result = runCatching { deleteExpenseItemUseCase(itemId) }
             if (result.isFailure) {
                 _message.value = "Error al eliminar gasto"
+                return@launch
             }
             val groupId = selectedGroupHolder.selectedGroupId.value
             if (groupId != null) recalculateSettlementSilently(groupId)

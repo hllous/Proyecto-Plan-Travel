@@ -28,6 +28,10 @@ _Avoid_: Trip, team, party
 A time-limited code that allows a User to join a Travel Group as a Group Member. Consumed once; invalidated on use or expiry.
 _Avoid_: Join code, link, QR
 
+**Leave Group**:
+The action of a USER-role Group Member voluntarily removing themselves from a Travel Group. Not available to the ADMIN (who must delete the group instead). Distinct from the ADMIN kicking a member.
+_Avoid_: Exit group, quit group, remove self
+
 ### Trip Planning
 
 **Trip Destination**:

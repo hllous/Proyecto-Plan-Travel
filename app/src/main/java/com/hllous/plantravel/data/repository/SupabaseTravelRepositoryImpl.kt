@@ -76,6 +76,7 @@ class SupabaseTravelRepositoryImpl @Inject constructor(
 
     @Serializable
     private data class InsertGroupDto(
+        val id: String,
         val name: String,
         @SerialName("admin_user_id") val adminUserId: String
     )
@@ -259,14 +260,12 @@ class SupabaseTravelRepositoryImpl @Inject constructor(
     override suspend fun createGroup(groupName: String): String {
         val userId = supabase.auth.currentUserOrNull()?.id
             ?: error("User must be authenticated to create a group")
-        val group = supabase.from("travel_groups")
-            .insert(InsertGroupDto(name = groupName, adminUserId = userId)) {
-                select()
-            }
-            .decodeSingle<TravelGroupDto>()
+        val groupId = UUID.randomUUID().toString()
+        supabase.from("travel_groups")
+            .insert(InsertGroupDto(id = groupId, name = groupName, adminUserId = userId))
         supabase.from("group_members")
-            .insert(InsertMemberDto(groupId = group.id, userId = userId, role = MemberRole.ADMIN.name))
-        return group.id
+            .insert(InsertMemberDto(groupId = groupId, userId = userId, role = MemberRole.ADMIN.name))
+        return groupId
     }
 
     override suspend fun updateGroupName(groupId: String, name: String) {
