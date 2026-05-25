@@ -19,6 +19,11 @@ import io.github.jan.supabase.realtime.PostgresAction
 import io.github.jan.supabase.realtime.channel
 import io.github.jan.supabase.realtime.postgresChangeFlow
 import io.github.jan.supabase.realtime.realtime
+import java.time.Instant
+import java.time.OffsetDateTime
+import java.time.ZoneOffset
+import java.time.format.DateTimeFormatter
+import java.util.UUID
 import javax.inject.Inject
 import javax.inject.Singleton
 import kotlinx.coroutines.flow.Flow
@@ -80,6 +85,35 @@ class SupabaseTravelRepositoryImpl @Inject constructor(
         val role: String
     )
 
+    @Serializable
+    private data class InviteTokenDto(
+        val code: String,
+        @SerialName("group_id") val groupId: String,
+        @SerialName("expires_at") val expiresAt: String
+    ) {
+        fun toDomain(): InviteToken {
+            val millis = runCatching {
+                OffsetDateTime.parse(expiresAt).toInstant().toEpochMilli()
+            }.getOrElse { Instant.now().toEpochMilli() }
+            return InviteToken(
+                code = code,
+                groupId = groupId,
+                link = "plantravel://invite/$code",
+                expiresAtMillis = millis
+            )
+        }
+    }
+
+    @Serializable
+    private data class InsertInviteDto(
+        val code: String,
+        @SerialName("group_id") val groupId: String,
+        @SerialName("expires_at") val expiresAt: String
+    )
+
+    @Serializable
+    private data class MembershipCheckDto(@SerialName("group_id") val groupId: String)
+
     // ─── Fetch helpers ───────────────────────────────────────────────────────
 
     private suspend fun fetchGroupsForUser(userId: String): List<TravelGroup> {
@@ -95,6 +129,15 @@ class SupabaseTravelRepositoryImpl @Inject constructor(
                 filter { isIn("id", groupIds) }
             }
             .decodeList<TravelGroupDto>()
+            .map { it.toDomain() }
+    }
+
+    private suspend fun fetchInvites(groupId: String): List<InviteToken> {
+        return supabase.from("invite_tokens")
+            .select {
+                filter { eq("group_id", groupId) }
+            }
+            .decodeList<InviteTokenDto>()
             .map { it.toDomain() }
     }
 
@@ -182,17 +225,70 @@ class SupabaseTravelRepositoryImpl @Inject constructor(
 
     // ─── Stubs (implemented in subsequent slices) ─────────────────────────────
 
-    override fun observeInvites(groupId: String): Flow<List<InviteToken>> =
-        flow { throw NotImplementedError("observeInvites not yet implemented — see #22") }
+    override fun observeInvites(groupId: String): Flow<List<InviteToken>> = channelFlow {
+        send(fetchInvites(groupId))
 
-    override suspend fun generateInvite(groupId: String): InviteToken =
-        throw NotImplementedError("generateInvite not yet implemented — see #22")
+        val channel = supabase.channel("invites-$groupId")
+        val changes = channel.postgresChangeFlow<PostgresAction>(schema = "public") {
+            table = "invite_tokens"
+        }
+        channel.subscribe(blockUntilSubscribed = true)
 
-    override suspend fun deleteInvite(code: String) =
-        throw NotImplementedError("deleteInvite not yet implemented — see #22")
+        try {
+            changes.collect { send(fetchInvites(groupId)) }
+        } finally {
+            supabase.realtime.removeChannel(channel)
+        }
+    }
 
-    override suspend fun consumeInvite(code: String, userId: String, displayName: String): Result<String> =
-        throw NotImplementedError("consumeInvite not yet implemented — see #22")
+    override suspend fun generateInvite(groupId: String): InviteToken {
+        val code = UUID.randomUUID().toString().replace("-", "").take(8).uppercase()
+        val expiresAt = OffsetDateTime.now(ZoneOffset.UTC).plusHours(24)
+            .format(DateTimeFormatter.ISO_OFFSET_DATE_TIME)
+        val dto = supabase.from("invite_tokens")
+            .insert(InsertInviteDto(code = code, groupId = groupId, expiresAt = expiresAt)) {
+                select()
+            }
+            .decodeSingle<InviteTokenDto>()
+        return dto.toDomain()
+    }
+
+    override suspend fun deleteInvite(code: String) {
+        supabase.from("invite_tokens").delete {
+            filter { eq("code", code) }
+        }
+    }
+
+    override suspend fun consumeInvite(code: String, userId: String, displayName: String): Result<String> {
+        val token = runCatching {
+            supabase.from("invite_tokens")
+                .select { filter { eq("code", code) } }
+                .decodeList<InviteTokenDto>()
+                .firstOrNull()
+        }.getOrNull() ?: return Result.failure(ConsumeInviteFailure.Expired)
+
+        val nowMillis = Instant.now().toEpochMilli()
+        val expiryMillis = runCatching {
+            OffsetDateTime.parse(token.expiresAt).toInstant().toEpochMilli()
+        }.getOrElse { 0L }
+        if (nowMillis > expiryMillis) return Result.failure(ConsumeInviteFailure.Expired)
+
+        val existing = supabase.from("group_members")
+            .select(Columns.list("group_id")) {
+                filter {
+                    eq("group_id", token.groupId)
+                    eq("user_id", userId)
+                }
+            }
+            .decodeList<MembershipCheckDto>()
+        if (existing.isNotEmpty()) return Result.failure(ConsumeInviteFailure.AlreadyMember)
+
+        supabase.from("group_members")
+            .insert(InsertMemberDto(groupId = token.groupId, userId = userId, role = MemberRole.USER.name))
+        supabase.from("invite_tokens").delete { filter { eq("code", code) } }
+
+        return Result.success(token.groupId)
+    }
 
     override suspend fun getRegions(): List<String> =
         throw NotImplementedError("getRegions not yet implemented — see #12")
