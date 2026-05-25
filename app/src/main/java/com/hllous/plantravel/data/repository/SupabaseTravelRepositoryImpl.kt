@@ -162,14 +162,17 @@ class SupabaseTravelRepositoryImpl @Inject constructor(
             .decodeList<ExpenseItemDto>()
             .map { it.toDomain() }
 
-    private suspend fun fetchAssignments(groupId: String): List<ItemAssignment> {
-        val items = fetchExpenseItems(groupId)
-        if (items.isEmpty()) return emptyList()
-        val itemIds = items.map { it.id }
+    private suspend fun fetchAssignmentsByItemIds(itemIds: List<String>): List<ItemAssignment> {
+        if (itemIds.isEmpty()) return emptyList()
         return supabase.from("item_assignments")
             .select { filter { isIn("item_id", itemIds) } }
             .decodeList<ItemAssignmentDto>()
             .map { it.toDomain() }
+    }
+
+    private suspend fun fetchAssignments(groupId: String): List<ItemAssignment> {
+        val items = fetchExpenseItems(groupId)
+        return fetchAssignmentsByItemIds(items.map { it.id })
     }
 
     private suspend fun fetchAssignmentsForItem(itemId: String): List<ItemAssignment> =
@@ -435,7 +438,7 @@ class SupabaseTravelRepositoryImpl @Inject constructor(
     override suspend fun calculateSettlement(groupId: String): SettlementResult {
         val members = fetchMembers(groupId)
         val items = fetchExpenseItems(groupId)
-        val assignments = fetchAssignments(groupId)
+        val assignments = fetchAssignmentsByItemIds(items.map { it.id })
         return settlementCalculator.calculate(members = members, items = items, assignments = assignments)
     }
 }

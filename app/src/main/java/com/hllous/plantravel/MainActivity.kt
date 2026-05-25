@@ -201,6 +201,25 @@ fun MainAppContent(
         }
     }
 
+    val groupMessage by groupViewModel.message.collectAsState(initial = null)
+    val expenseMessage by expenseViewModel.message.collectAsState(initial = null)
+
+    LaunchedEffect(groupMessage) {
+        val text = groupMessage
+        if (!text.isNullOrBlank()) {
+            snackbarHostState.showSnackbar(text)
+            groupViewModel.clearMessage()
+        }
+    }
+
+    LaunchedEffect(expenseMessage) {
+        val text = expenseMessage
+        if (!text.isNullOrBlank()) {
+            snackbarHostState.showSnackbar(text)
+            expenseViewModel.clearMessage()
+        }
+    }
+
     ModalNavigationDrawer(
         drawerState = drawerState,
         drawerContent = {

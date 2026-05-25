@@ -22,6 +22,10 @@ class FakeTravelRepository(
     var settlementResult: SettlementResult = SettlementResult(emptyList(), emptyList()),
     var generateInviteThrows: Boolean = false,
     var deleteInviteThrows: Boolean = false,
+    var addExpenseItemThrows: Boolean = false,
+    var deleteExpenseItemThrows: Boolean = false,
+    var calculateSettlementThrows: Boolean = false,
+    var assignItemThrows: Boolean = false,
     initialGroups: List<TravelGroup> = emptyList(),
     initialMembers: Map<String, List<GroupMember>> = emptyMap(),
     initialExpenseItems: Map<String, List<ExpenseItem>> = emptyMap(),
@@ -76,6 +80,7 @@ class FakeTravelRepository(
     override suspend fun getRecommendationsByRegion(region: String): List<DestinationRecommendation> = emptyList()
 
     override suspend fun addExpenseItem(groupId: String, itemName: String, totalPriceCents: Long, quantity: Int): String {
+        if (addExpenseItemThrows) throw RuntimeException("network error")
         val item = ExpenseItem(id = "fake-item-id", groupId = groupId, name = itemName, totalPriceCents = totalPriceCents, quantity = quantity)
         val current = _itemsByGroup.value.toMutableMap()
         current[groupId] = (current[groupId] ?: emptyList()) + item
@@ -83,13 +88,19 @@ class FakeTravelRepository(
         return item.id
     }
 
-    override suspend fun assignItemToMember(itemId: String, memberId: String, quantity: Int): AssignmentOutcome = assignOutcome
+    override suspend fun assignItemToMember(itemId: String, memberId: String, quantity: Int): AssignmentOutcome {
+        if (assignItemThrows) throw RuntimeException("network error")
+        return assignOutcome
+    }
+
     override suspend fun deleteExpenseItem(itemId: String) {
+        if (deleteExpenseItemThrows) throw RuntimeException("network error")
         val current = _itemsByGroup.value.toMutableMap()
         _itemsByGroup.value = current.mapValues { (_, items) -> items.filter { it.id != itemId } }
     }
 
     override suspend fun calculateSettlement(groupId: String): SettlementResult {
+        if (calculateSettlementThrows) throw RuntimeException("network error")
         calculateSettlementCallCount++
         return settlementResult
     }

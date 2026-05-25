@@ -107,7 +107,12 @@ class ExpenseViewModel @Inject constructor(
     fun refreshSettlement() {
         viewModelScope.launch {
             val groupId = selectedGroupHolder.selectedGroupId.value ?: return@launch
-            updateSettlement(calculateSettlementUseCase(groupId))
+            val result = runCatching { calculateSettlementUseCase(groupId) }
+            if (result.isFailure) {
+                _message.value = "Error al calcular liquidacion"
+                return@launch
+            }
+            updateSettlement(result.getOrThrow())
         }
     }
 
@@ -124,7 +129,11 @@ class ExpenseViewModel @Inject constructor(
                 _message.value = "Carga item, precio unitario y cantidad validos"
                 return@launch
             }
-            addExpenseItemUseCase(groupId, name, totalCents, quantity)
+            val result = runCatching { addExpenseItemUseCase(groupId, name, totalCents, quantity) }
+            if (result.isFailure) {
+                _message.value = "Error al agregar gasto"
+                return@launch
+            }
             recalculateSettlementSilently(groupId)
         }
     }
@@ -136,12 +145,13 @@ class ExpenseViewModel @Inject constructor(
                 _message.value = "Cantidad invalida"
                 return@launch
             }
-            val outcome = try {
-                assignItemToMemberUseCase(itemId, memberId, quantity)
-            } catch (e: IllegalStateException) {
-                _message.value = "El item ya no existe"
+            val result = runCatching { assignItemToMemberUseCase(itemId, memberId, quantity) }
+            if (result.isFailure) {
+                val e = result.exceptionOrNull()
+                _message.value = if (e is IllegalStateException) "El item ya no existe" else "Error al asignar"
                 return@launch
             }
+            val outcome = result.getOrThrow()
             when (outcome) {
                 AssignmentOutcome.Accepted -> {
                     val groupId = selectedGroupHolder.selectedGroupId.value
@@ -157,14 +167,17 @@ class ExpenseViewModel @Inject constructor(
 
     fun deleteExpenseItem(itemId: String) {
         viewModelScope.launch {
-            deleteExpenseItemUseCase(itemId)
+            val result = runCatching { deleteExpenseItemUseCase(itemId) }
+            if (result.isFailure) {
+                _message.value = "Error al eliminar gasto"
+            }
             val groupId = selectedGroupHolder.selectedGroupId.value
             if (groupId != null) recalculateSettlementSilently(groupId)
         }
     }
 
     private suspend fun recalculateSettlementSilently(groupId: String) {
-        updateSettlement(calculateSettlementUseCase(groupId))
+        runCatching { calculateSettlementUseCase(groupId) }.onSuccess { updateSettlement(it) }
     }
 
     private fun updateSettlement(result: SettlementResult) {

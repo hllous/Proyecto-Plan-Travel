@@ -103,4 +103,69 @@ class ExpenseViewModelTest {
         assertTrue(repo.calculateSettlementCallCount >= 1)
         assertTrue(vm.settlements.value.isEmpty())
     }
+
+    @Test
+    fun addExpenseItemWithNoGroupSelectedShowsMessage() {
+        val vm = viewModel()
+
+        vm.addExpenseItem(name = "Taxi", unitPriceText = "50", quantityText = "1")
+
+        assertEquals("Selecciona un grupo", vm.message.value)
+    }
+
+    @Test
+    fun addExpenseItemSuccessAddsItemToRepo() {
+        val holder = SelectedGroupHolder().also { it.selectedGroupId.value = "group-1" }
+        val repo = FakeTravelRepository()
+        val vm = viewModel(repo = repo, holder = holder)
+
+        vm.addExpenseItem(name = "Taxi", unitPriceText = "50", quantityText = "1")
+
+        assertTrue(repo.calculateSettlementCallCount >= 1)
+        assertEquals(null, vm.message.value)
+    }
+
+    @Test
+    fun addExpenseItemNetworkErrorShowsErrorMessage() {
+        val holder = SelectedGroupHolder().also { it.selectedGroupId.value = "group-1" }
+        val repo = FakeTravelRepository(addExpenseItemThrows = true)
+        val vm = viewModel(repo = repo, holder = holder)
+
+        vm.addExpenseItem(name = "Taxi", unitPriceText = "50", quantityText = "1")
+
+        assertEquals("Error al agregar gasto", vm.message.value)
+    }
+
+    @Test
+    fun deleteExpenseItemNetworkErrorShowsErrorMessage() {
+        val holder = SelectedGroupHolder().also { it.selectedGroupId.value = "group-1" }
+        val repo = FakeTravelRepository(deleteExpenseItemThrows = true)
+        val vm = viewModel(repo = repo, holder = holder)
+
+        vm.deleteExpenseItem("item-10")
+
+        assertEquals("Error al eliminar gasto", vm.message.value)
+    }
+
+    @Test
+    fun refreshSettlementNetworkErrorShowsErrorMessage() {
+        val holder = SelectedGroupHolder().also { it.selectedGroupId.value = "group-1" }
+        val repo = FakeTravelRepository(calculateSettlementThrows = true)
+        val vm = viewModel(repo = repo, holder = holder)
+
+        vm.refreshSettlement()
+
+        assertEquals("Error al calcular liquidacion", vm.message.value)
+    }
+
+    @Test
+    fun assignItemWithNonIseNetworkErrorShowsErrorMessage() {
+        val holder = SelectedGroupHolder().also { it.selectedGroupId.value = "group-1" }
+        val repo = FakeTravelRepository(assignItemThrows = true)
+        val vm = viewModel(repo = repo, holder = holder)
+
+        vm.assignItem(itemId = "item-10", memberId = "member-1", quantityText = "1")
+
+        assertEquals("Error al asignar", vm.message.value)
+    }
 }
