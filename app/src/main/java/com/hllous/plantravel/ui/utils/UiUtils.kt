@@ -28,6 +28,9 @@ fun memberColor(memberId: String): Color {
 
 fun formatCurrency(cents: Long): String = "$${"%.2f".format(cents / 100.0)}"
 
+fun isItemFullyAssigned(assignedQuantity: Int, totalQuantity: Int): Boolean =
+    assignedQuantity >= totalQuantity
+
 fun greetingForHour(hour: Int): String = when (hour) {
     in 6..11 -> "Buenos días"
     in 12..19 -> "Buenas tardes"

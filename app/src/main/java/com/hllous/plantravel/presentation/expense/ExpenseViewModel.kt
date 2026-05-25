@@ -50,6 +50,16 @@ class ExpenseViewModel @Inject constructor(
     val groups: StateFlow<List<TravelGroup>> = repository.observeGroups()
         .stateIn(viewModelScope, SharingStarted.WhileSubscribed(5000), emptyList())
 
+    init {
+        viewModelScope.launch {
+            groups.collect { list ->
+                if (list.isNotEmpty() && selectedGroupHolder.selectedGroupId.value == null) {
+                    selectedGroupHolder.selectedGroupId.value = list.first().id
+                }
+            }
+        }
+    }
+
     val members: StateFlow<List<GroupMember>> = selectedGroupHolder.selectedGroupId
         .flatMapLatest { groupId ->
             if (groupId == null) flowOf(emptyList()) else repository.observeMembers(groupId)

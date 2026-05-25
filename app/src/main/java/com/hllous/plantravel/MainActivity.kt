@@ -266,7 +266,7 @@ fun MainAppContent(
             topBar = {
                 if (currentRoute != "qr_scanner" && currentRoute != "profile" &&
                     currentRoute != "groups" && !currentRoute.startsWith("group_detail") &&
-                    currentRoute != "destinations") {
+                    currentRoute != "destinations" && currentRoute != "gastos") {
                     TopAppBar(
                         title = {
                             Text(
