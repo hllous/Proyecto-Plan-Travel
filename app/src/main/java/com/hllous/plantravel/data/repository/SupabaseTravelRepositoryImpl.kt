@@ -327,7 +327,7 @@ class SupabaseTravelRepositoryImpl @Inject constructor(
                 .select { filter { eq("code", code) } }
                 .decodeList<InviteTokenDto>()
                 .firstOrNull()
-        }.getOrNull() ?: return Result.failure(ConsumeInviteFailure.Expired)
+        }.getOrNull() ?: return Result.failure(ConsumeInviteFailure.NotFound)
 
         val nowMillis = Instant.now().toEpochMilli()
         val expiryMillis = runCatching {

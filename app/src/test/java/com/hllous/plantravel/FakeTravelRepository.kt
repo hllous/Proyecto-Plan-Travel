@@ -20,6 +20,8 @@ class FakeTravelRepository(
     var assignOutcome: AssignmentOutcome = AssignmentOutcome.Accepted,
     var consumeInviteResult: Result<String> = Result.success("fake-member-id"),
     var settlementResult: SettlementResult = SettlementResult(emptyList(), emptyList()),
+    var generateInviteThrows: Boolean = false,
+    var deleteInviteThrows: Boolean = false,
     initialGroups: List<TravelGroup> = emptyList(),
     initialMembers: Map<String, List<GroupMember>> = emptyMap(),
     initialExpenseItems: Map<String, List<ExpenseItem>> = emptyMap(),
@@ -51,9 +53,13 @@ class FakeTravelRepository(
     override suspend fun deleteGroup(groupId: String) {
         _groups.value = _groups.value.filter { it.id != groupId }
     }
-    override suspend fun generateInvite(groupId: String): InviteToken =
-        InviteToken(code = "FAKECODE", groupId = groupId, link = "plantravel://invite/FAKECODE", expiresAtMillis = Long.MAX_VALUE)
-    override suspend fun deleteInvite(code: String) = Unit
+    override suspend fun generateInvite(groupId: String): InviteToken {
+        if (generateInviteThrows) throw RuntimeException("network error")
+        return InviteToken(code = "FAKECODE", groupId = groupId, link = "plantravel://invite/FAKECODE", expiresAtMillis = Long.MAX_VALUE)
+    }
+    override suspend fun deleteInvite(code: String) {
+        if (deleteInviteThrows) throw RuntimeException("network error")
+    }
     override suspend fun consumeInvite(code: String, userId: String, displayName: String): Result<String> {
         lastConsumeUserId = userId
         if (consumeInviteResult.isSuccess) {

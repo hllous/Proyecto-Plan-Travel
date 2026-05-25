@@ -81,8 +81,9 @@ fun QrScannerScreen(viewModel: MainViewModel, onDone: () -> Unit, onBack: () -> 
             QrCameraPreview(onQrDetected = { payload ->
                 scope.launch {
                     if (scannedText.isNotBlank()) return@launch
+                    if (!payload.startsWith("plantravel://invite/")) return@launch
                     scannedText = payload
-                    val code = payload.removePrefix("PLANTRAVEL|").substringAfterLast("/")
+                    val code = payload.substringAfterLast("/")
                     viewModel.consumeInvite(code)
                     onDone()
                 }

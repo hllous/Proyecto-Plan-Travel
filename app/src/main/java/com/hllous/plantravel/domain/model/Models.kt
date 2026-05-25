@@ -20,9 +20,10 @@ data class GroupMember(
 )
 
 sealed class ConsumeInviteFailure : Exception() {
-    object Unauthenticated : ConsumeInviteFailure()
-    object Expired : ConsumeInviteFailure()
-    object AlreadyMember : ConsumeInviteFailure()
+    object Unauthenticated : ConsumeInviteFailure() { override val message = "Debes iniciar sesion" }
+    object NotFound : ConsumeInviteFailure() { override val message = "Codigo de invitacion invalido" }
+    object Expired : ConsumeInviteFailure() { override val message = "El codigo de invitacion vencio" }
+    object AlreadyMember : ConsumeInviteFailure() { override val message = "Ya sos miembro de este grupo" }
 }
 
 data class InviteToken(

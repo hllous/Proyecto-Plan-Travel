@@ -86,15 +86,17 @@ class MainViewModel @Inject constructor(
                 _message.value = "Selecciona un grupo"
                 return@launch
             }
-            generateInviteUseCase(groupId)
-            _message.value = "Invitacion generada"
+            runCatching { generateInviteUseCase(groupId) }
+                .onSuccess { _message.value = "Invitacion generada" }
+                .onFailure { _message.value = "Error al generar invitacion" }
         }
     }
 
     fun deleteInvite(code: String) {
         viewModelScope.launch {
-            deleteInviteUseCase(code)
-            _message.value = "Invitacion eliminada"
+            runCatching { deleteInviteUseCase(code) }
+                .onSuccess { _message.value = "Invitacion eliminada" }
+                .onFailure { _message.value = "Error al eliminar invitacion" }
         }
     }
 
