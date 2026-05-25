@@ -3,47 +3,69 @@ package com.hllous.plantravel.ui.screens
 import android.content.ClipData
 import android.content.ClipboardManager
 import android.graphics.Bitmap
+import androidx.compose.foundation.BorderStroke
+import androidx.compose.foundation.Image
+import androidx.compose.foundation.background
 import androidx.compose.foundation.layout.Arrangement
+import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
+import androidx.compose.foundation.layout.IntrinsicSize
+import androidx.compose.foundation.layout.PaddingValues
 import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.Spacer
+import androidx.compose.foundation.layout.WindowInsets
+import androidx.compose.foundation.layout.fillMaxHeight
 import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.height
 import androidx.compose.foundation.layout.padding
+import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.layout.width
 import androidx.compose.foundation.lazy.LazyColumn
+import androidx.compose.foundation.lazy.items
+import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.automirrored.filled.ArrowBack
+import androidx.compose.material.icons.automirrored.filled.ExitToApp
+import androidx.compose.material.icons.filled.Add
 import androidx.compose.material.icons.filled.ContentCopy
 import androidx.compose.material.icons.filled.Delete
 import androidx.compose.material.icons.filled.Edit
-import androidx.compose.material.icons.automirrored.filled.ExitToApp
+import androidx.compose.material.icons.filled.KeyboardArrowRight
 import androidx.compose.material.icons.filled.People
+import androidx.compose.material.icons.filled.PersonRemove
 import androidx.compose.material.icons.filled.QrCode
 import androidx.compose.material3.AlertDialog
 import androidx.compose.material3.Button
 import androidx.compose.material3.ButtonDefaults
-import androidx.compose.material3.Card
-import androidx.compose.material3.CardDefaults
+import androidx.compose.material3.ElevatedCard
+import androidx.compose.material3.ExperimentalMaterial3Api
+import androidx.compose.material3.ExtendedFloatingActionButton
 import androidx.compose.material3.Icon
 import androidx.compose.material3.IconButton
+import androidx.compose.material3.LargeTopAppBar
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.OutlinedButton
 import androidx.compose.material3.OutlinedTextField
+import androidx.compose.material3.Scaffold
 import androidx.compose.material3.Surface
 import androidx.compose.material3.Text
 import androidx.compose.material3.TextButton
+import androidx.compose.material3.TopAppBar
+import androidx.compose.material3.TopAppBarDefaults
 import androidx.compose.runtime.Composable
+import androidx.compose.runtime.DisposableEffect
 import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.collectAsState
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateOf
+import androidx.compose.runtime.remember
 import androidx.compose.runtime.saveable.rememberSaveable
 import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.graphics.asImageBitmap
+import androidx.compose.ui.input.nestedscroll.nestedScroll
 import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.unit.dp
@@ -51,16 +73,20 @@ import androidx.navigation.NavHostController
 import com.google.zxing.BarcodeFormat
 import com.google.zxing.MultiFormatWriter
 import com.google.zxing.common.BitMatrix
+import com.hllous.plantravel.domain.model.GroupMember
 import com.hllous.plantravel.domain.model.MemberRole
+import com.hllous.plantravel.domain.model.TravelGroup
 import com.hllous.plantravel.presentation.MainViewModel
 import com.hllous.plantravel.presentation.UiState
 import com.hllous.plantravel.presentation.group.GroupViewModel
 import com.hllous.plantravel.ui.components.ErrorCard
 import com.hllous.plantravel.ui.components.SectionCard
 import com.hllous.plantravel.ui.components.travelTextFieldColors
+import com.hllous.plantravel.ui.theme.FrauncesFamily
 import com.hllous.plantravel.ui.utils.memberColor
 import com.hllous.plantravel.ui.utils.memberInitial
 
+@OptIn(ExperimentalMaterial3Api::class)
 @Composable
 fun GroupsScreen(
     groupViewModel: GroupViewModel,
@@ -69,20 +95,164 @@ fun GroupsScreen(
 ) {
     val groupsUiState by groupViewModel.groupsUiState.collectAsState()
     val groups by groupViewModel.groups.collectAsState(initial = emptyList())
-    val selectedGroupId by groupViewModel.selectedGroupId.collectAsState(initial = null)
-    val members by groupViewModel.members.collectAsState(initial = emptyList())
+    var joinCode by rememberSaveable { mutableStateOf("") }
+    var showCreateDialog by rememberSaveable { mutableStateOf(false) }
+    var newGroupName by rememberSaveable { mutableStateOf("") }
+    val scrollBehavior = TopAppBarDefaults.exitUntilCollapsedScrollBehavior()
+
+    if (showCreateDialog) {
+        AlertDialog(
+            onDismissRequest = {
+                showCreateDialog = false
+                newGroupName = ""
+            },
+            title = { Text("Nuevo grupo") },
+            text = {
+                OutlinedTextField(
+                    value = newGroupName,
+                    onValueChange = { newGroupName = it },
+                    label = { Text("Nombre del grupo") },
+                    modifier = Modifier.fillMaxWidth(),
+                    singleLine = true,
+                    colors = travelTextFieldColors()
+                )
+            },
+            confirmButton = {
+                Button(
+                    onClick = {
+                        groupViewModel.createGroup(newGroupName)
+                        newGroupName = ""
+                        showCreateDialog = false
+                    },
+                    enabled = newGroupName.isNotBlank()
+                ) { Text("Crear") }
+            },
+            dismissButton = {
+                TextButton(onClick = {
+                    showCreateDialog = false
+                    newGroupName = ""
+                }) { Text("Cancelar") }
+            }
+        )
+    }
+
+    Scaffold(
+        modifier = Modifier.nestedScroll(scrollBehavior.nestedScrollConnection),
+        contentWindowInsets = WindowInsets(0),
+        topBar = {
+            LargeTopAppBar(
+                title = {
+                    Text(
+                        "Grupos",
+                        fontFamily = FrauncesFamily,
+                        fontWeight = FontWeight.Medium
+                    )
+                },
+                scrollBehavior = scrollBehavior,
+                windowInsets = WindowInsets(0)
+            )
+        },
+        floatingActionButton = {
+            ExtendedFloatingActionButton(
+                onClick = { showCreateDialog = true },
+                icon = { Icon(Icons.Default.Add, contentDescription = null) },
+                text = { Text("Crear grupo") }
+            )
+        }
+    ) { innerPadding ->
+        LazyColumn(
+            modifier = Modifier
+                .fillMaxSize()
+                .padding(innerPadding)
+                .padding(horizontal = 16.dp),
+            verticalArrangement = Arrangement.spacedBy(12.dp),
+            contentPadding = PaddingValues(vertical = 12.dp)
+        ) {
+            if (groupsUiState is UiState.Error) {
+                item {
+                    ErrorCard(
+                        message = (groupsUiState as UiState.Error).message,
+                        onRetry = { groupViewModel.reloadGroups() }
+                    )
+                }
+            }
+
+            items(groups, key = { it.id }) { group ->
+                GroupListItem(
+                    group = group,
+                    onClick = { navController.navigate("group_detail/${group.id}") }
+                )
+            }
+
+            item {
+                SectionCard(title = "Unirse a un grupo") {
+                    OutlinedTextField(
+                        value = joinCode,
+                        onValueChange = { joinCode = it.uppercase() },
+                        label = { Text("Código de invitación") },
+                        modifier = Modifier.fillMaxWidth(),
+                        singleLine = true,
+                        colors = travelTextFieldColors()
+                    )
+                    Button(
+                        onClick = {
+                            mainViewModel.consumeInvite(joinCode)
+                            joinCode = ""
+                        },
+                        modifier = Modifier.fillMaxWidth(),
+                        enabled = joinCode.isNotBlank()
+                    ) {
+                        Icon(Icons.Default.QrCode, contentDescription = null)
+                        Spacer(Modifier.width(8.dp))
+                        Text("Ingresar")
+                    }
+                }
+            }
+        }
+    }
+}
+
+@OptIn(ExperimentalMaterial3Api::class)
+@Composable
+fun GroupDetailScreen(
+    groupId: String,
+    groupViewModel: GroupViewModel,
+    mainViewModel: MainViewModel,
+    navController: NavHostController
+) {
+    val groups by groupViewModel.groups.collectAsState()
+    val members by groupViewModel.members.collectAsState()
+    val currentUserRole by groupViewModel.currentUserRole.collectAsState()
     val invites by mainViewModel.invites.collectAsState(initial = emptyList())
     val pendingKickMemberId by groupViewModel.pendingKickMemberId.collectAsState()
-    val currentUserRole by groupViewModel.currentUserRole.collectAsState()
-    var groupName by rememberSaveable { mutableStateOf("") }
-    var joinCode by rememberSaveable { mutableStateOf("") }
-    var editableGroupName by rememberSaveable { mutableStateOf("") }
-    var showCreateGroup by rememberSaveable { mutableStateOf(false) }
-    var showLeaveConfirm by rememberSaveable { mutableStateOf(false) }
-    val selectedGroup = groups.firstOrNull { it.id == selectedGroupId }
+    val selectedGroupId by groupViewModel.selectedGroupId.collectAsState()
 
-    LaunchedEffect(selectedGroupId, selectedGroup?.name) {
-        if (selectedGroup != null) editableGroupName = selectedGroup.name
+    val selectedGroup = groups.firstOrNull { it.id == groupId }
+
+    var showLeaveConfirm by rememberSaveable { mutableStateOf(false) }
+    var editableGroupName by rememberSaveable { mutableStateOf("") }
+    var showQr by rememberSaveable { mutableStateOf(false) }
+    var groupSelected by remember { mutableStateOf(false) }
+
+    LaunchedEffect(groupId) {
+        groupViewModel.selectGroup(groupId)
+        groupSelected = true
+    }
+
+    LaunchedEffect(selectedGroup?.name) {
+        val name = selectedGroup?.name ?: return@LaunchedEffect
+        editableGroupName = name
+    }
+
+    // Navigate back when group is deleted or user leaves
+    LaunchedEffect(selectedGroupId, groupSelected) {
+        if (groupSelected && selectedGroupId == null) {
+            navController.navigateUp()
+        }
+    }
+
+    DisposableEffect(Unit) {
+        onDispose { groupViewModel.clearSelectedGroup() }
     }
 
     if (pendingKickMemberId != null) {
@@ -122,286 +292,199 @@ fun GroupsScreen(
         )
     }
 
-    LazyColumn(
-        modifier = Modifier
-            .fillMaxSize()
-            .padding(horizontal = 16.dp, vertical = 12.dp),
-        verticalArrangement = Arrangement.spacedBy(12.dp)
-    ) {
-        if (groupsUiState is UiState.Error) {
-            item {
-                ErrorCard(
-                    message = (groupsUiState as UiState.Error).message,
-                    onRetry = { groupViewModel.reloadGroups() }
-                )
-            }
-        }
-        if (selectedGroupId == null) {
-            item {
-                Card(
-                    modifier = Modifier.fillMaxWidth(),
-                    colors = CardDefaults.cardColors(containerColor = MaterialTheme.colorScheme.primaryContainer)
-                ) {
-                    Column(
-                        modifier = Modifier.padding(18.dp),
-                        verticalArrangement = Arrangement.spacedBy(14.dp)
-                    ) {
-                        Text("Grupos", style = MaterialTheme.typography.headlineSmall)
-                        Row(horizontalArrangement = Arrangement.spacedBy(10.dp)) {
-                            Surface(
-                                onClick = { showCreateGroup = !showCreateGroup },
-                                shape = MaterialTheme.shapes.large,
-                                color = MaterialTheme.colorScheme.surface,
-                                modifier = Modifier.weight(1f)
-                            ) {
-                                Row(
-                                    modifier = Modifier
-                                        .fillMaxWidth()
-                                        .padding(horizontal = 14.dp, vertical = 12.dp),
-                                    verticalAlignment = Alignment.CenterVertically,
-                                    horizontalArrangement = Arrangement.spacedBy(8.dp)
-                                ) {
-                                    Icon(Icons.Default.Edit, contentDescription = null)
-                                    Text(if (showCreateGroup) "Cerrar" else "Crear")
-                                }
-                            }
-                            Surface(
-                                onClick = { navController.navigate("qr_scanner") },
-                                shape = MaterialTheme.shapes.large,
-                                color = MaterialTheme.colorScheme.surface,
-                                modifier = Modifier.weight(1f)
-                            ) {
-                                Row(
-                                    modifier = Modifier
-                                        .fillMaxWidth()
-                                        .padding(horizontal = 14.dp, vertical = 12.dp),
-                                    verticalAlignment = Alignment.CenterVertically,
-                                    horizontalArrangement = Arrangement.spacedBy(8.dp)
-                                ) {
-                                    Icon(Icons.Default.QrCode, contentDescription = null)
-                                    Text("Escanear")
-                                }
-                            }
-                        }
-                    }
-                }
-            }
-            if (showCreateGroup) {
-                item {
-                    SectionCard(title = "Nuevo grupo") {
-                        OutlinedTextField(
-                            value = groupName,
-                            onValueChange = { groupName = it },
-                            label = { Text("Nombre del grupo") },
-                            modifier = Modifier.fillMaxWidth(),
-                            singleLine = true,
-                            colors = travelTextFieldColors()
+    val context = LocalContext.current
+    val latestInvite = invites.firstOrNull()
+
+    Scaffold(
+        contentWindowInsets = WindowInsets(0),
+        topBar = {
+            TopAppBar(
+                windowInsets = WindowInsets(0),
+                title = {
+                    Column {
+                        Text(
+                            selectedGroup?.name ?: "Grupo",
+                            fontFamily = FrauncesFamily,
+                            fontWeight = FontWeight.Medium
                         )
-                        Row(horizontalArrangement = Arrangement.spacedBy(10.dp)) {
-                            OutlinedButton(
-                                onClick = { showCreateGroup = false },
-                                modifier = Modifier.weight(1f)
-                            ) { Text("Cancelar") }
-                            Button(
-                                onClick = {
-                                    groupViewModel.createGroup(groupName)
-                                    groupName = ""
-                                    showCreateGroup = false
-                                },
-                                modifier = Modifier.weight(1f)
-                            ) { Text("Crear") }
+                        Text(
+                            "${members.size} integrantes",
+                            style = MaterialTheme.typography.labelSmall,
+                            color = MaterialTheme.colorScheme.onSurfaceVariant
+                        )
+                    }
+                },
+                navigationIcon = {
+                    IconButton(onClick = { navController.navigateUp() }) {
+                        Icon(Icons.AutoMirrored.Filled.ArrowBack, contentDescription = "Volver")
+                    }
+                },
+                actions = {
+                    when (currentUserRole) {
+                        MemberRole.ADMIN -> IconButton(onClick = {}) {
+                            Icon(Icons.Default.Edit, contentDescription = "Editar grupo")
                         }
+                        MemberRole.USER -> IconButton(onClick = { showLeaveConfirm = true }) {
+                            Icon(
+                                Icons.AutoMirrored.Filled.ExitToApp,
+                                contentDescription = "Abandonar grupo",
+                                tint = MaterialTheme.colorScheme.error
+                            )
+                        }
+                        null -> Unit
                     }
                 }
-            }
-            if (groups.isNotEmpty()) {
-                item {
-                    SectionCard(title = "Mis grupos") {
-                        groups.forEach { group ->
-                            Card(
-                                onClick = { groupViewModel.selectGroup(group.id) },
-                                modifier = Modifier.fillMaxWidth(),
-                                colors = CardDefaults.cardColors(containerColor = MaterialTheme.colorScheme.surfaceVariant)
-                            ) {
-                                Row(
-                                    modifier = Modifier
-                                        .fillMaxWidth()
-                                        .padding(horizontal = 16.dp, vertical = 12.dp),
-                                    horizontalArrangement = Arrangement.SpaceBetween,
-                                    verticalAlignment = Alignment.CenterVertically
-                                ) {
-                                    Text(group.name, fontWeight = FontWeight.Medium)
-                                    Row(
-                                        horizontalArrangement = Arrangement.spacedBy(4.dp),
-                                        verticalAlignment = Alignment.CenterVertically
-                                    ) {
-                                        Icon(Icons.Default.People, contentDescription = null, tint = MaterialTheme.colorScheme.onSurfaceVariant)
-                                        Text(
-                                            "${group.memberCount}",
-                                            style = MaterialTheme.typography.labelMedium,
-                                            color = MaterialTheme.colorScheme.onSurfaceVariant
-                                        )
-                                    }
-                                }
-                            }
-                            Spacer(Modifier.height(8.dp))
-                        }
-                    }
-                }
-            }
-            item {
-                SectionCard(title = "Unirse") {
-                    OutlinedTextField(
-                        value = joinCode,
-                        onValueChange = { joinCode = it.uppercase() },
-                        label = { Text("Codigo de invitacion") },
-                        modifier = Modifier.fillMaxWidth(),
-                        singleLine = true,
-                        colors = travelTextFieldColors()
-                    )
-                    Button(
-                        onClick = {
-                            mainViewModel.consumeInvite(joinCode)
-                            joinCode = ""
-                        },
-                        modifier = Modifier.fillMaxWidth()
-                    ) {
-                        Icon(Icons.Default.QrCode, contentDescription = null)
-                        Spacer(Modifier.width(8.dp))
-                        Text("Ingresar")
-                    }
-                }
-            }
-        } else {
-            item {
-                Card(
-                    modifier = Modifier.fillMaxWidth(),
-                    colors = CardDefaults.cardColors(containerColor = MaterialTheme.colorScheme.primaryContainer)
-                ) {
-                    Row(
-                        modifier = Modifier
-                            .fillMaxWidth()
-                            .padding(18.dp),
-                        horizontalArrangement = Arrangement.SpaceBetween,
-                        verticalAlignment = Alignment.CenterVertically
-                    ) {
-                        IconButton(onClick = { groupViewModel.clearSelectedGroup() }) {
-                            Icon(Icons.AutoMirrored.Filled.ArrowBack, contentDescription = "Volver")
-                        }
-                        Column(modifier = Modifier.weight(1f)) {
-                            Text(selectedGroup?.name ?: "Grupo", style = MaterialTheme.typography.headlineSmall)
-                            Text("Activo", style = MaterialTheme.typography.labelMedium, color = MaterialTheme.colorScheme.onSurfaceVariant)
-                        }
-                        if (currentUserRole == MemberRole.USER) {
-                            IconButton(onClick = { showLeaveConfirm = true }) {
-                                Icon(Icons.AutoMirrored.Filled.ExitToApp, contentDescription = "Abandonar grupo", tint = MaterialTheme.colorScheme.error)
-                            }
-                        }
-                    }
-                }
-            }
-            item {
-                SectionCard(title = "Grupo activo") {
-                    OutlinedTextField(
-                        value = editableGroupName,
-                        onValueChange = { editableGroupName = it },
-                        label = { Text("Nombre") },
-                        modifier = Modifier.fillMaxWidth(),
-                        singleLine = true,
-                        colors = travelTextFieldColors()
-                    )
-                    Row(horizontalArrangement = Arrangement.spacedBy(10.dp)) {
-                        Button(
-                            onClick = { groupViewModel.updateSelectedGroupName(editableGroupName) },
-                            modifier = Modifier.weight(1f)
-                        ) { Text("Guardar") }
-                        Button(
-                            onClick = { groupViewModel.deleteSelectedGroup() },
-                            modifier = Modifier.weight(1f),
-                            colors = ButtonDefaults.buttonColors(containerColor = MaterialTheme.colorScheme.error)
-                        ) {
-                            Icon(Icons.Default.Delete, contentDescription = null)
-                            Spacer(Modifier.width(8.dp))
-                            Text("Eliminar")
-                        }
-                    }
-                }
-            }
-            item {
-                SectionCard(title = "Invitaciones") {
-                    Row(horizontalArrangement = Arrangement.spacedBy(10.dp)) {
-                        Button(
-                            onClick = { mainViewModel.generateInvite() },
-                            modifier = Modifier.weight(1f)
-                        ) {
-                            Icon(Icons.Default.Edit, contentDescription = null)
-                            Spacer(Modifier.width(8.dp))
-                            Text("Generar")
-                        }
-                        OutlinedButton(
-                            onClick = { navController.navigate("qr_scanner") },
-                            modifier = Modifier.weight(1f)
-                        ) {
-                            Icon(Icons.Default.QrCode, contentDescription = null)
-                            Spacer(Modifier.width(8.dp))
-                            Text("QR")
-                        }
-                    }
-                }
-            }
+            )
+        }
+    ) { innerPadding ->
+        LazyColumn(
+            modifier = Modifier
+                .fillMaxSize()
+                .padding(innerPadding)
+                .padding(horizontal = 16.dp),
+            verticalArrangement = Arrangement.spacedBy(12.dp),
+            contentPadding = PaddingValues(vertical = 12.dp)
+        ) {
             item {
                 SectionCard(title = "Integrantes") {
                     if (members.isEmpty()) {
-                        Text("Sin integrantes")
+                        Text(
+                            "Sin integrantes",
+                            style = MaterialTheme.typography.bodyMedium,
+                            color = MaterialTheme.colorScheme.onSurfaceVariant
+                        )
                     } else {
-                        members.forEach { member ->
-                            Row(
-                                modifier = Modifier
-                                    .fillMaxWidth()
-                                    .padding(vertical = 4.dp),
-                                horizontalArrangement = Arrangement.SpaceBetween,
-                                verticalAlignment = Alignment.CenterVertically
-                            ) {
-                                Row(
-                                    horizontalArrangement = Arrangement.spacedBy(8.dp),
-                                    verticalAlignment = Alignment.CenterVertically,
-                                    modifier = Modifier.weight(1f)
-                                ) {
-                                    Surface(color = memberColor(member.id).copy(alpha = 0.18f), shape = MaterialTheme.shapes.large) {
-                                        Text(
-                                            text = memberInitial(member.name),
-                                            color = memberColor(member.id),
-                                            modifier = Modifier.padding(horizontal = 12.dp, vertical = 8.dp),
-                                            fontWeight = FontWeight.Bold
-                                        )
-                                    }
-                                    Column {
-                                        Text(member.name, fontWeight = FontWeight.Medium)
-                                        Text(member.role.name, style = MaterialTheme.typography.labelSmall, color = MaterialTheme.colorScheme.onSurfaceVariant)
-                                    }
-                                }
-                                if (currentUserRole == MemberRole.ADMIN && member.role != MemberRole.ADMIN) {
-                                    IconButton(onClick = { groupViewModel.requestKickMember(member.id) }) {
-                                        Icon(Icons.Default.Delete, contentDescription = "Eliminar integrante", tint = MaterialTheme.colorScheme.error)
-                                    }
-                                }
+                        members.forEachIndexed { index, member ->
+                            MemberRow(
+                                member = member,
+                                canKick = currentUserRole == MemberRole.ADMIN && member.role != MemberRole.ADMIN,
+                                onKick = { groupViewModel.requestKickMember(member.id) }
+                            )
+                            if (index < members.size - 1) {
+                                Spacer(Modifier.height(8.dp))
                             }
                         }
                     }
                 }
             }
+
             item {
-                SectionCard(title = "Recientes") {
-                    if (invites.isEmpty()) {
-                        Text("Sin invitaciones")
-                    } else {
-                        invites.take(3).forEach { invite ->
-                            InviteCard(
-                                inviteCode = invite.code,
-                                inviteLink = invite.link,
-                                onDelete = { mainViewModel.deleteInvite(invite.code) }
+                SectionCard(title = "Invitar") {
+                    Button(
+                        onClick = { mainViewModel.generateInvite() },
+                        modifier = Modifier.fillMaxWidth()
+                    ) {
+                        Icon(Icons.Default.Add, contentDescription = null)
+                        Spacer(Modifier.width(8.dp))
+                        Text("Generar código")
+                    }
+                    if (latestInvite != null) {
+                        Spacer(Modifier.height(4.dp))
+                        Row(
+                            modifier = Modifier.fillMaxWidth(),
+                            horizontalArrangement = Arrangement.SpaceBetween,
+                            verticalAlignment = Alignment.CenterVertically
+                        ) {
+                            Text(
+                                "Código: ${latestInvite.code}",
+                                style = MaterialTheme.typography.bodyMedium,
+                                fontWeight = FontWeight.Medium
                             )
-                            Spacer(Modifier.height(8.dp))
+                            Surface(
+                                onClick = {
+                                    val clipboard = context.getSystemService(ClipboardManager::class.java)
+                                    clipboard?.setPrimaryClip(
+                                        ClipData.newPlainText("invite_code", latestInvite.code)
+                                    )
+                                },
+                                shape = RoundedCornerShape(50),
+                                color = MaterialTheme.colorScheme.secondaryContainer
+                            ) {
+                                Row(
+                                    Modifier.padding(horizontal = 12.dp, vertical = 6.dp),
+                                    verticalAlignment = Alignment.CenterVertically,
+                                    horizontalArrangement = Arrangement.spacedBy(4.dp)
+                                ) {
+                                    Icon(
+                                        Icons.Default.ContentCopy,
+                                        contentDescription = "Copiar código",
+                                        modifier = Modifier.size(14.dp)
+                                    )
+                                    Text("Copiar", style = MaterialTheme.typography.labelSmall)
+                                }
+                            }
+                        }
+                        TextButton(onClick = { showQr = !showQr }) {
+                            Text(if (showQr) "Ocultar QR" else "Mostrar QR")
+                        }
+                        if (showQr) {
+                            val qrBitmap = rememberQrBitmap(latestInvite.link)
+                            if (qrBitmap != null) {
+                                Image(
+                                    bitmap = qrBitmap.asImageBitmap(),
+                                    contentDescription = "QR de invitación",
+                                    modifier = Modifier.size(160.dp)
+                                )
+                            }
+                        }
+                    }
+                }
+            }
+
+            if (currentUserRole == MemberRole.ADMIN) {
+                item {
+                    ElevatedCard(modifier = Modifier.fillMaxWidth()) {
+                        Row(
+                            Modifier
+                                .fillMaxWidth()
+                                .height(IntrinsicSize.Min)
+                        ) {
+                            Box(
+                                Modifier
+                                    .width(4.dp)
+                                    .fillMaxHeight()
+                                    .background(MaterialTheme.colorScheme.error)
+                            )
+                            Column(
+                                modifier = Modifier
+                                    .padding(16.dp)
+                                    .fillMaxWidth(),
+                                verticalArrangement = Arrangement.spacedBy(10.dp)
+                            ) {
+                                Text(
+                                    "Zona de peligro",
+                                    style = MaterialTheme.typography.titleSmall,
+                                    color = MaterialTheme.colorScheme.error,
+                                    fontWeight = FontWeight.SemiBold
+                                )
+                                OutlinedTextField(
+                                    value = editableGroupName,
+                                    onValueChange = { editableGroupName = it },
+                                    label = { Text("Nombre del grupo") },
+                                    modifier = Modifier.fillMaxWidth(),
+                                    singleLine = true,
+                                    colors = travelTextFieldColors()
+                                )
+                                Row(horizontalArrangement = Arrangement.spacedBy(10.dp)) {
+                                    Button(
+                                        onClick = { groupViewModel.updateSelectedGroupName(editableGroupName) },
+                                        modifier = Modifier.weight(1f),
+                                        enabled = editableGroupName.isNotBlank()
+                                    ) { Text("Guardar") }
+                                    OutlinedButton(
+                                        onClick = { groupViewModel.deleteSelectedGroup() },
+                                        modifier = Modifier.weight(1f),
+                                        colors = ButtonDefaults.outlinedButtonColors(
+                                            contentColor = MaterialTheme.colorScheme.error
+                                        ),
+                                        border = BorderStroke(1.dp, MaterialTheme.colorScheme.error)
+                                    ) {
+                                        Icon(Icons.Default.Delete, contentDescription = null)
+                                        Spacer(Modifier.width(4.dp))
+                                        Text("Eliminar")
+                                    }
+                                }
+                            }
                         }
                     }
                 }
@@ -411,34 +494,122 @@ fun GroupsScreen(
 }
 
 @Composable
-private fun InviteCard(inviteCode: String, inviteLink: String, onDelete: () -> Unit) {
-    val context = LocalContext.current
-    val payload = inviteLink
-    Card(modifier = Modifier.fillMaxWidth()) {
-        Column(modifier = Modifier.padding(12.dp), verticalArrangement = Arrangement.spacedBy(6.dp)) {
-            Row(modifier = Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.SpaceBetween, verticalAlignment = Alignment.CenterVertically) {
-                Text("Codigo: $inviteCode")
-                Row {
-                    IconButton(onClick = {
-                        val clipboard = context.getSystemService(ClipboardManager::class.java)
-                        clipboard?.setPrimaryClip(ClipData.newPlainText("invite_code", inviteCode))
-                    }) {
-                        Icon(Icons.Default.ContentCopy, contentDescription = "Copiar codigo")
-                    }
-                    IconButton(onClick = onDelete) {
-                        Icon(Icons.Default.Delete, contentDescription = "Eliminar invitacion", tint = MaterialTheme.colorScheme.error)
+private fun GroupListItem(group: TravelGroup, onClick: () -> Unit) {
+    ElevatedCard(
+        onClick = onClick,
+        modifier = Modifier.fillMaxWidth()
+    ) {
+        Row(
+            Modifier
+                .fillMaxWidth()
+                .height(IntrinsicSize.Min)
+        ) {
+            Box(
+                Modifier
+                    .width(4.dp)
+                    .fillMaxHeight()
+                    .background(MaterialTheme.colorScheme.primaryContainer)
+            )
+            Row(
+                modifier = Modifier
+                    .weight(1f)
+                    .padding(horizontal = 16.dp, vertical = 14.dp),
+                horizontalArrangement = Arrangement.SpaceBetween,
+                verticalAlignment = Alignment.CenterVertically
+            ) {
+                Column(Modifier.weight(1f)) {
+                    Text(
+                        text = group.name,
+                        style = MaterialTheme.typography.titleMedium.copy(fontFamily = FrauncesFamily),
+                        fontWeight = FontWeight.Medium
+                    )
+                    Spacer(Modifier.height(2.dp))
+                    Row(
+                        verticalAlignment = Alignment.CenterVertically,
+                        horizontalArrangement = Arrangement.spacedBy(4.dp)
+                    ) {
+                        Icon(
+                            Icons.Default.People,
+                            contentDescription = null,
+                            modifier = Modifier.size(14.dp),
+                            tint = MaterialTheme.colorScheme.onSurfaceVariant
+                        )
+                        Text(
+                            "${group.memberCount} integrantes",
+                            style = MaterialTheme.typography.labelSmall,
+                            color = MaterialTheme.colorScheme.onSurfaceVariant
+                        )
                     }
                 }
+                Icon(
+                    Icons.Default.KeyboardArrowRight,
+                    contentDescription = null,
+                    tint = MaterialTheme.colorScheme.onSurfaceVariant
+                )
             }
-            Text("Link: $inviteLink", style = MaterialTheme.typography.bodySmall)
-            val qrBitmap = rememberQrBitmap(payload)
-            if (qrBitmap != null) {
-                androidx.compose.foundation.Image(
-                    bitmap = qrBitmap.asImageBitmap(),
-                    contentDescription = "QR",
-                    modifier = Modifier
-                        .width(140.dp)
-                        .height(140.dp)
+        }
+    }
+}
+
+@Composable
+private fun MemberRow(
+    member: GroupMember,
+    canKick: Boolean,
+    onKick: () -> Unit
+) {
+    Row(
+        modifier = Modifier.fillMaxWidth(),
+        horizontalArrangement = Arrangement.SpaceBetween,
+        verticalAlignment = Alignment.CenterVertically
+    ) {
+        Row(
+            horizontalArrangement = Arrangement.spacedBy(10.dp),
+            verticalAlignment = Alignment.CenterVertically,
+            modifier = Modifier.weight(1f)
+        ) {
+            Surface(
+                color = memberColor(member.id).copy(alpha = 0.18f),
+                shape = MaterialTheme.shapes.large
+            ) {
+                Text(
+                    text = memberInitial(member.name),
+                    color = memberColor(member.id),
+                    modifier = Modifier.padding(horizontal = 12.dp, vertical = 8.dp),
+                    fontWeight = FontWeight.Bold
+                )
+            }
+            Column {
+                Text(
+                    member.name,
+                    style = MaterialTheme.typography.bodyMedium,
+                    fontWeight = FontWeight.Medium
+                )
+                Spacer(Modifier.height(2.dp))
+                Surface(
+                    shape = RoundedCornerShape(50),
+                    color = if (member.role == MemberRole.ADMIN)
+                        MaterialTheme.colorScheme.primaryContainer
+                    else
+                        MaterialTheme.colorScheme.surfaceVariant
+                ) {
+                    Text(
+                        text = if (member.role == MemberRole.ADMIN) "Admin" else "Miembro",
+                        style = MaterialTheme.typography.labelSmall,
+                        color = if (member.role == MemberRole.ADMIN)
+                            MaterialTheme.colorScheme.onPrimaryContainer
+                        else
+                            MaterialTheme.colorScheme.onSurfaceVariant,
+                        modifier = Modifier.padding(horizontal = 8.dp, vertical = 2.dp)
+                    )
+                }
+            }
+        }
+        if (canKick) {
+            IconButton(onClick = onKick) {
+                Icon(
+                    Icons.Default.PersonRemove,
+                    contentDescription = "Eliminar integrante",
+                    tint = MaterialTheme.colorScheme.error
                 )
             }
         }
@@ -447,7 +618,7 @@ private fun InviteCard(inviteCode: String, inviteLink: String, onDelete: () -> U
 
 @Composable
 private fun rememberQrBitmap(content: String, size: Int = 512): Bitmap? {
-    return androidx.compose.runtime.remember(content, size) {
+    return remember(content, size) {
         runCatching {
             val matrix: BitMatrix = MultiFormatWriter().encode(content, BarcodeFormat.QR_CODE, size, size)
             val pixels = IntArray(size * size)

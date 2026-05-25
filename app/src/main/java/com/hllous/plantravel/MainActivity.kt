@@ -76,6 +76,7 @@ import com.hllous.plantravel.presentation.expense.ExpenseViewModel
 import com.hllous.plantravel.presentation.group.GroupViewModel
 import com.hllous.plantravel.ui.screens.DestinationScreen
 import com.hllous.plantravel.ui.screens.ExpenseScreen
+import com.hllous.plantravel.ui.screens.GroupDetailScreen
 import com.hllous.plantravel.ui.screens.GroupsScreen
 import com.hllous.plantravel.ui.screens.HomeScreen
 import com.hllous.plantravel.ui.screens.LoginScreen
@@ -263,7 +264,8 @@ fun MainAppContent(
             modifier = Modifier.fillMaxSize(),
             containerColor = MaterialTheme.colorScheme.background,
             topBar = {
-                if (currentRoute != "qr_scanner" && currentRoute != "profile") {
+                if (currentRoute != "qr_scanner" && currentRoute != "profile" &&
+                    currentRoute != "groups" && !currentRoute.startsWith("group_detail")) {
                     TopAppBar(
                         title = {
                             Text(
@@ -327,10 +329,12 @@ fun MainAppContent(
                     arguments = listOf(navArgument("groupId") { type = NavType.StringType }),
                 ) { backStackEntry ->
                     val groupId = backStackEntry.arguments?.getString("groupId") ?: return@composable
-                    // Placeholder — GroupDetailScreen extracted in #32
-                    Box(Modifier.fillMaxSize(), contentAlignment = Alignment.Center) {
-                        CircularProgressIndicator()
-                    }
+                    GroupDetailScreen(
+                        groupId = groupId,
+                        groupViewModel = groupViewModel,
+                        mainViewModel = viewModel,
+                        navController = navController
+                    )
                 }
             }
         }
