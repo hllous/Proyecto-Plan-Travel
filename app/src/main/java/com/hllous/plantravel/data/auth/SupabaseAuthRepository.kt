@@ -39,6 +39,10 @@ class SupabaseAuthRepository(private val supabase: SupabaseClient) : AuthReposit
         .filter { it is SessionStatus.Authenticated || it is SessionStatus.NotAuthenticated }
         .map { status -> (status as? SessionStatus.Authenticated)?.session?.user?.id }
 
+    override fun observeUserEmail(): Flow<String?> = supabase.auth.sessionStatus
+        .filter { it is SessionStatus.Authenticated || it is SessionStatus.NotAuthenticated }
+        .map { status -> (status as? SessionStatus.Authenticated)?.session?.user?.email }
+
     override suspend fun register(email: String, password: String): Result<Unit> = safeResult {
         supabase.auth.signUpWith(Email) {
             this.email = email

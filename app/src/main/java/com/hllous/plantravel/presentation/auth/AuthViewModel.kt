@@ -6,7 +6,9 @@ import com.hllous.plantravel.domain.auth.AuthRepository
 import dagger.hilt.android.lifecycle.HiltViewModel
 import javax.inject.Inject
 import kotlinx.coroutines.flow.MutableStateFlow
+import kotlinx.coroutines.flow.SharingStarted
 import kotlinx.coroutines.flow.StateFlow
+import kotlinx.coroutines.flow.stateIn
 import kotlinx.coroutines.launch
 
 sealed class AuthState {
@@ -24,6 +26,9 @@ class AuthViewModel @Inject constructor(
 
     private val _state = MutableStateFlow<AuthState>(AuthState.Loading)
     val state: StateFlow<AuthState> = _state
+
+    val userEmail: StateFlow<String?> = authRepository.observeUserEmail()
+        .stateIn(viewModelScope, SharingStarted.WhileSubscribed(5000L), null)
 
     private val _pendingInviteCode = MutableStateFlow<String?>(null)
     val pendingInviteCode: StateFlow<String?> = _pendingInviteCode

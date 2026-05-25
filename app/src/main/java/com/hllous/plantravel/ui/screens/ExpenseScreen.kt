@@ -71,7 +71,7 @@ import com.hllous.plantravel.ui.utils.memberInitial
 
 @Suppress("UNUSED_PARAMETER")
 @Composable
-fun BallroomScreen(viewModel: ExpenseViewModel, navController: NavHostController) {
+fun ExpenseScreen(viewModel: ExpenseViewModel, navController: NavHostController) {
     val expenseItemsUiState by viewModel.expenseItemsUiState.collectAsState()
     val groups by viewModel.groups.collectAsState(initial = emptyList())
     val members by viewModel.members.collectAsState(initial = emptyList())

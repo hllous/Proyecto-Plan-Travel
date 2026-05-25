@@ -192,6 +192,26 @@ class AuthViewModelTest {
         assertEquals(AuthState.NeedsProfileSetup("user-new"), vm.state.value)
     }
 
+    // --- userEmail ---
+
+    @Test
+    fun whenEmailEmitted_userEmailStateFlowUpdates() {
+        val repo = FakeAuthRepository(displayName = "Ana", email = "ana@test.com")
+        val vm = viewModel(repo)
+
+        repo.userEmailFlow.tryEmit("ana@test.com")
+
+        assertEquals("ana@test.com", vm.userEmail.value)
+    }
+
+    @Test
+    fun whenNoEmailEmitted_userEmailIsNull() {
+        val repo = FakeAuthRepository(displayName = "Ana")
+        val vm = viewModel(repo)
+
+        assertEquals(null, vm.userEmail.value)
+    }
+
     @Test
     fun loginWithGoogle_onFailure_emitsError() {
         val repo = FakeAuthRepository(loginWithGoogleResult = Result.failure(Exception("OAuth error")))

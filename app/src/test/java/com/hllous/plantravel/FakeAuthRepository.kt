@@ -11,11 +11,14 @@ class FakeAuthRepository(
     var createProfileResult: Result<Unit> = Result.success(Unit),
     var loginWithGoogleResult: Result<Unit> = Result.success(Unit),
     var displayName: String? = null,
+    var email: String? = null,
 ) : AuthRepository {
 
     var logoutCalled = false
+    val userEmailFlow: MutableSharedFlow<String?> = MutableSharedFlow(replay = 1)
 
     override fun observeUserId(): Flow<String?> = userIdFlow
+    override fun observeUserEmail(): Flow<String?> = userEmailFlow
 
     override suspend fun login(email: String, password: String): Result<Unit> = loginResult
 

@@ -10,24 +10,29 @@ import androidx.compose.foundation.background
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
+import androidx.compose.foundation.layout.Spacer
 import androidx.compose.foundation.layout.fillMaxHeight
 import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.fillMaxWidth
+import androidx.compose.foundation.layout.height
 import androidx.compose.foundation.layout.padding
+import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.layout.width
-import androidx.compose.foundation.lazy.LazyColumn
+import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.filled.AccountBalanceWallet
 import androidx.compose.material.icons.filled.DarkMode
 import androidx.compose.material.icons.filled.Home
 import androidx.compose.material.icons.filled.LightMode
 import androidx.compose.material.icons.filled.LocationOn
+import androidx.compose.material.icons.filled.Logout
 import androidx.compose.material.icons.filled.Menu
 import androidx.compose.material.icons.filled.People
-import androidx.compose.material.icons.filled.QrCode
+import androidx.compose.material.icons.filled.Person
 import androidx.compose.material3.CircularProgressIndicator
 import androidx.compose.material3.DrawerValue
 import androidx.compose.material3.ExperimentalMaterial3Api
+import androidx.compose.material3.HorizontalDivider
 import androidx.compose.material3.Icon
 import androidx.compose.material3.IconButton
 import androidx.compose.material3.MaterialTheme
@@ -41,7 +46,6 @@ import androidx.compose.material3.SnackbarHostState
 import androidx.compose.material3.Surface
 import androidx.compose.material3.Text
 import androidx.compose.material3.TopAppBar
-import androidx.compose.material3.TopAppBarDefaults
 import androidx.compose.material3.rememberDrawerState
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.LaunchedEffect
@@ -54,32 +58,38 @@ import androidx.compose.runtime.saveable.rememberSaveable
 import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
+import androidx.compose.ui.draw.clip
+import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.unit.dp
 import androidx.hilt.navigation.compose.hiltViewModel
 import androidx.navigation.NavHostController
+import androidx.navigation.NavType
 import androidx.navigation.compose.NavHost
 import androidx.navigation.compose.composable
 import androidx.navigation.compose.currentBackStackEntryAsState
 import androidx.navigation.compose.rememberNavController
+import androidx.navigation.navArgument
 import com.hllous.plantravel.presentation.MainViewModel
 import com.hllous.plantravel.presentation.auth.AuthState
 import com.hllous.plantravel.presentation.auth.AuthViewModel
 import com.hllous.plantravel.presentation.expense.ExpenseViewModel
 import com.hllous.plantravel.presentation.group.GroupViewModel
-import io.github.jan.supabase.SupabaseClient
-import io.github.jan.supabase.auth.handleDeeplinks
-import javax.inject.Inject
-import com.hllous.plantravel.ui.screens.BallroomScreen
 import com.hllous.plantravel.ui.screens.DestinationScreen
+import com.hllous.plantravel.ui.screens.ExpenseScreen
 import com.hllous.plantravel.ui.screens.GroupsScreen
 import com.hllous.plantravel.ui.screens.HomeScreen
 import com.hllous.plantravel.ui.screens.LoginScreen
+import com.hllous.plantravel.ui.screens.ProfileScreen
 import com.hllous.plantravel.ui.screens.ProfileSetupScreen
 import com.hllous.plantravel.ui.screens.QrScannerScreen
 import com.hllous.plantravel.ui.screens.RegisterScreen
+import com.hllous.plantravel.ui.theme.FrauncesFamily
 import com.hllous.plantravel.ui.theme.ProyectoPlanTravelTheme
 import dagger.hilt.android.AndroidEntryPoint
+import io.github.jan.supabase.SupabaseClient
+import io.github.jan.supabase.auth.handleDeeplinks
 import kotlinx.coroutines.launch
+import javax.inject.Inject
 
 @AndroidEntryPoint
 class MainActivity : ComponentActivity() {
@@ -121,8 +131,11 @@ class MainActivity : ComponentActivity() {
 fun PlanTravelApp(isDarkTheme: Boolean, onThemeChange: (Boolean) -> Unit) {
     val authViewModel = hiltViewModel<AuthViewModel>()
     val authState by authViewModel.state.collectAsState()
+    val userEmail by authViewModel.userEmail.collectAsState()
     val pendingInviteCode by authViewModel.pendingInviteCode.collectAsState()
     val navController = rememberNavController()
+
+    val displayName = (authState as? AuthState.Authenticated)?.displayName ?: ""
 
     LaunchedEffect(authState) {
         when (authState) {
@@ -163,7 +176,10 @@ fun PlanTravelApp(isDarkTheme: Boolean, onThemeChange: (Boolean) -> Unit) {
                 onThemeChange = onThemeChange,
                 onLogout = { authViewModel.logout() },
                 pendingInviteCode = pendingInviteCode,
-                onPendingInviteConsumed = { authViewModel.clearPendingInviteCode() }
+                onPendingInviteConsumed = { authViewModel.clearPendingInviteCode() },
+                displayName = displayName,
+                userEmail = userEmail,
+                authViewModel = authViewModel,
             )
         }
     }
@@ -176,7 +192,10 @@ fun MainAppContent(
     onThemeChange: (Boolean) -> Unit,
     onLogout: () -> Unit,
     pendingInviteCode: String? = null,
-    onPendingInviteConsumed: () -> Unit = {}
+    onPendingInviteConsumed: () -> Unit = {},
+    displayName: String = "",
+    userEmail: String? = null,
+    authViewModel: AuthViewModel,
 ) {
     val viewModel = hiltViewModel<MainViewModel>()
     val groupViewModel = hiltViewModel<GroupViewModel>()
@@ -224,6 +243,8 @@ fun MainAppContent(
         drawerState = drawerState,
         drawerContent = {
             DrawerContent(
+                displayName = displayName,
+                userEmail = userEmail,
                 isDarkTheme = isDarkTheme,
                 onThemeChange = onThemeChange,
                 onLogout = onLogout,
@@ -236,35 +257,32 @@ fun MainAppContent(
     ) {
         val currentBackStackEntry by navController.currentBackStackEntryAsState()
         val currentRoute = currentBackStackEntry?.destination?.route ?: "home"
+
         Scaffold(
             modifier = Modifier.fillMaxSize(),
             containerColor = MaterialTheme.colorScheme.background,
             topBar = {
-                TopAppBar(
-                    title = { Text("Plan Travel") },
-                    navigationIcon = {
-                        IconButton(onClick = { scope.launch { drawerState.open() } }) {
-                            Icon(Icons.Default.Menu, contentDescription = "Menu")
-                        }
-                    },
-                    actions = {
-                        IconButton(onClick = { onThemeChange(!isDarkTheme) }) {
-                            Icon(
-                                if (isDarkTheme) Icons.Default.LightMode else Icons.Default.DarkMode,
-                                contentDescription = "Toggle theme"
+                if (currentRoute != "qr_scanner" && currentRoute != "profile") {
+                    TopAppBar(
+                        title = {
+                            Text(
+                                "Plan Travel",
+                                fontFamily = FrauncesFamily,
+                                fontWeight = FontWeight.Medium,
                             )
-                        }
-                    },
-                    colors = TopAppBarDefaults.topAppBarColors(
-                        containerColor = MaterialTheme.colorScheme.primary,
-                        titleContentColor = MaterialTheme.colorScheme.onPrimary,
-                        navigationIconContentColor = MaterialTheme.colorScheme.onPrimary,
-                        actionIconContentColor = MaterialTheme.colorScheme.onPrimary
+                        },
+                        navigationIcon = {
+                            IconButton(onClick = { scope.launch { drawerState.open() } }) {
+                                Icon(Icons.Default.Menu, contentDescription = "Menú")
+                            }
+                        },
                     )
-                )
+                }
             },
             bottomBar = {
-                if (currentRoute != "qr_scanner") {
+                if (currentRoute != "qr_scanner" && currentRoute != "profile" &&
+                    !currentRoute.startsWith("group_detail")
+                ) {
                     BottomNavBar(currentRoute = currentRoute, navController = navController)
                 }
             },
@@ -277,16 +295,41 @@ fun MainAppContent(
                     .fillMaxSize()
                     .padding(innerPadding)
             ) {
-                composable("home") { HomeScreen(navController = navController) }
-                composable("groups") { GroupsScreen(groupViewModel = groupViewModel, mainViewModel = viewModel, navController = navController) }
-                composable("destinations") { DestinationScreen(viewModel = viewModel, navController = navController) }
-                composable("gastos") { BallroomScreen(viewModel = expenseViewModel, navController = navController) }
+                composable("home") {
+                    HomeScreen(navController = navController)
+                }
+                composable("groups") {
+                    GroupsScreen(
+                        groupViewModel = groupViewModel,
+                        mainViewModel = viewModel,
+                        navController = navController,
+                    )
+                }
+                composable("destinations") {
+                    DestinationScreen(viewModel = viewModel, navController = navController)
+                }
+                composable("gastos") {
+                    ExpenseScreen(viewModel = expenseViewModel, navController = navController)
+                }
                 composable("qr_scanner") {
                     QrScannerScreen(
                         viewModel = viewModel,
                         onDone = { navController.navigate("groups") },
-                        onBack = { navController.navigateUp() }
+                        onBack = { navController.navigateUp() },
                     )
+                }
+                composable("profile") {
+                    ProfileScreen(authViewModel = authViewModel, onLogout = onLogout)
+                }
+                composable(
+                    route = "group_detail/{groupId}",
+                    arguments = listOf(navArgument("groupId") { type = NavType.StringType }),
+                ) { backStackEntry ->
+                    val groupId = backStackEntry.arguments?.getString("groupId") ?: return@composable
+                    // Placeholder — GroupDetailScreen extracted in #32
+                    Box(Modifier.fillMaxSize(), contentAlignment = Alignment.Center) {
+                        CircularProgressIndicator()
+                    }
                 }
             }
         }
@@ -295,53 +338,107 @@ fun MainAppContent(
 
 @Composable
 fun DrawerContent(
+    displayName: String,
+    userEmail: String?,
     isDarkTheme: Boolean,
     onThemeChange: (Boolean) -> Unit,
     onLogout: () -> Unit,
-    onNavigate: (String) -> Unit
+    onNavigate: (String) -> Unit,
 ) {
     Surface(
         modifier = Modifier
-            .width(280.dp)
+            .width(300.dp)
             .fillMaxHeight(),
-        color = MaterialTheme.colorScheme.surface
+        color = MaterialTheme.colorScheme.surface,
     ) {
-        Column(
-            modifier = Modifier.fillMaxHeight(),
-            verticalArrangement = Arrangement.spacedBy(12.dp)
-        ) {
+        Column(modifier = Modifier.fillMaxHeight()) {
+            // User header
             Column(
                 modifier = Modifier
                     .background(MaterialTheme.colorScheme.primary)
                     .fillMaxWidth()
                     .padding(24.dp),
-                verticalArrangement = Arrangement.Center,
-                horizontalAlignment = Alignment.CenterHorizontally
+                verticalArrangement = Arrangement.spacedBy(12.dp),
             ) {
-                Text("Plan Travel", style = MaterialTheme.typography.headlineSmall, color = MaterialTheme.colorScheme.onPrimary)
-                Text("Organiza tus viajes", style = MaterialTheme.typography.bodySmall, color = MaterialTheme.colorScheme.onPrimary)
+                val initials = displayName
+                    .split(" ")
+                    .filter { it.isNotBlank() }
+                    .take(2)
+                    .joinToString("") { it.first().uppercase() }
+                    .ifEmpty { "?" }
+
+                Box(
+                    modifier = Modifier
+                        .size(56.dp)
+                        .clip(CircleShape)
+                        .background(MaterialTheme.colorScheme.primaryContainer),
+                    contentAlignment = Alignment.Center,
+                ) {
+                    Text(
+                        text = initials,
+                        style = MaterialTheme.typography.titleLarge,
+                        color = MaterialTheme.colorScheme.onPrimaryContainer,
+                        fontWeight = FontWeight.Bold,
+                    )
+                }
+                Column(verticalArrangement = Arrangement.spacedBy(2.dp)) {
+                    Text(
+                        text = displayName.ifBlank { "Usuario" },
+                        style = MaterialTheme.typography.headlineSmall,
+                        fontFamily = FrauncesFamily,
+                        fontWeight = FontWeight.Medium,
+                        color = MaterialTheme.colorScheme.onPrimary,
+                    )
+                    if (!userEmail.isNullOrBlank()) {
+                        Text(
+                            text = userEmail,
+                            style = MaterialTheme.typography.bodySmall,
+                            color = MaterialTheme.colorScheme.onPrimary.copy(alpha = 0.78f),
+                        )
+                    }
+                }
             }
-            LazyColumn(
-                modifier = Modifier.weight(1f, fill = true).padding(horizontal = 12.dp),
-                verticalArrangement = Arrangement.spacedBy(8.dp)
+
+            Spacer(Modifier.height(8.dp))
+
+            Column(
+                modifier = Modifier
+                    .weight(1f)
+                    .padding(horizontal = 12.dp),
+                verticalArrangement = Arrangement.spacedBy(4.dp),
             ) {
-                item { NavigationDrawerItem(icon = { Icon(Icons.Default.Home, contentDescription = "Home") }, label = { Text("Home") }, selected = false, onClick = { onNavigate("home") }) }
-                item { NavigationDrawerItem(icon = { Icon(Icons.Default.People, contentDescription = "Grupos") }, label = { Text("Grupos") }, selected = false, onClick = { onNavigate("groups") }) }
-                item { NavigationDrawerItem(icon = { Icon(Icons.Default.LocationOn, contentDescription = "Destinos") }, label = { Text("Destinos") }, selected = false, onClick = { onNavigate("destinations") }) }
-                item { NavigationDrawerItem(icon = { Icon(Icons.Default.AccountBalanceWallet, contentDescription = "Gastos") }, label = { Text("Gastos") }, selected = false, onClick = { onNavigate("gastos") }) }
-                item { NavigationDrawerItem(icon = { Icon(Icons.Default.QrCode, contentDescription = "Escanear") }, label = { Text("Escanear QR") }, selected = false, onClick = { onNavigate("qr_scanner") }) }
-            }
-            Column(modifier = Modifier.fillMaxWidth().padding(12.dp), verticalArrangement = Arrangement.spacedBy(8.dp)) {
                 NavigationDrawerItem(
-                    icon = { Icon(if (isDarkTheme) Icons.Default.LightMode else Icons.Default.DarkMode, contentDescription = "Theme") },
+                    icon = { Icon(Icons.Default.Person, contentDescription = null) },
+                    label = { Text("Perfil") },
+                    selected = false,
+                    onClick = { onNavigate("profile") },
+                )
+            }
+
+            HorizontalDivider(modifier = Modifier.padding(horizontal = 12.dp))
+
+            Column(
+                modifier = Modifier
+                    .fillMaxWidth()
+                    .padding(12.dp),
+                verticalArrangement = Arrangement.spacedBy(4.dp),
+            ) {
+                NavigationDrawerItem(
+                    icon = {
+                        Icon(
+                            if (isDarkTheme) Icons.Default.LightMode else Icons.Default.DarkMode,
+                            contentDescription = null,
+                        )
+                    },
                     label = { Text(if (isDarkTheme) "Modo claro" else "Modo oscuro") },
                     selected = false,
-                    onClick = { onThemeChange(!isDarkTheme) }
+                    onClick = { onThemeChange(!isDarkTheme) },
                 )
                 NavigationDrawerItem(
+                    icon = { Icon(Icons.Default.Logout, contentDescription = null) },
                     label = { Text("Cerrar sesión") },
                     selected = false,
-                    onClick = onLogout
+                    onClick = onLogout,
                 )
             }
         }
@@ -350,10 +447,30 @@ fun DrawerContent(
 
 @Composable
 fun BottomNavBar(currentRoute: String, navController: NavHostController) {
-    NavigationBar(containerColor = MaterialTheme.colorScheme.primary, contentColor = MaterialTheme.colorScheme.onPrimary) {
-        NavigationBarItem(icon = { Icon(Icons.Default.Home, contentDescription = "Home") }, label = { Text("Home") }, selected = currentRoute == "home", onClick = { navController.navigate("home") })
-        NavigationBarItem(icon = { Icon(Icons.Default.People, contentDescription = "Grupos") }, label = { Text("Grupos") }, selected = currentRoute == "groups", onClick = { navController.navigate("groups") })
-        NavigationBarItem(icon = { Icon(Icons.Default.LocationOn, contentDescription = "Destinos") }, label = { Text("Destinos") }, selected = currentRoute == "destinations", onClick = { navController.navigate("destinations") })
-        NavigationBarItem(icon = { Icon(Icons.Default.AccountBalanceWallet, contentDescription = "Gastos") }, label = { Text("Gastos") }, selected = currentRoute == "gastos", onClick = { navController.navigate("gastos") })
+    NavigationBar {
+        NavigationBarItem(
+            icon = { Icon(Icons.Default.Home, contentDescription = "Inicio") },
+            label = { Text("Inicio") },
+            selected = currentRoute == "home",
+            onClick = { navController.navigate("home") { launchSingleTop = true } },
+        )
+        NavigationBarItem(
+            icon = { Icon(Icons.Default.People, contentDescription = "Grupos") },
+            label = { Text("Grupos") },
+            selected = currentRoute == "groups",
+            onClick = { navController.navigate("groups") { launchSingleTop = true } },
+        )
+        NavigationBarItem(
+            icon = { Icon(Icons.Default.LocationOn, contentDescription = "Destinos") },
+            label = { Text("Destinos") },
+            selected = currentRoute == "destinations",
+            onClick = { navController.navigate("destinations") { launchSingleTop = true } },
+        )
+        NavigationBarItem(
+            icon = { Icon(Icons.Default.AccountBalanceWallet, contentDescription = "Gastos") },
+            label = { Text("Gastos") },
+            selected = currentRoute == "gastos",
+            onClick = { navController.navigate("gastos") { launchSingleTop = true } },
+        )
     }
 }
