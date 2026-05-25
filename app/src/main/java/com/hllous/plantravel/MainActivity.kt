@@ -299,7 +299,11 @@ fun MainAppContent(
                     .padding(innerPadding)
             ) {
                 composable("home") {
-                    HomeScreen(navController = navController)
+                    HomeScreen(
+                        navController = navController,
+                        displayName = displayName,
+                        groupViewModel = groupViewModel,
+                    )
                 }
                 composable("groups") {
                     GroupsScreen(
