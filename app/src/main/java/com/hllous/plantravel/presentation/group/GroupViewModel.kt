@@ -83,8 +83,12 @@ class GroupViewModel @Inject constructor(
                 _message.value = "Completa el nombre del grupo"
                 return@launch
             }
-            val groupId = createGroupUseCase(groupName)
-            selectedGroupHolder.selectedGroupId.value = groupId
+            val result = runCatching { createGroupUseCase(groupName) }
+            if (result.isFailure) {
+                _message.value = "Error al crear grupo"
+                return@launch
+            }
+            selectedGroupHolder.selectedGroupId.value = result.getOrThrow()
             _message.value = "Grupo creado"
         }
     }

@@ -52,6 +52,17 @@ class GroupViewModelTest {
     }
 
     @Test
+    fun createGroupNetworkErrorShowsErrorMessage() {
+        val repo = FakeTravelRepository(createGroupThrows = true)
+        val vm = viewModel(repo = repo)
+
+        vm.createGroup("Viaje Mendoza")
+
+        assertEquals("Error al crear grupo", vm.message.value)
+        assertNull(vm.selectedGroupId.value)
+    }
+
+    @Test
     fun createGroupWithBlankNameShowsErrorMessage() {
         val vm = viewModel()
         vm.createGroup("   ")

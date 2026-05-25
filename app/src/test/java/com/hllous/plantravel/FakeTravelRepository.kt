@@ -22,6 +22,7 @@ class FakeTravelRepository(
     var settlementResult: SettlementResult = SettlementResult(emptyList(), emptyList()),
     var generateInviteThrows: Boolean = false,
     var deleteInviteThrows: Boolean = false,
+    var createGroupThrows: Boolean = false,
     var addExpenseItemThrows: Boolean = false,
     var deleteExpenseItemThrows: Boolean = false,
     var calculateSettlementThrows: Boolean = false,
@@ -47,6 +48,7 @@ class FakeTravelRepository(
     override fun observeAssignments(groupId: String): Flow<List<ItemAssignment>> = flowOf(emptyList())
 
     override suspend fun createGroup(groupName: String): String {
+        if (createGroupThrows) throw RuntimeException("network error")
         val newGroup = TravelGroup(id = "fake-group-id", name = groupName)
         _groups.value = _groups.value + newGroup
         return newGroup.id
