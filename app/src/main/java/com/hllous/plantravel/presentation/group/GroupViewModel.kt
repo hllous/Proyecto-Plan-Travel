@@ -2,12 +2,15 @@ package com.hllous.plantravel.presentation.group
 
 import androidx.lifecycle.ViewModel
 import androidx.lifecycle.viewModelScope
+import com.hllous.plantravel.domain.auth.SessionProvider
 import com.hllous.plantravel.domain.model.GroupMember
+import com.hllous.plantravel.domain.model.MemberRole
 import com.hllous.plantravel.domain.model.TravelGroup
 import com.hllous.plantravel.domain.repository.TravelRepository
 import com.hllous.plantravel.domain.usecase.CreateGroupUseCase
 import com.hllous.plantravel.domain.usecase.DeleteGroupUseCase
 import com.hllous.plantravel.domain.usecase.DeleteMemberUseCase
+import com.hllous.plantravel.domain.usecase.LeaveGroupUseCase
 import com.hllous.plantravel.domain.usecase.UpdateGroupNameUseCase
 import com.hllous.plantravel.presentation.UiState
 import dagger.hilt.android.lifecycle.HiltViewModel
@@ -29,10 +32,12 @@ import kotlinx.coroutines.launch
 class GroupViewModel @Inject constructor(
     private val repository: TravelRepository,
     private val selectedGroupHolder: SelectedGroupHolder,
+    private val sessionProvider: SessionProvider,
     private val createGroupUseCase: CreateGroupUseCase,
     private val updateGroupNameUseCase: UpdateGroupNameUseCase,
     private val deleteGroupUseCase: DeleteGroupUseCase,
     private val deleteMemberUseCase: DeleteMemberUseCase,
+    private val leaveGroupUseCase: LeaveGroupUseCase,
 ) : ViewModel() {
 
     val selectedGroupId: StateFlow<String?> = selectedGroupHolder.selectedGroupId.asStateFlow()
@@ -58,8 +63,15 @@ class GroupViewModel @Inject constructor(
         }
         .stateIn(viewModelScope, SharingStarted.WhileSubscribed(5000), emptyList())
 
+    val currentUserRole: StateFlow<MemberRole?> = members
+        .map { list -> list.firstOrNull { it.userId == sessionProvider.userId }?.role }
+        .stateIn(viewModelScope, SharingStarted.WhileSubscribed(5000), null)
+
     private val _message = MutableStateFlow<String?>(null)
     val message: StateFlow<String?> = _message
+
+    private val _pendingKickMemberId = MutableStateFlow<String?>(null)
+    val pendingKickMemberId: StateFlow<String?> = _pendingKickMemberId
 
     fun reloadGroups() {
         _groupsRetryTrigger.value++
@@ -119,6 +131,41 @@ class GroupViewModel @Inject constructor(
                 }
                 .onFailure { _message.value = "Error al eliminar grupo" }
         }
+    }
+
+    fun leaveGroup() {
+        val groupId = selectedGroupHolder.selectedGroupId.value ?: run {
+            _message.value = "Selecciona un grupo"
+            return
+        }
+        val userId = sessionProvider.userId
+        val currentMember = members.value.firstOrNull { it.userId == userId }
+        if (currentMember?.role == MemberRole.ADMIN) {
+            _message.value = "El administrador no puede abandonar el grupo"
+            return
+        }
+        viewModelScope.launch {
+            runCatching { leaveGroupUseCase(groupId) }
+                .onSuccess {
+                    selectedGroupHolder.selectedGroupId.value = null
+                    _message.value = "Abandonaste el grupo"
+                }
+                .onFailure { _message.value = "Error al abandonar el grupo" }
+        }
+    }
+
+    fun requestKickMember(memberId: String) {
+        _pendingKickMemberId.value = memberId
+    }
+
+    fun confirmKick() {
+        val memberId = _pendingKickMemberId.value ?: return
+        _pendingKickMemberId.value = null
+        deleteMember(memberId)
+    }
+
+    fun cancelKick() {
+        _pendingKickMemberId.value = null
     }
 
     fun deleteMember(memberId: String) {

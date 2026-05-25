@@ -8,7 +8,8 @@ enum class MemberRole {
 data class TravelGroup(
     val id: String,
     val name: String,
-    val adminUserId: String? = null
+    val adminUserId: String? = null,
+    val memberCount: Int = 0
 )
 
 data class GroupMember(

@@ -190,12 +190,19 @@ class SupabaseTravelRepositoryImpl @Inject constructor(
             .decodeList<GroupMembershipDto>()
         val groupIds = memberships.map { it.groupId }
         if (groupIds.isEmpty()) return emptyList()
+        val countByGroupId = supabase.from("group_members")
+            .select(Columns.list("group_id")) {
+                filter { isIn("group_id", groupIds) }
+            }
+            .decodeList<GroupMembershipDto>()
+            .groupingBy { it.groupId }
+            .eachCount()
         return supabase.from("travel_groups")
             .select {
                 filter { isIn("id", groupIds) }
             }
             .decodeList<TravelGroupDto>()
-            .map { it.toDomain() }
+            .map { it.toDomain().copy(memberCount = countByGroupId[it.id] ?: 0) }
     }
 
     private suspend fun fetchInvites(groupId: String): List<InviteToken> {
@@ -277,6 +284,16 @@ class SupabaseTravelRepositoryImpl @Inject constructor(
     override suspend fun deleteMember(memberId: String) {
         supabase.from("group_members").delete {
             filter { eq("id", memberId) }
+        }
+    }
+
+    override suspend fun leaveGroup(groupId: String) {
+        val userId = supabase.auth.currentUserOrNull()?.id ?: return
+        supabase.from("group_members").delete {
+            filter {
+                eq("group_id", groupId)
+                eq("user_id", userId)
+            }
         }
     }
 

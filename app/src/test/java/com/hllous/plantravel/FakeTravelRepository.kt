@@ -22,6 +22,7 @@ class FakeTravelRepository(
     var generateInviteThrows: Boolean = false,
     var deleteInviteThrows: Boolean = false,
     var createGroupThrows: Boolean = false,
+    var leaveGroupThrows: Boolean = false,
     var addExpenseItemThrows: Boolean = false,
     var deleteExpenseItemThrows: Boolean = false,
     var calculateSettlementThrows: Boolean = false,
@@ -55,6 +56,9 @@ class FakeTravelRepository(
 
     override suspend fun updateGroupName(groupId: String, name: String) = Unit
     override suspend fun deleteMember(memberId: String) = Unit
+    override suspend fun leaveGroup(groupId: String) {
+        if (leaveGroupThrows) throw RuntimeException("network error")
+    }
     override suspend fun deleteGroup(groupId: String) {
         _groups.value = _groups.value.filter { it.id != groupId }
     }

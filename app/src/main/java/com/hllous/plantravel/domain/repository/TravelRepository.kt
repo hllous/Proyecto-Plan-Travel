@@ -18,6 +18,7 @@ interface TravelRepository {
     suspend fun createGroup(groupName: String): String
     suspend fun updateGroupName(groupId: String, name: String)
     suspend fun deleteMember(memberId: String)
+    suspend fun leaveGroup(groupId: String)
     suspend fun deleteGroup(groupId: String)
     suspend fun generateInvite(groupId: String): InviteToken
     suspend fun deleteInvite(code: String)

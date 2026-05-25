@@ -38,6 +38,14 @@ class DeleteGroupUseCase @Inject constructor(
     }
 }
 
+class LeaveGroupUseCase @Inject constructor(
+    private val repository: TravelRepository
+) {
+    suspend operator fun invoke(groupId: String) {
+        repository.leaveGroup(groupId)
+    }
+}
+
 class GenerateInviteUseCase @Inject constructor(
     private val repository: TravelRepository
 ) {

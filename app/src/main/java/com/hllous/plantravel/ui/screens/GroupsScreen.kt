@@ -2,6 +2,7 @@ package com.hllous.plantravel.ui.screens
 
 import android.content.ClipData
 import android.content.ClipboardManager
+import android.graphics.Bitmap
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.Row
@@ -14,15 +15,17 @@ import androidx.compose.foundation.layout.width
 import androidx.compose.foundation.lazy.LazyColumn
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.automirrored.filled.ArrowBack
-import androidx.compose.material.icons.automirrored.filled.ArrowForward
 import androidx.compose.material.icons.filled.ContentCopy
 import androidx.compose.material.icons.filled.Delete
 import androidx.compose.material.icons.filled.Edit
+import androidx.compose.material.icons.automirrored.filled.ExitToApp
 import androidx.compose.material.icons.filled.People
 import androidx.compose.material.icons.filled.QrCode
+import androidx.compose.material3.AlertDialog
 import androidx.compose.material3.Button
 import androidx.compose.material3.ButtonDefaults
 import androidx.compose.material3.Card
+import androidx.compose.material3.CardDefaults
 import androidx.compose.material3.Icon
 import androidx.compose.material3.IconButton
 import androidx.compose.material3.MaterialTheme
@@ -30,6 +33,7 @@ import androidx.compose.material3.OutlinedButton
 import androidx.compose.material3.OutlinedTextField
 import androidx.compose.material3.Surface
 import androidx.compose.material3.Text
+import androidx.compose.material3.TextButton
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.collectAsState
@@ -39,7 +43,6 @@ import androidx.compose.runtime.saveable.rememberSaveable
 import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
-import android.graphics.Bitmap
 import androidx.compose.ui.graphics.asImageBitmap
 import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.text.font.FontWeight
@@ -48,8 +51,8 @@ import androidx.navigation.NavHostController
 import com.google.zxing.BarcodeFormat
 import com.google.zxing.MultiFormatWriter
 import com.google.zxing.common.BitMatrix
-import com.hllous.plantravel.presentation.MainViewModel
 import com.hllous.plantravel.domain.model.MemberRole
+import com.hllous.plantravel.presentation.MainViewModel
 import com.hllous.plantravel.presentation.UiState
 import com.hllous.plantravel.presentation.group.GroupViewModel
 import com.hllous.plantravel.ui.components.ErrorCard
@@ -69,17 +72,54 @@ fun GroupsScreen(
     val selectedGroupId by groupViewModel.selectedGroupId.collectAsState(initial = null)
     val members by groupViewModel.members.collectAsState(initial = emptyList())
     val invites by mainViewModel.invites.collectAsState(initial = emptyList())
+    val pendingKickMemberId by groupViewModel.pendingKickMemberId.collectAsState()
+    val currentUserRole by groupViewModel.currentUserRole.collectAsState()
     var groupName by rememberSaveable { mutableStateOf("") }
     var joinCode by rememberSaveable { mutableStateOf("") }
     var editableGroupName by rememberSaveable { mutableStateOf("") }
     var showCreateGroup by rememberSaveable { mutableStateOf(false) }
+    var showLeaveConfirm by rememberSaveable { mutableStateOf(false) }
     val selectedGroup = groups.firstOrNull { it.id == selectedGroupId }
-    val availableGroup = groups.firstOrNull()
 
     LaunchedEffect(selectedGroupId, selectedGroup?.name) {
-        if (selectedGroup != null) {
-            editableGroupName = selectedGroup.name
-        }
+        if (selectedGroup != null) editableGroupName = selectedGroup.name
+    }
+
+    if (pendingKickMemberId != null) {
+        AlertDialog(
+            onDismissRequest = { groupViewModel.cancelKick() },
+            title = { Text("Eliminar integrante") },
+            text = { Text("¿Estás seguro de que querés eliminar a este integrante?") },
+            confirmButton = {
+                Button(
+                    onClick = { groupViewModel.confirmKick() },
+                    colors = ButtonDefaults.buttonColors(containerColor = MaterialTheme.colorScheme.error)
+                ) { Text("Eliminar") }
+            },
+            dismissButton = {
+                TextButton(onClick = { groupViewModel.cancelKick() }) { Text("Cancelar") }
+            }
+        )
+    }
+
+    if (showLeaveConfirm) {
+        AlertDialog(
+            onDismissRequest = { showLeaveConfirm = false },
+            title = { Text("Abandonar grupo") },
+            text = { Text("¿Estás seguro de que querés abandonar este grupo?") },
+            confirmButton = {
+                Button(
+                    onClick = {
+                        showLeaveConfirm = false
+                        groupViewModel.leaveGroup()
+                    },
+                    colors = ButtonDefaults.buttonColors(containerColor = MaterialTheme.colorScheme.error)
+                ) { Text("Abandonar") }
+            },
+            dismissButton = {
+                TextButton(onClick = { showLeaveConfirm = false }) { Text("Cancelar") }
+            }
+        )
     }
 
     LazyColumn(
@@ -100,25 +140,13 @@ fun GroupsScreen(
             item {
                 Card(
                     modifier = Modifier.fillMaxWidth(),
-                    colors = androidx.compose.material3.CardDefaults.cardColors(containerColor = MaterialTheme.colorScheme.primaryContainer)
+                    colors = CardDefaults.cardColors(containerColor = MaterialTheme.colorScheme.primaryContainer)
                 ) {
                     Column(
                         modifier = Modifier.padding(18.dp),
                         verticalArrangement = Arrangement.spacedBy(14.dp)
                     ) {
-                        Row(
-                            modifier = Modifier.fillMaxWidth(),
-                            horizontalArrangement = Arrangement.SpaceBetween,
-                            verticalAlignment = Alignment.CenterVertically
-                        ) {
-                            Text("Grupos", style = MaterialTheme.typography.headlineSmall)
-                            if (availableGroup != null) {
-                                OutlinedButton(onClick = { groupViewModel.selectGroup(availableGroup.id) }) {
-                                    Text("Grupos")
-                                    Icon(Icons.AutoMirrored.Filled.ArrowForward, contentDescription = null)
-                                }
-                            }
-                        }
+                        Text("Grupos", style = MaterialTheme.typography.headlineSmall)
                         Row(horizontalArrangement = Arrangement.spacedBy(10.dp)) {
                             Surface(
                                 onClick = { showCreateGroup = !showCreateGroup },
@@ -164,7 +192,7 @@ fun GroupsScreen(
                         OutlinedTextField(
                             value = groupName,
                             onValueChange = { groupName = it },
-                            label = { Text("Grupo") },
+                            label = { Text("Nombre del grupo") },
                             modifier = Modifier.fillMaxWidth(),
                             singleLine = true,
                             colors = travelTextFieldColors()
@@ -173,9 +201,7 @@ fun GroupsScreen(
                             OutlinedButton(
                                 onClick = { showCreateGroup = false },
                                 modifier = Modifier.weight(1f)
-                            ) {
-                                Text("Cancelar")
-                            }
+                            ) { Text("Cancelar") }
                             Button(
                                 onClick = {
                                     groupViewModel.createGroup(groupName)
@@ -183,9 +209,42 @@ fun GroupsScreen(
                                     showCreateGroup = false
                                 },
                                 modifier = Modifier.weight(1f)
+                            ) { Text("Crear") }
+                        }
+                    }
+                }
+            }
+            if (groups.isNotEmpty()) {
+                item {
+                    SectionCard(title = "Mis grupos") {
+                        groups.forEach { group ->
+                            Card(
+                                onClick = { groupViewModel.selectGroup(group.id) },
+                                modifier = Modifier.fillMaxWidth(),
+                                colors = CardDefaults.cardColors(containerColor = MaterialTheme.colorScheme.surfaceVariant)
                             ) {
-                                Text("Crear")
+                                Row(
+                                    modifier = Modifier
+                                        .fillMaxWidth()
+                                        .padding(horizontal = 16.dp, vertical = 12.dp),
+                                    horizontalArrangement = Arrangement.SpaceBetween,
+                                    verticalAlignment = Alignment.CenterVertically
+                                ) {
+                                    Text(group.name, fontWeight = FontWeight.Medium)
+                                    Row(
+                                        horizontalArrangement = Arrangement.spacedBy(4.dp),
+                                        verticalAlignment = Alignment.CenterVertically
+                                    ) {
+                                        Icon(Icons.Default.People, contentDescription = null, tint = MaterialTheme.colorScheme.onSurfaceVariant)
+                                        Text(
+                                            "${group.memberCount}",
+                                            style = MaterialTheme.typography.labelMedium,
+                                            color = MaterialTheme.colorScheme.onSurfaceVariant
+                                        )
+                                    }
+                                }
                             }
+                            Spacer(Modifier.height(8.dp))
                         }
                     }
                 }
@@ -217,7 +276,7 @@ fun GroupsScreen(
             item {
                 Card(
                     modifier = Modifier.fillMaxWidth(),
-                    colors = androidx.compose.material3.CardDefaults.cardColors(containerColor = MaterialTheme.colorScheme.primaryContainer)
+                    colors = CardDefaults.cardColors(containerColor = MaterialTheme.colorScheme.primaryContainer)
                 ) {
                     Row(
                         modifier = Modifier
@@ -232,6 +291,11 @@ fun GroupsScreen(
                         Column(modifier = Modifier.weight(1f)) {
                             Text(selectedGroup?.name ?: "Grupo", style = MaterialTheme.typography.headlineSmall)
                             Text("Activo", style = MaterialTheme.typography.labelMedium, color = MaterialTheme.colorScheme.onSurfaceVariant)
+                        }
+                        if (currentUserRole == MemberRole.USER) {
+                            IconButton(onClick = { showLeaveConfirm = true }) {
+                                Icon(Icons.AutoMirrored.Filled.ExitToApp, contentDescription = "Abandonar grupo", tint = MaterialTheme.colorScheme.error)
+                            }
                         }
                     }
                 }
@@ -250,9 +314,7 @@ fun GroupsScreen(
                         Button(
                             onClick = { groupViewModel.updateSelectedGroupName(editableGroupName) },
                             modifier = Modifier.weight(1f)
-                        ) {
-                            Text("Guardar")
-                        }
+                        ) { Text("Guardar") }
                         Button(
                             onClick = { groupViewModel.deleteSelectedGroup() },
                             modifier = Modifier.weight(1f),
@@ -318,8 +380,8 @@ fun GroupsScreen(
                                         Text(member.role.name, style = MaterialTheme.typography.labelSmall, color = MaterialTheme.colorScheme.onSurfaceVariant)
                                     }
                                 }
-                                if (member.role != MemberRole.ADMIN) {
-                                    IconButton(onClick = { groupViewModel.deleteMember(member.id) }) {
+                                if (currentUserRole == MemberRole.ADMIN && member.role != MemberRole.ADMIN) {
+                                    IconButton(onClick = { groupViewModel.requestKickMember(member.id) }) {
                                         Icon(Icons.Default.Delete, contentDescription = "Eliminar integrante", tint = MaterialTheme.colorScheme.error)
                                     }
                                 }

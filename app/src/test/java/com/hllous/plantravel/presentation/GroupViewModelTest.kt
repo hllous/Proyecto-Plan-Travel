@@ -1,12 +1,15 @@
 package com.hllous.plantravel.presentation
 
+import com.hllous.plantravel.FakeSessionProvider
 import com.hllous.plantravel.FakeTravelRepository
 import com.hllous.plantravel.MainDispatcherRule
 import com.hllous.plantravel.domain.model.GroupMember
 import com.hllous.plantravel.domain.model.MemberRole
+import com.hllous.plantravel.domain.model.TravelGroup
 import com.hllous.plantravel.domain.usecase.CreateGroupUseCase
 import com.hllous.plantravel.domain.usecase.DeleteGroupUseCase
 import com.hllous.plantravel.domain.usecase.DeleteMemberUseCase
+import com.hllous.plantravel.domain.usecase.LeaveGroupUseCase
 import com.hllous.plantravel.domain.usecase.UpdateGroupNameUseCase
 import com.hllous.plantravel.presentation.group.GroupViewModel
 import com.hllous.plantravel.presentation.group.SelectedGroupHolder
@@ -27,14 +30,17 @@ class GroupViewModelTest {
 
     private fun viewModel(
         repo: FakeTravelRepository = FakeTravelRepository(),
-        holder: SelectedGroupHolder = SelectedGroupHolder()
+        holder: SelectedGroupHolder = SelectedGroupHolder(),
+        session: FakeSessionProvider = FakeSessionProvider(userId = "user-1")
     ) = GroupViewModel(
         repository = repo,
         selectedGroupHolder = holder,
+        sessionProvider = session,
         createGroupUseCase = CreateGroupUseCase(repo),
         updateGroupNameUseCase = UpdateGroupNameUseCase(repo),
         deleteGroupUseCase = DeleteGroupUseCase(repo),
-        deleteMemberUseCase = DeleteMemberUseCase(repo)
+        deleteMemberUseCase = DeleteMemberUseCase(repo),
+        leaveGroupUseCase = LeaveGroupUseCase(repo)
     )
 
     @Test
@@ -141,5 +147,107 @@ class GroupViewModelTest {
         assertEquals(userId, repo.lastConsumeUserId)
         assertEquals(userId, vm.members.value.firstOrNull()?.userId)
         job.cancel()
+    }
+
+    // --- Leave Group ---
+
+    @Test
+    fun leaveGroupAsUserClearsSelectedGroup() {
+        val groupId = "group-1"
+        val members = listOf(GroupMember(id = "m1", groupId = groupId, name = "Nico", userId = "user-1", role = MemberRole.USER))
+        val repo = FakeTravelRepository(initialMembers = mapOf(groupId to members))
+        val holder = SelectedGroupHolder().also { it.selectedGroupId.value = groupId }
+        val vm = viewModel(repo = repo, holder = holder, session = FakeSessionProvider(userId = "user-1"))
+        val scope = CoroutineScope(UnconfinedTestDispatcher())
+        val job = scope.launch { vm.members.collect { } }
+
+        vm.leaveGroup()
+
+        assertNull(vm.selectedGroupId.value)
+        job.cancel()
+    }
+
+    @Test
+    fun leaveGroupAsUserShowsSuccessMessage() {
+        val groupId = "group-1"
+        val members = listOf(GroupMember(id = "m1", groupId = groupId, name = "Nico", userId = "user-1", role = MemberRole.USER))
+        val repo = FakeTravelRepository(initialMembers = mapOf(groupId to members))
+        val holder = SelectedGroupHolder().also { it.selectedGroupId.value = groupId }
+        val vm = viewModel(repo = repo, holder = holder, session = FakeSessionProvider(userId = "user-1"))
+        val scope = CoroutineScope(UnconfinedTestDispatcher())
+        val job = scope.launch { vm.members.collect { } }
+
+        vm.leaveGroup()
+
+        assertEquals("Abandonaste el grupo", vm.message.value)
+        job.cancel()
+    }
+
+    @Test
+    fun leaveGroupAsAdminShowsErrorMessage() {
+        val groupId = "group-1"
+        val members = listOf(GroupMember(id = "m1", groupId = groupId, name = "Nico", userId = "user-1", role = MemberRole.ADMIN))
+        val repo = FakeTravelRepository(initialMembers = mapOf(groupId to members))
+        val holder = SelectedGroupHolder().also { it.selectedGroupId.value = groupId }
+        val vm = viewModel(repo = repo, holder = holder, session = FakeSessionProvider(userId = "user-1"))
+        val scope = CoroutineScope(UnconfinedTestDispatcher())
+        val job = scope.launch { vm.members.collect { } }
+
+        vm.leaveGroup()
+
+        assertEquals("El administrador no puede abandonar el grupo", vm.message.value)
+        assertEquals(groupId, vm.selectedGroupId.value)
+        job.cancel()
+    }
+
+    @Test
+    fun leaveGroupWithNoGroupSelectedShowsErrorMessage() {
+        val vm = viewModel()
+        vm.leaveGroup()
+        assertEquals("Selecciona un grupo", vm.message.value)
+    }
+
+    @Test
+    fun leaveGroupNetworkErrorShowsErrorMessage() {
+        val groupId = "group-1"
+        val members = listOf(GroupMember(id = "m1", groupId = groupId, name = "Nico", userId = "user-1", role = MemberRole.USER))
+        val repo = FakeTravelRepository(initialMembers = mapOf(groupId to members), leaveGroupThrows = true)
+        val holder = SelectedGroupHolder().also { it.selectedGroupId.value = groupId }
+        val vm = viewModel(repo = repo, holder = holder, session = FakeSessionProvider(userId = "user-1"))
+        val scope = CoroutineScope(UnconfinedTestDispatcher())
+        val job = scope.launch { vm.members.collect { } }
+
+        vm.leaveGroup()
+
+        assertEquals("Error al abandonar el grupo", vm.message.value)
+        assertEquals(groupId, vm.selectedGroupId.value)
+        job.cancel()
+    }
+
+    // --- ADMIN kick confirmation ---
+
+    @Test
+    fun requestKickMemberSetsPendingMemberId() {
+        val vm = viewModel()
+        vm.requestKickMember("m5")
+        assertEquals("m5", vm.pendingKickMemberId.value)
+    }
+
+    @Test
+    fun confirmKickCallsDeleteAndClearsPending() {
+        val vm = viewModel()
+        vm.requestKickMember("m5")
+        vm.confirmKick()
+        assertNull(vm.pendingKickMemberId.value)
+        assertEquals("Integrante eliminado", vm.message.value)
+    }
+
+    @Test
+    fun cancelKickClearsPendingWithoutDeleting() {
+        val vm = viewModel()
+        vm.requestKickMember("m5")
+        vm.cancelKick()
+        assertNull(vm.pendingKickMemberId.value)
+        assertNull(vm.message.value)
     }
 }
