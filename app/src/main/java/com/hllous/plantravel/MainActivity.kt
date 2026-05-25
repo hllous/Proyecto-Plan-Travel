@@ -84,6 +84,7 @@ import com.hllous.plantravel.ui.screens.ProfileSetupScreen
 import com.hllous.plantravel.ui.screens.QrScannerScreen
 import com.hllous.plantravel.ui.screens.RegisterScreen
 import com.hllous.plantravel.ui.theme.FrauncesFamily
+import com.hllous.plantravel.ui.utils.displayInitials
 import com.hllous.plantravel.ui.theme.ProyectoPlanTravelTheme
 import dagger.hilt.android.AndroidEntryPoint
 import io.github.jan.supabase.SupabaseClient
@@ -360,12 +361,7 @@ fun DrawerContent(
                     .padding(24.dp),
                 verticalArrangement = Arrangement.spacedBy(12.dp),
             ) {
-                val initials = displayName
-                    .split(" ")
-                    .filter { it.isNotBlank() }
-                    .take(2)
-                    .joinToString("") { it.first().uppercase() }
-                    .ifEmpty { "?" }
+                val initials = displayInitials(displayName)
 
                 Box(
                     modifier = Modifier

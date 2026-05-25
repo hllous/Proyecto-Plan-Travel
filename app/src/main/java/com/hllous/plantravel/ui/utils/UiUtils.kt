@@ -4,6 +4,13 @@ import androidx.compose.ui.graphics.Color
 
 fun memberInitial(name: String): String = name.trim().firstOrNull()?.uppercase() ?: "?"
 
+fun displayInitials(name: String): String = name
+    .split(" ")
+    .filter { it.isNotBlank() }
+    .take(2)
+    .joinToString("") { it.first().uppercase() }
+    .ifEmpty { "?" }
+
 fun memberColor(memberId: String): Color {
     val palette = listOf(
         Color(0xFF1D4ED8),
