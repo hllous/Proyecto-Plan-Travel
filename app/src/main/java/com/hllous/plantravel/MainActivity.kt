@@ -265,7 +265,8 @@ fun MainAppContent(
             containerColor = MaterialTheme.colorScheme.background,
             topBar = {
                 if (currentRoute != "qr_scanner" && currentRoute != "profile" &&
-                    currentRoute != "groups" && !currentRoute.startsWith("group_detail")) {
+                    currentRoute != "groups" && !currentRoute.startsWith("group_detail") &&
+                    currentRoute != "destinations") {
                     TopAppBar(
                         title = {
                             Text(
