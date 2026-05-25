@@ -49,7 +49,9 @@ import com.google.zxing.BarcodeFormat
 import com.google.zxing.MultiFormatWriter
 import com.google.zxing.common.BitMatrix
 import com.hllous.plantravel.presentation.MainViewModel
+import com.hllous.plantravel.presentation.UiState
 import com.hllous.plantravel.presentation.group.GroupViewModel
+import com.hllous.plantravel.ui.components.ErrorCard
 import com.hllous.plantravel.ui.components.SectionCard
 import com.hllous.plantravel.ui.components.travelTextFieldColors
 import com.hllous.plantravel.ui.utils.memberColor
@@ -61,6 +63,7 @@ fun GroupsScreen(
     mainViewModel: MainViewModel,
     navController: NavHostController
 ) {
+    val groupsUiState by groupViewModel.groupsUiState.collectAsState()
     val groups by groupViewModel.groups.collectAsState(initial = emptyList())
     val selectedGroupId by groupViewModel.selectedGroupId.collectAsState(initial = null)
     val members by groupViewModel.members.collectAsState(initial = emptyList())
@@ -85,6 +88,14 @@ fun GroupsScreen(
             .padding(horizontal = 16.dp, vertical = 12.dp),
         verticalArrangement = Arrangement.spacedBy(12.dp)
     ) {
+        if (groupsUiState is UiState.Error) {
+            item {
+                ErrorCard(
+                    message = (groupsUiState as UiState.Error).message,
+                    onRetry = { groupViewModel.reloadGroups() }
+                )
+            }
+        }
         if (selectedGroupId == null) {
             item {
                 Card(

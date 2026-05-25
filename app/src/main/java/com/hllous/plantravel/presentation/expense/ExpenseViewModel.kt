@@ -17,6 +17,7 @@ import com.hllous.plantravel.domain.usecase.AddExpenseItemUseCase
 import com.hllous.plantravel.domain.usecase.AssignItemToMemberUseCase
 import com.hllous.plantravel.domain.usecase.CalculateSettlementUseCase
 import com.hllous.plantravel.domain.usecase.DeleteExpenseItemUseCase
+import com.hllous.plantravel.presentation.UiState
 import com.hllous.plantravel.presentation.group.SelectedGroupHolder
 import dagger.hilt.android.lifecycle.HiltViewModel
 import javax.inject.Inject
@@ -25,6 +26,7 @@ import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.SharingStarted
 import kotlinx.coroutines.flow.StateFlow
 import kotlinx.coroutines.flow.asStateFlow
+import kotlinx.coroutines.flow.catch
 import kotlinx.coroutines.flow.flatMapLatest
 import kotlinx.coroutines.flow.flowOf
 import kotlinx.coroutines.flow.map
@@ -58,10 +60,21 @@ class ExpenseViewModel @Inject constructor(
         .map { list -> list.firstOrNull { it.userId == sessionProvider.userId } }
         .stateIn(viewModelScope, SharingStarted.WhileSubscribed(5000), null)
 
-    val expenseItems: StateFlow<List<ExpenseItem>> = selectedGroupHolder.selectedGroupId
-        .flatMapLatest { groupId ->
-            if (groupId == null) flowOf(emptyList()) else repository.observeExpenseItems(groupId)
+    private val _expenseRetryTrigger = MutableStateFlow(0)
+
+    val expenseItemsUiState: StateFlow<UiState<List<ExpenseItem>>> = _expenseRetryTrigger
+        .flatMapLatest {
+            selectedGroupHolder.selectedGroupId.flatMapLatest { groupId ->
+                if (groupId == null) flowOf(UiState.Success(emptyList()))
+                else repository.observeExpenseItems(groupId)
+                    .map<List<ExpenseItem>, UiState<List<ExpenseItem>>> { UiState.Success(it) }
+                    .catch { e -> emit(UiState.Error(e.message ?: "Error al cargar gastos")) }
+            }
         }
+        .stateIn(viewModelScope, SharingStarted.WhileSubscribed(5000), UiState.Loading)
+
+    val expenseItems: StateFlow<List<ExpenseItem>> = expenseItemsUiState
+        .map { if (it is UiState.Success) it.data else emptyList() }
         .stateIn(viewModelScope, SharingStarted.WhileSubscribed(5000), emptyList())
 
     val assignments: StateFlow<List<ItemAssignment>> = selectedGroupHolder.selectedGroupId
@@ -78,6 +91,10 @@ class ExpenseViewModel @Inject constructor(
 
     private val _message = MutableStateFlow<String?>(null)
     val message: StateFlow<String?> = _message
+
+    fun reloadExpenseItems() {
+        _expenseRetryTrigger.value++
+    }
 
     fun selectGroup(groupId: String) {
         selectedGroupHolder.selectedGroupId.value = groupId

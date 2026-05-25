@@ -10,6 +10,7 @@ import com.hllous.plantravel.domain.usecase.CreateGroupUseCase
 import com.hllous.plantravel.domain.usecase.DeleteGroupUseCase
 import com.hllous.plantravel.domain.usecase.DeleteMemberUseCase
 import com.hllous.plantravel.domain.usecase.UpdateGroupNameUseCase
+import com.hllous.plantravel.presentation.UiState
 import dagger.hilt.android.lifecycle.HiltViewModel
 import javax.inject.Inject
 import kotlinx.coroutines.ExperimentalCoroutinesApi
@@ -17,6 +18,7 @@ import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.SharingStarted
 import kotlinx.coroutines.flow.StateFlow
 import kotlinx.coroutines.flow.asStateFlow
+import kotlinx.coroutines.flow.catch
 import kotlinx.coroutines.flow.flatMapLatest
 import kotlinx.coroutines.flow.flowOf
 import kotlinx.coroutines.flow.map
@@ -37,7 +39,18 @@ class GroupViewModel @Inject constructor(
 
     val selectedGroupId: StateFlow<String?> = selectedGroupHolder.selectedGroupId.asStateFlow()
 
-    val groups: StateFlow<List<TravelGroup>> = repository.observeGroups()
+    private val _groupsRetryTrigger = MutableStateFlow(0)
+
+    val groupsUiState: StateFlow<UiState<List<TravelGroup>>> = _groupsRetryTrigger
+        .flatMapLatest {
+            repository.observeGroups()
+                .map<List<TravelGroup>, UiState<List<TravelGroup>>> { UiState.Success(it) }
+                .catch { e -> emit(UiState.Error(e.message ?: "Error al cargar grupos")) }
+        }
+        .stateIn(viewModelScope, SharingStarted.WhileSubscribed(5000), UiState.Loading)
+
+    val groups: StateFlow<List<TravelGroup>> = groupsUiState
+        .map { if (it is UiState.Success) it.data else emptyList() }
         .stateIn(viewModelScope, SharingStarted.WhileSubscribed(5000), emptyList())
 
     val members: StateFlow<List<GroupMember>> = selectedGroupHolder.selectedGroupId
@@ -53,6 +66,10 @@ class GroupViewModel @Inject constructor(
 
     private val _message = MutableStateFlow<String?>(null)
     val message: StateFlow<String?> = _message
+
+    fun reloadGroups() {
+        _groupsRetryTrigger.value++
+    }
 
     fun selectGroup(groupId: String) {
         selectedGroupHolder.selectedGroupId.value = groupId

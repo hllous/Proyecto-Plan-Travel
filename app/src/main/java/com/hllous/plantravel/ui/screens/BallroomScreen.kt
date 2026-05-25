@@ -59,7 +59,9 @@ import com.hllous.plantravel.domain.model.ItemAssignment
 import com.hllous.plantravel.domain.model.MemberSettlement
 import com.hllous.plantravel.domain.model.SettlementWarning
 import com.hllous.plantravel.domain.model.TravelGroup
+import com.hllous.plantravel.presentation.UiState
 import com.hllous.plantravel.presentation.expense.ExpenseViewModel
+import com.hllous.plantravel.ui.components.ErrorCard
 import com.hllous.plantravel.ui.components.CollapsibleHeader
 import com.hllous.plantravel.ui.components.SectionCard
 import com.hllous.plantravel.ui.components.travelTextFieldColors
@@ -70,6 +72,7 @@ import com.hllous.plantravel.ui.utils.memberInitial
 @Suppress("UNUSED_PARAMETER")
 @Composable
 fun BallroomScreen(viewModel: ExpenseViewModel, navController: NavHostController) {
+    val expenseItemsUiState by viewModel.expenseItemsUiState.collectAsState()
     val groups by viewModel.groups.collectAsState(initial = emptyList())
     val members by viewModel.members.collectAsState(initial = emptyList())
     val items by viewModel.expenseItems.collectAsState(initial = emptyList())
@@ -121,6 +124,14 @@ fun BallroomScreen(viewModel: ExpenseViewModel, navController: NavHostController
                     expanded = groupsExpanded,
                     onToggle = { groupsExpanded = !groupsExpanded }
                 )
+            }
+            if (expenseItemsUiState is UiState.Error) {
+                item {
+                    ErrorCard(
+                        message = (expenseItemsUiState as UiState.Error).message,
+                        onRetry = { viewModel.reloadExpenseItems() }
+                    )
+                }
             }
             if (groupsExpanded) {
                 if (groups.isEmpty()) {
