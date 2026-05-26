@@ -34,7 +34,7 @@ import androidx.compose.material.icons.filled.AccessTime
 import androidx.compose.material.icons.filled.Add
 import androidx.compose.material.icons.filled.ContentCopy
 import androidx.compose.material.icons.filled.Delete
-import androidx.compose.material.icons.filled.KeyboardArrowRight
+import androidx.compose.material.icons.automirrored.filled.KeyboardArrowRight
 import androidx.compose.material.icons.filled.Link
 import androidx.compose.material.icons.filled.PersonRemove
 import androidx.compose.material.icons.filled.QrCode
@@ -585,7 +585,7 @@ private fun CtaCard(
                 )
             }
             Icon(
-                Icons.Default.KeyboardArrowRight,
+                Icons.AutoMirrored.Filled.KeyboardArrowRight,
                 contentDescription = null,
                 modifier = Modifier.graphicsLayer { rotationZ = chevronRotation },
                 tint = if (isExpanded) MaterialTheme.colorScheme.primary else MaterialTheme.colorScheme.onSurfaceVariant
@@ -759,7 +759,7 @@ private fun InviteSection(
                     Surface(
                         onClick = {
                             val cb = context.getSystemService(ClipboardManager::class.java)
-                            cb?.setPrimaryClip(ClipData.newPlainText("invite_code", latestInvite.code))
+                            cb?.setPrimaryClip(ClipData.newPlainText("invite_link", latestInvite.link))
                         },
                         shape = RoundedCornerShape(50),
                         color = MaterialTheme.colorScheme.secondaryContainer
