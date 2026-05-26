@@ -1,0 +1,710 @@
+<!DOCTYPE html>
+<html lang="es">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>Plan Travel · Expense Screen Prototype</title>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link href="https://fonts.googleapis.com/css2?family=Fraunces:ital,opsz,wght@0,9..144,300;0,9..144,500;0,9..144,700;1,9..144,300&family=Plus+Jakarta+Sans:wght@300;400;500;600;700&display=swap" rel="stylesheet">
+<style>
+*, *::before, *::after { box-sizing: border-box; margin: 0; padding: 0; }
+
+body {
+  min-height: 100vh;
+  background: #0E0E0E;
+  display: flex; flex-direction: column;
+  align-items: center;
+  padding: 28px 24px 64px;
+  font-family: 'Plus Jakarta Sans', sans-serif;
+  gap: 20px;
+}
+
+.proto-banner {
+  font-size: 10px; font-weight: 700;
+  letter-spacing: 0.12em; text-transform: uppercase;
+  color: #555; border: 1px solid #2A2A2A;
+  padding: 5px 14px; border-radius: 100px;
+}
+
+.controls {
+  display: flex; gap: 8px; flex-wrap: wrap;
+  justify-content: center; align-items: center;
+}
+.ctrl-btn {
+  padding: 8px 18px; border-radius: 100px;
+  border: 1.5px solid #2E2E2E;
+  background: #1A1A1A; color: #666;
+  font-family: 'Plus Jakarta Sans', sans-serif;
+  font-size: 12px; font-weight: 700;
+  cursor: pointer; transition: all 0.22s ease;
+  letter-spacing: 0.03em;
+}
+.ctrl-btn:hover { background: #242424; color: #ccc; border-color: #444; }
+.ctrl-btn.active { background: #242424; color: #fff; border-color: #666; }
+.divider { width: 1px; height: 28px; background: #2A2A2A; display: inline-block; }
+
+.phones-row {
+  display: flex; gap: 32px;
+  flex-wrap: wrap; justify-content: center; align-items: flex-start;
+}
+.phone-col { display: flex; flex-direction: column; align-items: center; gap: 10px; }
+.option-label {
+  font-size: 11px; font-weight: 800;
+  letter-spacing: 0.08em; text-transform: uppercase; color: #555;
+}
+.option-name { font-size: 13px; font-weight: 600; color: #888; text-align: center; margin-top: -4px; }
+
+/* ── Phone ── */
+.phone {
+  width: 340px; height: 720px;
+  border-radius: 46px; overflow: hidden;
+  position: relative; display: flex; flex-direction: column;
+  box-shadow:
+    0 0 0 1px rgba(255,255,255,0.07),
+    0 32px 80px rgba(0,0,0,0.85),
+    inset 0 0 0 1px rgba(255,255,255,0.04);
+}
+
+/* ── Atlas tokens ── */
+.lt {
+  --bg: #F8FAFF; --surf: #FFFFFF; --surf-v: #EDF1FB;
+  --pri: #2563EB; --on-pri: #FFFFFF;
+  --pri-c: #DBEAFE; --on-pri-c: #1E3A8A;
+  --sec: #7C3AED; --sec-c: #EDE9FE; --on-sec-c: #4C1D95;
+  --ter: #D97706; --ter-c: #FEF3C7; --on-ter-c: #78350F;
+  --on-bg: #0F172A; --on-s: #0F172A; --on-sv: #475569;
+  --out: #C4CEDF;
+  --sh1: 0 2px 8px rgba(37,99,235,0.08), 0 1px 3px rgba(0,0,0,0.04);
+  --sh2: 0 4px 20px rgba(37,99,235,0.13), 0 2px 6px rgba(0,0,0,0.06);
+}
+.dk {
+  --bg: #0A0C14; --surf: #141A27; --surf-v: #1E283E;
+  --pri: #60A5FA; --on-pri: #0A1A3E;
+  --pri-c: #1E3A6E; --on-pri-c: #BAD4FF;
+  --sec: #A78BFA; --sec-c: #3D1C8E; --on-sec-c: #D4BBFF;
+  --ter: #FBB928; --ter-c: #3A2200; --on-ter-c: #FFE08A;
+  --on-bg: #E2E8FF; --on-s: #E2E8FF; --on-sv: #8A9ABF;
+  --out: #384260;
+  --sh1: 0 2px 8px rgba(0,0,0,0.4), 0 1px 3px rgba(96,165,250,0.08);
+  --sh2: 0 4px 20px rgba(0,0,0,0.55), 0 2px 6px rgba(96,165,250,0.12);
+}
+
+.phone { background: var(--bg); color: var(--on-bg); transition: background 0.35s, color 0.35s; }
+
+/* ── Shared ── */
+.status-bar {
+  padding: 14px 24px 6px;
+  display: flex; justify-content: space-between; align-items: center;
+  font-size: 11px; font-weight: 700; letter-spacing: 0.04em;
+  flex-shrink: 0;
+  transition: background 0.35s, color 0.35s;
+}
+
+.sec-label {
+  font-size: 11px; font-weight: 800;
+  letter-spacing: 0.08em; text-transform: uppercase;
+  color: var(--on-sv); margin-bottom: 8px; padding: 0 2px;
+  transition: color 0.35s;
+}
+
+.scroll-area {
+  flex: 1; overflow-y: auto; scrollbar-width: none;
+  padding: 10px 14px 90px;
+  display: flex; flex-direction: column; gap: 10px;
+  background: var(--bg);
+  transition: background 0.35s;
+  position: relative;
+}
+.scroll-area::-webkit-scrollbar { display: none; }
+
+/* FAB */
+.fab {
+  position: absolute; bottom: 16px; right: 16px;
+  background: var(--pri); color: var(--on-pri);
+  border: none; border-radius: 20px;
+  padding: 14px 18px;
+  display: flex; align-items: center; gap: 8px;
+  font-family: 'Plus Jakarta Sans', sans-serif;
+  font-size: 14px; font-weight: 700;
+  cursor: pointer;
+  box-shadow: 0 6px 20px rgba(37,99,235,0.4);
+  transition: background 0.35s, color 0.35s, box-shadow 0.35s;
+  z-index: 10;
+}
+.dk .fab { box-shadow: 0 6px 20px rgba(96,165,250,0.25); }
+
+/* ── Member avatar colors ── */
+.mav-blue  { background: rgba(37,99,235,0.14); color: #2563EB; }
+.mav-purp  { background: rgba(124,58,237,0.14); color: #7C3AED; }
+.mav-ora   { background: rgba(217,119,6,0.14);  color: #D97706; }
+.mav-green { background: rgba(16,185,129,0.12); color: #059669; }
+.dk .mav-blue  { background: rgba(96,165,250,0.18);  color: #60A5FA; }
+.dk .mav-purp  { background: rgba(167,139,250,0.18); color: #A78BFA; }
+.dk .mav-ora   { background: rgba(251,185,40,0.18);  color: #FBB928; }
+.dk .mav-green { background: rgba(52,211,153,0.15);  color: #34D399; }
+
+/* ══════════════════════════════════
+   OPTION A  ─  Lista con barra resumen
+══════════════════════════════════ */
+
+.a-large-bar {
+  background: var(--bg);
+  padding: 4px 8px 0; flex-shrink: 0;
+  transition: background 0.35s;
+}
+.a-large-bar-row { display: flex; align-items: center; height: 44px; }
+.a-large-bar-title {
+  font-family: 'Fraunces', serif;
+  font-size: 34px; font-weight: 600;
+  letter-spacing: -0.02em; color: var(--on-bg);
+  padding: 2px 16px 12px; line-height: 1;
+  transition: color 0.35s;
+}
+
+/* Summary bar below the large title */
+.a-summary-bar {
+  display: flex; align-items: center; justify-content: space-between;
+  padding: 8px 16px 10px;
+  background: var(--bg);
+  transition: background 0.35s;
+}
+.a-summary-total {
+  display: flex; flex-direction: column;
+}
+.a-sum-label { font-size: 10px; font-weight: 800; letter-spacing: 0.08em; text-transform: uppercase; color: var(--on-sv); transition: color 0.35s; }
+.a-sum-amount {
+  font-family: 'Fraunces', serif;
+  font-size: 22px; font-weight: 700; letter-spacing: -0.02em;
+  color: var(--pri); transition: color 0.35s;
+}
+.a-pending-chip {
+  background: var(--ter-c); color: var(--on-ter-c);
+  border-radius: 100px; padding: 5px 12px;
+  font-size: 12px; font-weight: 700;
+  transition: background 0.35s, color 0.35s;
+}
+
+/* Expense item card — Option A */
+.a-expense-card {
+  background: var(--surf);
+  border-radius: 18px; box-shadow: var(--sh1);
+  display: flex; overflow: hidden;
+  transition: background 0.35s, box-shadow 0.35s;
+}
+.a-card-accent { width: 4px; flex-shrink: 0; transition: background 0.35s; }
+.accent-ok  { background: var(--pri); }
+.accent-warn { background: #EF4444; }
+.a-card-body { flex: 1; padding: 12px 12px 12px 14px; display: flex; flex-direction: column; gap: 8px; }
+
+.a-item-header { display: flex; align-items: flex-start; justify-content: space-between; }
+.a-item-name {
+  font-family: 'Fraunces', serif;
+  font-size: 16px; font-weight: 600;
+  letter-spacing: -0.01em; color: var(--on-s);
+  transition: color 0.35s;
+}
+.a-item-prices { font-size: 12px; color: var(--on-sv); margin-top: 3px; transition: color 0.35s; }
+.a-item-total {
+  font-family: 'Fraunces', serif;
+  font-size: 17px; font-weight: 700;
+  color: var(--on-s); letter-spacing: -0.01em;
+  transition: color 0.35s;
+}
+
+.a-assign-row { display: flex; gap: 6px; flex-wrap: wrap; }
+.assign-chip {
+  display: flex; align-items: center; gap: 5px;
+  border-radius: 100px; padding: 3px 9px;
+  font-size: 11px; font-weight: 700;
+}
+.a-my-row {
+  display: flex; align-items: center; justify-content: space-between;
+  background: var(--surf-v); border-radius: 10px;
+  padding: 6px 10px;
+  transition: background 0.35s;
+}
+.a-my-label { font-size: 12px; font-weight: 600; color: var(--on-s); transition: color 0.35s; }
+.a-stepper { display: flex; align-items: center; gap: 0; }
+.a-step-btn {
+  width: 28px; height: 28px; border-radius: 50%; border: none;
+  background: var(--surf); box-shadow: var(--sh1);
+  display: flex; align-items: center; justify-content: center;
+  font-size: 14px; cursor: pointer; color: var(--on-s);
+  transition: background 0.35s, color 0.35s;
+}
+.a-step-val { font-size: 14px; font-weight: 700; color: var(--on-s); padding: 0 8px; transition: color 0.35s; }
+
+/* Warning card */
+.warn-card {
+  background: #FEF2F2; border-radius: 14px; padding: 12px 14px;
+  display: flex; gap: 10px; align-items: flex-start;
+  transition: background 0.35s;
+}
+.dk .warn-card { background: #2D1515; }
+.warn-icon { font-size: 16px; flex-shrink: 0; }
+.warn-title { font-size: 13px; font-weight: 700; color: #DC2626; }
+.warn-text { font-size: 11px; color: #DC2626; margin-top: 2px; opacity: 0.8; }
+
+/* Bottom panel Option A */
+.a-bottom-panel {
+  position: absolute; bottom: 0; left: 0; right: 0;
+  background: var(--surf);
+  border-top: 1px solid var(--out);
+  padding: 10px 16px 14px;
+  display: flex; align-items: center; justify-content: space-between;
+  z-index: 20;
+  transition: background 0.35s, border-color 0.35s;
+}
+.a-bp-left { display: flex; align-items: center; gap: 10px; }
+.a-bp-avatar {
+  width: 38px; height: 38px; border-radius: 50%;
+  display: flex; align-items: center; justify-content: center;
+  font-size: 14px; font-weight: 800; flex-shrink: 0;
+}
+.a-bp-name { font-size: 13px; font-weight: 600; color: var(--on-s); transition: color 0.35s; }
+.a-bp-amount {
+  font-family: 'Fraunces', serif;
+  font-size: 18px; font-weight: 700; color: #2563EB;
+  transition: color 0.35s;
+}
+.dk .a-bp-amount { color: #60A5FA; }
+.a-bp-btn {
+  background: transparent; border: none;
+  font-family: 'Plus Jakarta Sans', sans-serif;
+  font-size: 12px; font-weight: 700; color: var(--pri);
+  cursor: pointer; padding: 6px 10px; border-radius: 8px;
+  transition: color 0.35s;
+}
+
+/* ══════════════════════════════════════
+   OPTION B  ─  Hero resumen + lista
+══════════════════════════════════════ */
+
+.b-topbar {
+  background: var(--bg); padding: 4px 8px 0; flex-shrink: 0;
+  transition: background 0.35s;
+}
+.b-topbar-row { display: flex; align-items: center; height: 44px; }
+.b-topbar-title {
+  font-family: 'Fraunces', serif;
+  font-size: 34px; font-weight: 600;
+  letter-spacing: -0.02em; color: var(--on-bg);
+  padding: 2px 16px 12px; line-height: 1;
+  transition: color 0.35s;
+}
+
+/* Hero summary card */
+.b-hero-card {
+  background: var(--pri);
+  border-radius: 22px; margin: 0 0 2px;
+  padding: 16px 18px 18px;
+  position: relative; overflow: hidden;
+  transition: background 0.35s;
+}
+.b-hero-deco  { position: absolute; top: -30px; right: -30px; width: 130px; height: 130px; border-radius: 50%; background: rgba(255,255,255,0.07); pointer-events: none; }
+.b-hero-deco2 { position: absolute; bottom: -20px; left: 10px; width: 80px; height: 80px; border-radius: 50%; background: rgba(255,255,255,0.04); pointer-events: none; }
+
+.b-hero-eyebrow {
+  font-size: 10px; font-weight: 800; letter-spacing: 0.1em; text-transform: uppercase;
+  color: rgba(255,255,255,0.65); margin-bottom: 4px; position: relative; z-index: 1;
+}
+.b-hero-total {
+  font-family: 'Fraunces', serif;
+  font-size: 36px; font-weight: 700; letter-spacing: -0.03em;
+  color: #fff; position: relative; z-index: 1; margin-bottom: 12px;
+}
+.b-hero-breakdown {
+  display: flex; gap: 8px; position: relative; z-index: 1;
+}
+.b-breakdown-pill {
+  flex: 1; background: rgba(255,255,255,0.14); border-radius: 12px;
+  padding: 8px 10px;
+}
+.b-bp-label { font-size: 10px; font-weight: 700; color: rgba(255,255,255,0.65); margin-bottom: 2px; }
+.b-bp-val {
+  font-family: 'Fraunces', serif;
+  font-size: 15px; font-weight: 700; color: #fff;
+}
+
+.b-scroll {
+  flex: 1; overflow-y: auto; scrollbar-width: none;
+  padding: 10px 14px 90px;
+  display: flex; flex-direction: column; gap: 10px;
+  background: var(--bg); position: relative;
+  transition: background 0.35s;
+}
+.b-scroll::-webkit-scrollbar { display: none; }
+
+/* Expense card — Option B (tertiary accents on amounts) */
+.b-expense-card {
+  background: var(--surf);
+  border-radius: 18px; box-shadow: var(--sh1);
+  overflow: hidden;
+  transition: background 0.35s, box-shadow 0.35s;
+}
+.b-card-inner { padding: 12px 14px; display: flex; flex-direction: column; gap: 8px; }
+.b-item-header { display: flex; align-items: flex-start; justify-content: space-between; gap: 8px; }
+.b-item-name {
+  font-family: 'Fraunces', serif;
+  font-size: 16px; font-weight: 600;
+  letter-spacing: -0.01em; color: var(--on-s);
+  transition: color 0.35s;
+}
+.b-item-meta { font-size: 11px; color: var(--on-sv); margin-top: 2px; transition: color 0.35s; }
+.b-item-total {
+  font-family: 'Fraunces', serif;
+  font-size: 18px; font-weight: 700;
+  color: var(--ter); letter-spacing: -0.01em;
+  transition: color 0.35s; flex-shrink: 0;
+}
+.dk .b-item-total { color: var(--ter); }
+
+.b-assign-row { display: flex; gap: 6px; flex-wrap: wrap; }
+.b-my-row {
+  display: flex; align-items: center; justify-content: space-between;
+  background: var(--surf-v); border-radius: 10px; padding: 6px 10px;
+  transition: background 0.35s;
+}
+.b-my-label { font-size: 12px; font-weight: 600; color: var(--on-s); transition: color 0.35s; }
+.b-stepper { display: flex; align-items: center; }
+.b-step-btn {
+  width: 28px; height: 28px; border-radius: 50%; border: none;
+  background: var(--surf); box-shadow: var(--sh1);
+  display: flex; align-items: center; justify-content: center;
+  font-size: 14px; cursor: pointer; color: var(--on-s);
+  transition: background 0.35s, color 0.35s;
+}
+.b-step-val { font-size: 14px; font-weight: 700; color: var(--on-s); padding: 0 8px; transition: color 0.35s; }
+
+/* Bottom panel Option B */
+.b-bottom-panel {
+  position: absolute; bottom: 0; left: 0; right: 0;
+  background: var(--surf);
+  border-top: 1px solid var(--out);
+  padding: 10px 16px 14px;
+  display: flex; align-items: center; justify-content: space-between;
+  z-index: 20;
+  transition: background 0.35s, border-color 0.35s;
+}
+.b-bp-left { display: flex; align-items: center; gap: 10px; }
+.b-bp-avatar {
+  width: 38px; height: 38px; border-radius: 50%;
+  display: flex; align-items: center; justify-content: center;
+  font-size: 14px; font-weight: 800; flex-shrink: 0;
+}
+.b-bp-name { font-size: 13px; font-weight: 600; color: var(--on-s); transition: color 0.35s; }
+.b-bp-amount {
+  font-family: 'Fraunces', serif;
+  font-size: 18px; font-weight: 700; color: var(--ter);
+  transition: color 0.35s;
+}
+.b-bp-btn {
+  background: transparent; border: none;
+  font-family: 'Plus Jakarta Sans', sans-serif;
+  font-size: 12px; font-weight: 700; color: var(--pri);
+  cursor: pointer; padding: 6px 10px; border-radius: 8px;
+  transition: color 0.35s;
+}
+
+</style>
+</head>
+<body>
+
+<div class="proto-banner">⚠ Prototype · ExpenseScreen · Elegir una opción antes de implementar</div>
+
+<div class="controls">
+  <button class="ctrl-btn" id="modeBtn" onclick="toggleMode()">☾ Dark mode</button>
+</div>
+
+<div class="phones-row">
+
+  <!-- ══ OPTION A ══ -->
+  <div class="phone-col">
+    <div class="option-label">Opción A</div>
+    <div class="option-name">Lista con barra de resumen</div>
+
+    <div class="phone lt" id="phoneA">
+      <div class="status-bar" style="background:var(--bg);color:var(--on-sv);">
+        <span>12:30</span><span>▲ WiFi 🔋</span>
+      </div>
+
+      <div class="a-large-bar">
+        <div class="a-large-bar-row"></div>
+        <div class="a-large-bar-title">Gastos</div>
+      </div>
+
+      <!-- Summary strip -->
+      <div class="a-summary-bar">
+        <div class="a-summary-total">
+          <div class="a-sum-label">Total del grupo</div>
+          <div class="a-sum-amount">$47.850</div>
+        </div>
+        <div class="a-pending-chip">⚠ $3.200 por liquidar</div>
+      </div>
+
+      <div class="scroll-area">
+        <!-- Fully assigned card -->
+        <div class="a-expense-card">
+          <div class="a-card-accent accent-ok"></div>
+          <div class="a-card-body">
+            <div class="a-item-header">
+              <div>
+                <div class="a-item-name">Asado del sábado</div>
+                <div class="a-item-prices">$1.200 c/u · x4 unidades</div>
+              </div>
+              <div class="a-item-total">$4.800</div>
+            </div>
+            <div class="a-assign-row">
+              <div class="assign-chip mav-blue">N · x2</div>
+              <div class="assign-chip mav-purp">S · x1</div>
+              <div class="assign-chip mav-ora">T · x1</div>
+            </div>
+            <div class="a-my-row">
+              <div class="a-my-label">Mis unidades: 2</div>
+              <div class="a-stepper">
+                <button class="a-step-btn">−</button>
+                <span class="a-step-val">2</span>
+                <button class="a-step-btn">+</button>
+              </div>
+            </div>
+          </div>
+        </div>
+
+        <!-- Partially assigned card -->
+        <div class="a-expense-card">
+          <div class="a-card-accent accent-warn"></div>
+          <div class="a-card-body">
+            <div class="a-item-header">
+              <div>
+                <div class="a-item-name">Vino Malbec</div>
+                <div class="a-item-prices">$3.200 c/u · x2 unidades</div>
+              </div>
+              <div class="a-item-total">$6.400</div>
+            </div>
+            <div class="a-assign-row">
+              <div class="assign-chip mav-blue">N · x1</div>
+            </div>
+            <div class="a-my-row">
+              <div class="a-my-label">Mis unidades: 1</div>
+              <div class="a-stepper">
+                <button class="a-step-btn">−</button>
+                <span class="a-step-val">1</span>
+                <button class="a-step-btn">+</button>
+              </div>
+            </div>
+          </div>
+        </div>
+
+        <!-- Another card -->
+        <div class="a-expense-card">
+          <div class="a-card-accent accent-ok"></div>
+          <div class="a-card-body">
+            <div class="a-item-header">
+              <div>
+                <div class="a-item-name">Combustible</div>
+                <div class="a-item-prices">$9.500 c/u · x4 personas</div>
+              </div>
+              <div class="a-item-total">$38.000</div>
+            </div>
+            <div class="a-assign-row">
+              <div class="assign-chip mav-blue">N · x1</div>
+              <div class="assign-chip mav-purp">S · x1</div>
+              <div class="assign-chip mav-ora">T · x1</div>
+              <div class="assign-chip mav-green">V · x1</div>
+            </div>
+            <div class="a-my-row">
+              <div class="a-my-label">Mis unidades: 1</div>
+              <div class="a-stepper">
+                <button class="a-step-btn">−</button>
+                <span class="a-step-val">1</span>
+                <button class="a-step-btn">+</button>
+              </div>
+            </div>
+          </div>
+        </div>
+
+        <!-- Warning -->
+        <div class="warn-card">
+          <div class="warn-icon">⚠️</div>
+          <div>
+            <div class="warn-title">Vino Malbec</div>
+            <div class="warn-text">Quedan 1 ud. sin asignar por $3.200</div>
+          </div>
+        </div>
+
+        <button class="fab">＋ Agregar gasto</button>
+      </div>
+
+      <!-- Bottom panel -->
+      <div class="a-bottom-panel">
+        <div class="a-bp-left">
+          <div class="a-bp-avatar mav-blue">N</div>
+          <div>
+            <div class="a-bp-name">Nicolás L.</div>
+            <div class="a-bp-amount">$14.000</div>
+          </div>
+        </div>
+        <button class="a-bp-btn">Ver resumen ›</button>
+      </div>
+    </div>
+  </div>
+
+  <!-- ══ OPTION B ══ -->
+  <div class="phone-col">
+    <div class="option-label">Opción B</div>
+    <div class="option-name">Hero resumen · montos en terciario</div>
+
+    <div class="phone lt" id="phoneB">
+      <div class="status-bar" style="background:var(--bg);color:var(--on-sv);">
+        <span>12:30</span><span>▲ WiFi 🔋</span>
+      </div>
+
+      <div class="b-topbar">
+        <div class="b-topbar-row"></div>
+        <div class="b-topbar-title">Gastos</div>
+      </div>
+
+      <div class="b-scroll">
+        <!-- Hero summary card -->
+        <div class="b-hero-card">
+          <div class="b-hero-deco"></div>
+          <div class="b-hero-deco2"></div>
+          <div class="b-hero-eyebrow">Total del grupo</div>
+          <div class="b-hero-total">$47.850</div>
+          <div class="b-hero-breakdown">
+            <div class="b-breakdown-pill">
+              <div class="b-bp-label">Pagado</div>
+              <div class="b-bp-val">$44.650</div>
+            </div>
+            <div class="b-breakdown-pill">
+              <div class="b-bp-label">Por liquidar</div>
+              <div class="b-bp-val">$3.200</div>
+            </div>
+            <div class="b-breakdown-pill">
+              <div class="b-bp-label">Mis gastos</div>
+              <div class="b-bp-val">$14.000</div>
+            </div>
+          </div>
+        </div>
+
+        <div class="sec-label" style="margin-top:4px;">Ítems de gastos</div>
+
+        <!-- Fully assigned -->
+        <div class="b-expense-card">
+          <div class="b-card-inner">
+            <div class="b-item-header">
+              <div>
+                <div class="b-item-name">Asado del sábado</div>
+                <div class="b-item-meta">$1.200 c/u · x4 unidades</div>
+              </div>
+              <div class="b-item-total">$4.800</div>
+            </div>
+            <div class="b-assign-row">
+              <div class="assign-chip mav-blue">N · x2</div>
+              <div class="assign-chip mav-purp">S · x1</div>
+              <div class="assign-chip mav-ora">T · x1</div>
+            </div>
+            <div class="b-my-row">
+              <div class="b-my-label">Mis unidades: 2</div>
+              <div class="b-stepper">
+                <button class="b-step-btn">−</button>
+                <span class="b-step-val">2</span>
+                <button class="b-step-btn">+</button>
+              </div>
+            </div>
+          </div>
+        </div>
+
+        <!-- Partial -->
+        <div class="b-expense-card">
+          <div class="b-card-inner">
+            <div class="b-item-header">
+              <div>
+                <div class="b-item-name">Vino Malbec</div>
+                <div class="b-item-meta">$3.200 c/u · x2 unidades</div>
+              </div>
+              <div class="b-item-total">$6.400</div>
+            </div>
+            <div class="b-assign-row">
+              <div class="assign-chip mav-blue">N · x1</div>
+            </div>
+            <div class="b-my-row">
+              <div class="b-my-label">Mis unidades: 1</div>
+              <div class="b-stepper">
+                <button class="b-step-btn">−</button>
+                <span class="b-step-val">1</span>
+                <button class="b-step-btn">+</button>
+              </div>
+            </div>
+          </div>
+        </div>
+
+        <!-- Another -->
+        <div class="b-expense-card">
+          <div class="b-card-inner">
+            <div class="b-item-header">
+              <div>
+                <div class="b-item-name">Combustible</div>
+                <div class="b-item-meta">$9.500 c/u · x4 personas</div>
+              </div>
+              <div class="b-item-total">$38.000</div>
+            </div>
+            <div class="b-assign-row">
+              <div class="assign-chip mav-blue">N · x1</div>
+              <div class="assign-chip mav-purp">S · x1</div>
+              <div class="assign-chip mav-ora">T · x1</div>
+              <div class="assign-chip mav-green">V · x1</div>
+            </div>
+            <div class="b-my-row">
+              <div class="b-my-label">Mis unidades: 1</div>
+              <div class="b-stepper">
+                <button class="b-step-btn">−</button>
+                <span class="b-step-val">1</span>
+                <button class="b-step-btn">+</button>
+              </div>
+            </div>
+          </div>
+        </div>
+
+        <!-- Warning -->
+        <div class="warn-card">
+          <div class="warn-icon">⚠️</div>
+          <div>
+            <div class="warn-title">Vino Malbec</div>
+            <div class="warn-text">Quedan 1 ud. sin asignar por $3.200</div>
+          </div>
+        </div>
+
+        <button class="fab">＋ Agregar gasto</button>
+      </div>
+
+      <!-- Bottom panel -->
+      <div class="b-bottom-panel">
+        <div class="b-bp-left">
+          <div class="b-bp-avatar mav-blue">N</div>
+          <div>
+            <div class="b-bp-name">Nicolás L.</div>
+            <div class="b-bp-amount">$14.000</div>
+          </div>
+        </div>
+        <button class="b-bp-btn">Ver resumen ›</button>
+      </div>
+    </div>
+  </div>
+
+</div>
+
+<script>
+  let mode = 'lt';
+  function toggleMode() {
+    mode = mode === 'lt' ? 'dk' : 'lt';
+    document.getElementById('modeBtn').textContent = mode === 'lt' ? '☾ Dark mode' : '☀ Light mode';
+    document.getElementById('modeBtn').classList.toggle('active', mode === 'dk');
+    document.getElementById('phoneA').className = `phone ${mode}`;
+    document.getElementById('phoneB').className = `phone ${mode}`;
+  }
+</script>
+
+</body>
+</html>

@@ -1,0 +1,707 @@
+<!DOCTYPE html>
+<html lang="es">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>Plan Travel · Grupos · Especificación Final (PRD #35)</title>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link href="https://fonts.googleapis.com/css2?family=Fraunces:ital,opsz,wght@0,9..144,300;0,9..144,500;0,9..144,700;1,9..144,300&family=Plus+Jakarta+Sans:wght@300;400;500;600;700&display=swap" rel="stylesheet">
+<style>
+*, *::before, *::after { box-sizing: border-box; margin: 0; padding: 0; }
+
+body {
+  min-height: 100vh;
+  background: #0E0E0E;
+  display: flex; flex-direction: column;
+  align-items: center;
+  padding: 28px 24px 64px;
+  font-family: 'Plus Jakarta Sans', sans-serif;
+  gap: 20px;
+}
+
+.proto-banner {
+  font-size: 10px; font-weight: 700;
+  letter-spacing: 0.12em; text-transform: uppercase;
+  color: #555; border: 1px solid #2A2A2A;
+  padding: 5px 14px; border-radius: 100px;
+}
+
+.controls {
+  display: flex; gap: 8px; flex-wrap: wrap;
+  justify-content: center; align-items: center;
+}
+.ctrl-btn {
+  padding: 8px 18px; border-radius: 100px;
+  border: 1.5px solid #2E2E2E;
+  background: #1A1A1A; color: #666;
+  font-family: 'Plus Jakarta Sans', sans-serif;
+  font-size: 12px; font-weight: 700;
+  cursor: pointer; transition: all 0.22s ease;
+  letter-spacing: 0.03em;
+}
+.ctrl-btn:hover { background: #242424; color: #ccc; border-color: #444; }
+.ctrl-btn.active { background: #242424; color: #fff; border-color: #666; }
+.divider { width: 1px; height: 28px; background: #2A2A2A; display: inline-block; }
+
+.phones-row {
+  display: flex; gap: 32px;
+  flex-wrap: wrap; justify-content: center; align-items: flex-start;
+}
+.phone-col { display: flex; flex-direction: column; align-items: center; gap: 10px; }
+.option-label {
+  font-size: 11px; font-weight: 800;
+  letter-spacing: 0.08em; text-transform: uppercase; color: #555;
+}
+.option-name { font-size: 13px; font-weight: 600; color: #888; text-align: center; margin-top: -4px; }
+
+/* ── Phone ── */
+.phone {
+  width: 340px; height: 720px;
+  border-radius: 46px; overflow: hidden;
+  position: relative; display: flex; flex-direction: column;
+  box-shadow:
+    0 0 0 1px rgba(255,255,255,0.07),
+    0 32px 80px rgba(0,0,0,0.85),
+    inset 0 0 0 1px rgba(255,255,255,0.04);
+}
+
+/* ── Atlas tokens ── */
+.lt {
+  --bg: #F8FAFF; --surf: #FFFFFF; --surf-v: #EDF1FB;
+  --pri: #2563EB; --on-pri: #FFFFFF;
+  --pri-c: #DBEAFE; --on-pri-c: #1E3A8A;
+  --sec: #7C3AED; --sec-c: #EDE9FE; --on-sec-c: #4C1D95;
+  --ter: #D97706; --ter-c: #FEF3C7; --on-ter-c: #78350F;
+  --on-bg: #0F172A; --on-s: #0F172A; --on-sv: #475569;
+  --out: #C4CEDF;
+  --sh1: 0 2px 8px rgba(37,99,235,0.08), 0 1px 3px rgba(0,0,0,0.04);
+  --sh2: 0 4px 20px rgba(37,99,235,0.13), 0 2px 6px rgba(0,0,0,0.06);
+}
+.dk {
+  --bg: #0A0C14; --surf: #141A27; --surf-v: #1E283E;
+  --pri: #60A5FA; --on-pri: #0A1A3E;
+  --pri-c: #1E3A6E; --on-pri-c: #BAD4FF;
+  --sec: #A78BFA; --sec-c: #3D1C8E; --on-sec-c: #D4BBFF;
+  --ter: #FBB928; --ter-c: #3A2200; --on-ter-c: #FFE08A;
+  --on-bg: #E2E8FF; --on-s: #E2E8FF; --on-sv: #8A9ABF;
+  --out: #384260;
+  --sh1: 0 2px 8px rgba(0,0,0,0.4), 0 1px 3px rgba(96,165,250,0.08);
+  --sh2: 0 4px 20px rgba(0,0,0,0.55), 0 2px 6px rgba(96,165,250,0.12);
+}
+
+.phone { background: var(--bg); color: var(--on-bg); transition: background 0.35s, color 0.35s; }
+
+/* ── Utility ── */
+.hidden { display: none !important; }
+
+/* ── Status bar ── */
+.status-bar {
+  padding: 14px 24px 6px;
+  display: flex; justify-content: space-between; align-items: center;
+  font-size: 11px; font-weight: 700; letter-spacing: 0.04em;
+  flex-shrink: 0;
+  background: var(--pri); color: var(--on-pri);
+  transition: background 0.35s, color 0.35s;
+}
+
+/* ── Icon button ── */
+.icon-btn {
+  width: 40px; height: 40px; border-radius: 50%;
+  border: none; background: transparent;
+  cursor: pointer; display: flex; align-items: center; justify-content: center;
+  font-size: 19px; transition: background 0.2s;
+  flex-shrink: 0; color: var(--on-pri);
+}
+.icon-btn:hover { background: rgba(255,255,255,0.12); }
+
+/* ── View system ── */
+.view { display: flex; flex-direction: column; flex: 1; overflow: hidden; }
+
+/* ── Section eyebrow ── */
+.sec-label {
+  font-size: 11px; font-weight: 800;
+  letter-spacing: 0.08em; text-transform: uppercase;
+  color: var(--on-sv); margin-bottom: 8px; padding: 0 2px;
+  transition: color 0.35s;
+}
+
+/* ── Shared card ── */
+.scard {
+  background: var(--surf); border-radius: 18px;
+  box-shadow: var(--sh1); overflow: hidden;
+  transition: background 0.35s, box-shadow 0.35s;
+}
+.scard-inner { padding: 4px 0; }
+
+/* ── Avatar colors ── */
+.av-blue  { background: rgba(37,99,235,0.14);  color: #2563EB; }
+.av-purp  { background: rgba(124,58,237,0.14);  color: #7C3AED; }
+.av-ora   { background: rgba(217,119,6,0.14);   color: #D97706; }
+.av-green { background: rgba(16,185,129,0.12);  color: #059669; }
+.av-teal  { background: rgba(6,182,212,0.13);   color: #0891B2; }
+.dk .av-blue  { background: rgba(96,165,250,0.18);  color: #60A5FA; }
+.dk .av-purp  { background: rgba(167,139,250,0.18); color: #A78BFA; }
+.dk .av-ora   { background: rgba(251,185,40,0.18);  color: #FBB928; }
+.dk .av-green { background: rgba(52,211,153,0.15);  color: #34D399; }
+.dk .av-teal  { background: rgba(34,211,238,0.15);  color: #22D3EE; }
+
+/* ── Primary button ── */
+.pri-btn {
+  width: 100%; background: var(--pri); color: var(--on-pri);
+  border: none; border-radius: 14px; padding: 13px;
+  display: flex; align-items: center; justify-content: center; gap: 6px;
+  font-family: 'Plus Jakarta Sans', sans-serif;
+  font-size: 14px; font-weight: 700; cursor: pointer;
+  box-shadow: 0 4px 14px rgba(37,99,235,0.3);
+  transition: background 0.35s, color 0.35s;
+}
+.dk .pri-btn { box-shadow: 0 4px 14px rgba(96,165,250,0.2); }
+
+/* ══════════════════════════════
+   NO-GROUP STATE
+══════════════════════════════ */
+
+.ng-header {
+  background: var(--pri);
+  padding: 4px 8px 44px;
+  flex-shrink: 0; position: relative; overflow: hidden;
+  transition: background 0.35s;
+}
+.ng-deco  { position: absolute; top: -50px; right: -50px; width: 180px; height: 180px; border-radius: 50%; background: rgba(255,255,255,0.06); pointer-events: none; }
+.ng-deco2 { position: absolute; bottom: -30px; left: -20px; width: 120px; height: 120px; border-radius: 50%; background: rgba(255,255,255,0.04); pointer-events: none; }
+.ng-toprow {
+  display: flex; align-items: center; height: 44px; padding: 0 8px;
+  position: relative; z-index: 1;
+}
+.ng-screen-title {
+  font-size: 16px; font-weight: 600; letter-spacing: -0.01em;
+  color: var(--on-pri); transition: color 0.35s;
+}
+.ng-body {
+  display: flex; flex-direction: column; align-items: center;
+  gap: 6px; padding-top: 8px; position: relative; z-index: 1;
+}
+.ng-icon { font-size: 40px; opacity: 0.9; }
+.ng-title {
+  font-family: 'Fraunces', serif;
+  font-size: 26px; font-weight: 700;
+  color: var(--on-pri); letter-spacing: -0.02em;
+  transition: color 0.35s;
+}
+.ng-subtitle { font-size: 12px; color: rgba(255,255,255,0.58); }
+
+.ng-content {
+  flex: 1; overflow-y: auto; scrollbar-width: none;
+  background: var(--bg);
+  padding: 20px 16px 24px;
+  display: flex; flex-direction: column; gap: 12px;
+  margin-top: -20px; border-radius: 22px 22px 0 0;
+  position: relative; z-index: 2;
+  box-shadow: 0 -2px 12px rgba(0,0,0,0.08);
+  transition: background 0.35s;
+}
+.ng-content::-webkit-scrollbar { display: none; }
+
+/* CTA card */
+.cta-card {
+  background: var(--surf); border: 1.5px solid var(--out);
+  border-radius: 16px; padding: 14px 16px;
+  display: flex; align-items: center; gap: 12px;
+  cursor: pointer; box-shadow: var(--sh1);
+  transition: background 0.2s, border-color 0.22s, box-shadow 0.22s;
+}
+.cta-card.open { border-color: var(--pri); box-shadow: 0 0 0 2px rgba(37,99,235,0.1), var(--sh1); }
+.dk .cta-card.open { box-shadow: 0 0 0 2px rgba(96,165,250,0.15), var(--sh1); }
+.cta-icon {
+  width: 40px; height: 40px; border-radius: 13px;
+  background: var(--pri-c);
+  display: flex; align-items: center; justify-content: center;
+  font-size: 19px; flex-shrink: 0; font-weight: 700;
+  color: var(--on-pri-c);
+  transition: background 0.35s, color 0.35s;
+}
+.cta-text { flex: 1; }
+.cta-label { font-size: 15px; font-weight: 700; color: var(--on-s); transition: color 0.35s; }
+.cta-desc { font-size: 11px; color: var(--on-sv); margin-top: 2px; transition: color 0.35s; }
+.cta-arr {
+  font-size: 20px; color: var(--out); line-height: 1;
+  transition: transform 0.22s, color 0.22s;
+}
+.cta-card.open .cta-arr { transform: rotate(90deg); color: var(--pri); }
+
+/* Inline form */
+.inline-form {
+  display: none; flex-direction: column; gap: 10px; padding: 0 2px;
+}
+.inline-form.open { display: flex; animation: fadeSlide 0.22s ease; }
+@keyframes fadeSlide { from { opacity: 0; transform: translateY(-6px); } to { opacity: 1; transform: translateY(0); } }
+.form-input {
+  width: 100%; background: var(--surf-v); border: 1.5px solid var(--out);
+  border-radius: 12px; padding: 11px 14px;
+  font-family: 'Plus Jakarta Sans', sans-serif;
+  font-size: 13px; color: var(--on-s); outline: none;
+  transition: background 0.35s, border-color 0.35s, color 0.35s;
+}
+
+/* Or divider */
+.or-div { display: flex; align-items: center; gap: 10px; padding: 0 2px; }
+.or-line { flex: 1; height: 1px; background: var(--out); transition: background 0.35s; }
+.or-text { font-size: 11px; font-weight: 700; color: var(--on-sv); transition: color 0.35s; }
+
+/* ══════════════════════════════
+   GROUP DETAIL STATE
+══════════════════════════════ */
+
+.gd-header {
+  background: var(--pri);
+  padding: 4px 8px 36px;
+  flex-shrink: 0; position: relative; overflow: hidden;
+  transition: background 0.35s;
+}
+.gd-deco  { position: absolute; top: -40px; right: -40px; width: 160px; height: 160px; border-radius: 50%; background: rgba(255,255,255,0.06); pointer-events: none; }
+.gd-deco2 { position: absolute; bottom: -20px; left: -20px; width: 100px; height: 100px; border-radius: 50%; background: rgba(255,255,255,0.04); pointer-events: none; }
+.gd-toprow {
+  display: flex; align-items: center; justify-content: flex-end;
+  height: 44px; padding: 0 4px; position: relative; z-index: 1;
+}
+.gd-body {
+  display: flex; flex-direction: column; align-items: center;
+  gap: 8px; padding-top: 4px; position: relative; z-index: 1;
+}
+
+/* Avatar stack in header */
+.gd-av-stack { display: flex; }
+.gd-av {
+  width: 34px; height: 34px; border-radius: 50%;
+  border: 2.5px solid var(--pri);
+  display: flex; align-items: center; justify-content: center;
+  font-family: 'Fraunces', serif; font-size: 12px; font-weight: 700;
+  margin-left: -10px; transition: border-color 0.35s;
+}
+.gd-av:first-child { margin-left: 0; }
+.gd-av-overflow {
+  background: rgba(255,255,255,0.2); color: var(--on-pri);
+  font-family: 'Plus Jakarta Sans', sans-serif; font-size: 10px; font-weight: 800;
+}
+.gd-name {
+  font-family: 'Fraunces', serif;
+  font-size: 22px; font-weight: 700;
+  color: var(--on-pri); letter-spacing: -0.02em;
+  transition: color 0.35s;
+}
+.gd-badge {
+  background: rgba(255,255,255,0.18); color: var(--on-pri);
+  border-radius: 100px; padding: 4px 12px;
+  font-size: 11px; font-weight: 700; letter-spacing: 0.04em;
+}
+
+/* Content card */
+.gd-content {
+  flex: 1; overflow-y: auto; scrollbar-width: none;
+  background: var(--bg);
+  padding: 18px 14px 24px;
+  display: flex; flex-direction: column; gap: 14px;
+  margin-top: -18px; border-radius: 20px 20px 0 0;
+  position: relative; z-index: 2;
+  box-shadow: 0 -2px 12px rgba(0,0,0,0.08);
+  transition: background 0.35s;
+}
+.gd-content::-webkit-scrollbar { display: none; }
+
+/* Member rows */
+.member-row {
+  display: flex; align-items: center;
+  padding: 9px 16px; gap: 12px;
+  border-bottom: 1px solid var(--out);
+  transition: border-color 0.35s;
+}
+.member-row:last-child { border-bottom: none; }
+.mavatar {
+  width: 34px; height: 34px; border-radius: 11px;
+  display: flex; align-items: center; justify-content: center;
+  font-size: 13px; font-weight: 800; flex-shrink: 0;
+}
+.member-name { font-size: 14px; font-weight: 600; color: var(--on-s); flex: 1; transition: color 0.35s; }
+.role-chip { border-radius: 100px; padding: 3px 9px; font-size: 10px; font-weight: 800; flex-shrink: 0; }
+.role-admin  { background: var(--pri-c); color: var(--on-pri-c); transition: background 0.35s, color 0.35s; }
+.role-member { background: var(--surf-v); color: var(--on-sv); transition: background 0.35s, color 0.35s; }
+.kick-btn {
+  width: 26px; height: 26px; border-radius: 50%;
+  border: 1.5px solid rgba(239,68,68,0.3); background: transparent;
+  color: #EF4444; font-size: 12px; cursor: pointer;
+  display: flex; align-items: center; justify-content: center;
+  flex-shrink: 0; transition: background 0.2s, border-color 0.2s;
+}
+.kick-btn:hover { background: rgba(239,68,68,0.08); border-color: rgba(239,68,68,0.5); }
+
+/* Invite section */
+.invite-scard {
+  background: var(--surf); border-radius: 18px; box-shadow: var(--sh1);
+  padding: 14px 16px; display: flex; flex-direction: column; gap: 10px;
+  transition: background 0.35s, box-shadow 0.35s;
+}
+.invite-pill {
+  background: var(--pri-c); border-radius: 12px;
+  padding: 13px 16px;
+  display: flex; align-items: center; justify-content: center;
+  transition: background 0.35s;
+}
+.invite-code {
+  font-family: 'Fraunces', serif;
+  font-size: 19px; font-weight: 700;
+  letter-spacing: 0.15em; color: var(--on-pri-c);
+  transition: color 0.35s;
+}
+.invite-actions { display: flex; gap: 8px; }
+.invite-chip {
+  display: flex; align-items: center; gap: 5px;
+  border-radius: 100px; padding: 6px 12px;
+  font-size: 12px; font-weight: 700; cursor: pointer; flex-shrink: 0;
+}
+.chip-copy  { background: var(--sec-c); color: var(--on-sec-c); transition: background 0.35s, color 0.35s; }
+.chip-share { background: var(--surf-v); color: var(--on-sv); transition: background 0.35s, color 0.35s; }
+.invite-expiry {
+  display: flex; align-items: center; gap: 5px;
+  font-size: 12px; font-weight: 600; color: var(--ter);
+  transition: color 0.35s;
+}
+.invite-qr-btn {
+  width: 100%; background: transparent; border: 1.5px solid var(--out);
+  border-radius: 10px; padding: 7px 12px;
+  font-family: 'Plus Jakarta Sans', sans-serif;
+  font-size: 12px; font-weight: 600; color: var(--on-sv);
+  cursor: pointer; display: flex; align-items: center; justify-content: center; gap: 5px;
+  transition: border-color 0.22s, color 0.22s, background 0.22s;
+}
+.invite-qr-btn.qr-open { border-color: var(--pri); color: var(--pri); background: var(--pri-c); }
+.qr-block {
+  display: none; align-items: center; justify-content: center;
+  background: var(--surf-v); border-radius: 12px; padding: 16px;
+  transition: background 0.35s;
+}
+.qr-block.open { display: flex; }
+.qr-img {
+  width: 80px; height: 80px; background: #fff; border-radius: 6px;
+  display: flex; align-items: center; justify-content: center;
+  font-size: 9px; font-weight: 700; color: #333; letter-spacing: 0.05em;
+  box-shadow: 0 2px 8px rgba(0,0,0,0.1);
+}
+
+/* ── Admin bottom sheet ── */
+.sheet-overlay {
+  position: absolute; inset: 0;
+  background: rgba(0,0,0,0.5); z-index: 50;
+  display: none; align-items: flex-end;
+}
+.sheet-overlay.open { display: flex; }
+.sheet {
+  background: var(--surf); border-radius: 24px 24px 0 0;
+  width: 100%; padding: 0 20px 28px;
+  display: flex; flex-direction: column; gap: 14px;
+  transition: background 0.35s;
+  animation: sheetUp 0.28s ease;
+}
+@keyframes sheetUp { from { transform: translateY(24px); opacity: 0; } to { transform: translateY(0); opacity: 1; } }
+.sheet-handle {
+  width: 40px; height: 4px; border-radius: 2px;
+  background: var(--out); margin: 12px auto 2px;
+  transition: background 0.35s;
+}
+.sheet-title {
+  font-family: 'Fraunces', serif;
+  font-size: 18px; font-weight: 700;
+  color: var(--on-s); letter-spacing: -0.01em;
+  transition: color 0.35s;
+}
+.sheet-field-label {
+  font-size: 11px; font-weight: 700; color: var(--on-sv);
+  margin-bottom: -8px; transition: color 0.35s;
+}
+.sheet-input {
+  width: 100%; background: var(--surf-v); border: 1.5px solid var(--out);
+  border-radius: 12px; padding: 11px 14px;
+  font-family: 'Plus Jakarta Sans', sans-serif;
+  font-size: 14px; color: var(--on-s); outline: none;
+  transition: background 0.35s, border-color 0.35s, color 0.35s;
+}
+.sheet-save {
+  width: 100%; background: var(--pri); color: var(--on-pri);
+  border: none; border-radius: 14px; padding: 13px;
+  font-family: 'Plus Jakarta Sans', sans-serif;
+  font-size: 14px; font-weight: 700; cursor: pointer;
+  box-shadow: 0 4px 14px rgba(37,99,235,0.3);
+  transition: background 0.35s, color 0.35s;
+}
+.dk .sheet-save { box-shadow: 0 4px 14px rgba(96,165,250,0.2); }
+.sheet-delete {
+  width: 100%; background: transparent; color: #EF4444;
+  border: 1.5px solid rgba(239,68,68,0.35); border-radius: 14px; padding: 13px;
+  font-family: 'Plus Jakarta Sans', sans-serif;
+  font-size: 14px; font-weight: 600; cursor: pointer;
+}
+</style>
+</head>
+<body>
+
+<div class="proto-banner">Prototipo · Grupos · Opción B — Especificación Final (PRD #35)</div>
+
+<div class="controls">
+  <button class="ctrl-btn" id="modeBtn" onclick="toggleMode()">☾ Dark mode</button>
+  <div class="divider"></div>
+  <button class="ctrl-btn active" id="btnNogroup" onclick="setState('nogroup')">😶 Sin grupo</button>
+  <button class="ctrl-btn" id="btnGroup" onclick="setState('group')">👥 En grupo</button>
+  <div class="divider"></div>
+  <button class="ctrl-btn active" id="btnAdmin" onclick="setRole('admin')">👑 Admin</button>
+  <button class="ctrl-btn" id="btnMember" onclick="setRole('member')">👤 Miembro</button>
+  <div class="divider"></div>
+  <button class="ctrl-btn" id="btnSheet" onclick="toggleSheet()">⚙ Config</button>
+  <button class="ctrl-btn active" id="btnCode" onclick="toggleCode()">🔑 Con código</button>
+</div>
+
+<div class="phones-row">
+  <div class="phone-col">
+    <div class="option-label">Opción B · Especificación Final</div>
+    <div class="option-name">Modelo de grupo único · Layout inmersivo</div>
+
+    <div class="phone lt" id="phone">
+      <div class="status-bar">
+        <span>12:30</span><span>▲ WiFi 🔋</span>
+      </div>
+
+      <!-- ══ NO-GROUP VIEW ══ -->
+      <div class="view" id="v-nogroup">
+        <div class="ng-header">
+          <div class="ng-deco"></div>
+          <div class="ng-deco2"></div>
+          <div class="ng-toprow">
+            <div class="ng-screen-title">Grupo</div>
+          </div>
+          <div class="ng-body">
+            <div class="ng-icon">✈️</div>
+            <div class="ng-title">Sin grupo aún</div>
+            <div class="ng-subtitle">Creá o unite a uno para planificar</div>
+          </div>
+        </div>
+
+        <div class="ng-content">
+          <!-- CTA: Crear grupo -->
+          <div class="cta-card" id="ctaCreate" onclick="toggleCreateForm()">
+            <div class="cta-icon">＋</div>
+            <div class="cta-text">
+              <div class="cta-label">Crear grupo</div>
+              <div class="cta-desc">Invitá personas con un código</div>
+            </div>
+            <div class="cta-arr">›</div>
+          </div>
+          <div class="inline-form" id="createForm">
+            <input class="form-input" placeholder="Nombre del grupo, ej: Viaje a Bariloche" />
+            <button class="pri-btn">＋ Crear</button>
+          </div>
+
+          <div class="or-div">
+            <div class="or-line"></div>
+            <div class="or-text">o</div>
+            <div class="or-line"></div>
+          </div>
+
+          <!-- CTA: Unirme con código -->
+          <div class="cta-card" id="ctaJoin" onclick="toggleJoinForm()">
+            <div class="cta-icon">🔗</div>
+            <div class="cta-text">
+              <div class="cta-label">Unirme con código</div>
+              <div class="cta-desc">Ingresá el código de invitación</div>
+            </div>
+            <div class="cta-arr">›</div>
+          </div>
+          <div class="inline-form" id="joinForm">
+            <input class="form-input" placeholder="Código de invitación" value="VIAJ-XKZQ" />
+            <button class="pri-btn">🔗 Unirme</button>
+          </div>
+        </div>
+      </div>
+
+      <!-- ══ GROUP DETAIL VIEW ══ -->
+      <div class="view hidden" id="v-group">
+        <div class="gd-header">
+          <div class="gd-deco"></div>
+          <div class="gd-deco2"></div>
+          <div class="gd-toprow">
+            <button class="icon-btn" id="gearBtn" onclick="toggleSheet()" title="Configurar grupo">⚙</button>
+            <button class="icon-btn hidden" id="exitBtn" title="Salir del grupo">🚪</button>
+          </div>
+          <div class="gd-body">
+            <div class="gd-av-stack">
+              <div class="gd-av av-blue">N</div>
+              <div class="gd-av av-purp">S</div>
+              <div class="gd-av av-ora">T</div>
+              <div class="gd-av av-green">V</div>
+              <div class="gd-av gd-av-overflow">+1</div>
+            </div>
+            <div class="gd-name">Viaje a Bariloche</div>
+            <div class="gd-badge">👥 5 integrantes</div>
+          </div>
+        </div>
+
+        <!-- Content slides up -->
+        <div class="gd-content">
+
+          <!-- Members -->
+          <div>
+            <div class="sec-label">Integrantes</div>
+            <div class="scard">
+              <div class="scard-inner">
+                <div class="member-row">
+                  <div class="mavatar av-blue">N</div>
+                  <div class="member-name">Nicolás L.</div>
+                  <div class="role-chip role-admin">Admin</div>
+                </div>
+                <div class="member-row">
+                  <div class="mavatar av-purp">S</div>
+                  <div class="member-name">Sofía M.</div>
+                  <div class="role-chip role-member">Miembro</div>
+                  <button class="kick-btn admin-only" title="Expulsar">✕</button>
+                </div>
+                <div class="member-row">
+                  <div class="mavatar av-ora">T</div>
+                  <div class="member-name">Tomás R.</div>
+                  <div class="role-chip role-member">Miembro</div>
+                  <button class="kick-btn admin-only" title="Expulsar">✕</button>
+                </div>
+                <div class="member-row">
+                  <div class="mavatar av-green">V</div>
+                  <div class="member-name">Valentina P.</div>
+                  <div class="role-chip role-member">Miembro</div>
+                  <button class="kick-btn admin-only" title="Expulsar">✕</button>
+                </div>
+                <div class="member-row">
+                  <div class="mavatar av-teal">P</div>
+                  <div class="member-name">Pedro Q.</div>
+                  <div class="role-chip role-member">Miembro</div>
+                  <button class="kick-btn admin-only" title="Expulsar">✕</button>
+                </div>
+              </div>
+            </div>
+          </div>
+
+          <!-- Invite -->
+          <div>
+            <div class="sec-label">Invitar</div>
+            <div class="invite-scard">
+              <!-- No code state -->
+              <div id="inviteGen">
+                <button class="pri-btn">＋ Generar código</button>
+              </div>
+              <!-- Code exists state -->
+              <div id="inviteActive" class="hidden" style="display:flex;flex-direction:column;gap:10px;">
+                <div class="invite-pill">
+                  <div class="invite-code">VIAJ-XKZQ</div>
+                </div>
+                <div class="invite-actions">
+                  <div class="invite-chip chip-copy">📋 Copiar</div>
+                  <div class="invite-chip chip-share">↗ Compartir</div>
+                </div>
+                <div class="invite-expiry">⏱ Vence en 6 horas</div>
+                <button class="invite-qr-btn" id="qrToggleBtn" onclick="toggleQr()">📷 Ver QR</button>
+                <div class="qr-block" id="qrBlock">
+                  <div class="qr-img">QR CODE</div>
+                </div>
+              </div>
+            </div>
+          </div>
+
+        </div>
+
+        <!-- Admin bottom sheet -->
+        <div class="sheet-overlay" id="sheetOverlay" onclick="closeSheet(event)">
+          <div class="sheet" onclick="event.stopPropagation()">
+            <div class="sheet-handle"></div>
+            <div class="sheet-title">Configuración del grupo</div>
+            <div class="sheet-field-label">Nombre del grupo</div>
+            <input class="sheet-input" value="Viaje a Bariloche" />
+            <button class="sheet-save">Guardar cambios</button>
+            <button class="sheet-delete">🗑 Eliminar grupo</button>
+          </div>
+        </div>
+      </div>
+
+    </div>
+  </div>
+</div>
+
+<script>
+  let mode = 'lt';
+  let appState = 'nogroup';
+  let role = 'admin';
+  let showSheet = false;
+  let showCode = true;
+  let showQr = false;
+  let showCreateForm = false;
+  let showJoinForm = false;
+
+  function render() {
+    document.getElementById('phone').className = `phone ${mode}`;
+
+    document.getElementById('v-nogroup').classList.toggle('hidden', appState !== 'nogroup');
+    document.getElementById('v-group').classList.toggle('hidden', appState !== 'group');
+
+    document.getElementById('gearBtn').classList.toggle('hidden', role !== 'admin');
+    document.getElementById('exitBtn').classList.toggle('hidden', role !== 'member');
+    document.querySelectorAll('.admin-only').forEach(el => {
+      el.classList.toggle('hidden', role !== 'admin');
+    });
+
+    const overlay = document.getElementById('sheetOverlay');
+    overlay.classList.toggle('open', showSheet && appState === 'group' && role === 'admin');
+
+    document.getElementById('inviteGen').classList.toggle('hidden', showCode);
+    document.getElementById('inviteActive').classList.toggle('hidden', !showCode);
+
+    const qrBlock = document.getElementById('qrBlock');
+    const qrBtn = document.getElementById('qrToggleBtn');
+    if (qrBlock) qrBlock.classList.toggle('open', showQr);
+    if (qrBtn) {
+      qrBtn.classList.toggle('qr-open', showQr);
+      qrBtn.textContent = showQr ? '📷 Ocultar QR' : '📷 Ver QR';
+    }
+
+    document.getElementById('ctaCreate').classList.toggle('open', showCreateForm);
+    document.getElementById('ctaJoin').classList.toggle('open', showJoinForm);
+    document.getElementById('createForm').classList.toggle('open', showCreateForm);
+    document.getElementById('joinForm').classList.toggle('open', showJoinForm);
+
+    document.getElementById('modeBtn').textContent = mode === 'lt' ? '☾ Dark mode' : '☀ Light mode';
+    document.getElementById('modeBtn').classList.toggle('active', mode === 'dk');
+    document.getElementById('btnNogroup').classList.toggle('active', appState === 'nogroup');
+    document.getElementById('btnGroup').classList.toggle('active', appState === 'group');
+    document.getElementById('btnAdmin').classList.toggle('active', role === 'admin');
+    document.getElementById('btnMember').classList.toggle('active', role === 'member');
+    document.getElementById('btnSheet').classList.toggle('active', showSheet && appState === 'group');
+    document.getElementById('btnCode').textContent = showCode ? '🔑 Con código' : '🔑 Sin código';
+    document.getElementById('btnCode').classList.toggle('active', showCode);
+  }
+
+  function toggleMode() { mode = mode === 'lt' ? 'dk' : 'lt'; render(); }
+  function setState(s) { appState = s; showSheet = false; render(); }
+  function setRole(r) { role = r; render(); }
+  function toggleSheet() { showSheet = !showSheet; render(); }
+  function closeSheet(e) { showSheet = false; render(); }
+  function toggleCode() { showCode = !showCode; showQr = false; render(); }
+  function toggleQr() { showQr = !showQr; render(); }
+
+  function toggleCreateForm() {
+    showCreateForm = !showCreateForm;
+    if (showCreateForm) showJoinForm = false;
+    render();
+  }
+  function toggleJoinForm() {
+    showJoinForm = !showJoinForm;
+    if (showJoinForm) showCreateForm = false;
+    render();
+  }
+
+  render();
+</script>
+
+</body>
+</html>

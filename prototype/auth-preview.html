@@ -1,0 +1,646 @@
+<!DOCTYPE html>
+<html lang="es">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>Plan Travel · Auth Screens Prototype</title>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link href="https://fonts.googleapis.com/css2?family=Fraunces:ital,opsz,wght@0,9..144,300;0,9..144,500;0,9..144,700;1,9..144,300&family=Plus+Jakarta+Sans:wght@300;400;500;600;700&display=swap" rel="stylesheet">
+<style>
+*, *::before, *::after { box-sizing: border-box; margin: 0; padding: 0; }
+
+body {
+  min-height: 100vh;
+  background: #0E0E0E;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  padding: 28px 24px 64px;
+  font-family: 'Plus Jakarta Sans', sans-serif;
+  gap: 20px;
+}
+
+.proto-banner {
+  font-size: 10px; font-weight: 700;
+  letter-spacing: 0.12em; text-transform: uppercase;
+  color: #555; border: 1px solid #2A2A2A;
+  padding: 5px 14px; border-radius: 100px;
+}
+
+/* ── Controls ── */
+.controls {
+  display: flex; gap: 8px; flex-wrap: wrap;
+  justify-content: center; align-items: center;
+}
+.ctrl-btn {
+  padding: 8px 18px; border-radius: 100px;
+  border: 1.5px solid #2E2E2E;
+  background: #1A1A1A; color: #666;
+  font-family: 'Plus Jakarta Sans', sans-serif;
+  font-size: 12px; font-weight: 700;
+  cursor: pointer; transition: all 0.22s ease;
+  letter-spacing: 0.03em;
+}
+.ctrl-btn:hover { background: #242424; color: #ccc; border-color: #444; }
+.ctrl-btn.active { background: #242424; color: #fff; border-color: #666; }
+
+.divider { width: 1px; height: 28px; background: #2A2A2A; display: inline-block; }
+
+/* ── Side-by-side phones ── */
+.phones-row {
+  display: flex; gap: 32px;
+  flex-wrap: wrap; justify-content: center;
+  align-items: flex-start;
+}
+
+.phone-col { display: flex; flex-direction: column; align-items: center; gap: 10px; }
+
+.option-label {
+  font-size: 11px; font-weight: 800;
+  letter-spacing: 0.08em; text-transform: uppercase;
+  color: #555;
+}
+.option-name { font-size: 13px; font-weight: 600; color: #888; text-align: center; margin-top: -4px; }
+
+/* ── Phone frame ── */
+.phone {
+  width: 340px; height: 720px;
+  border-radius: 46px; overflow: hidden;
+  position: relative; display: flex; flex-direction: column;
+  box-shadow:
+    0 0 0 1px rgba(255,255,255,0.07),
+    0 32px 80px rgba(0,0,0,0.85),
+    inset 0 0 0 1px rgba(255,255,255,0.04);
+  transition: background 0.35s;
+}
+
+/* ── Atlas palette tokens ── */
+.lt {
+  --bg: #F8FAFF; --surf: #FFFFFF; --surf-v: #EDF1FB;
+  --pri: #2563EB; --on-pri: #FFFFFF;
+  --pri-c: #DBEAFE; --on-pri-c: #1E3A8A;
+  --sec: #7C3AED; --sec-c: #EDE9FE; --on-sec-c: #4C1D95;
+  --ter: #D97706; --ter-c: #FEF3C7; --on-ter-c: #78350F;
+  --on-bg: #0F172A; --on-s: #0F172A; --on-sv: #475569;
+  --out: #C4CEDF; --err: #DC2626;
+  --field-bg: #F1F5F9;
+}
+.dk {
+  --bg: #0A0C14; --surf: #141A27; --surf-v: #1E283E;
+  --pri: #60A5FA; --on-pri: #0A1A3E;
+  --pri-c: #1E3A6E; --on-pri-c: #BAD4FF;
+  --sec: #A78BFA; --sec-c: #3D1C8E; --on-sec-c: #D4BBFF;
+  --ter: #FBB928; --ter-c: #3A2200; --on-ter-c: #FFE08A;
+  --on-bg: #E2E8FF; --on-s: #E2E8FF; --on-sv: #8A9ABF;
+  --out: #384260; --err: #F87171;
+  --field-bg: #1E283E;
+}
+
+/* ── Status bar ── */
+.status-bar {
+  padding: 14px 24px 6px;
+  display: flex; justify-content: space-between; align-items: center;
+  font-size: 11px; font-weight: 700;
+  letter-spacing: 0.04em;
+  flex-shrink: 0;
+  transition: background 0.35s, color 0.35s;
+}
+
+/* ── Screen containers (hidden by default, shown via JS) ── */
+.screen { display: none; flex-direction: column; flex: 1; overflow: hidden; }
+.screen.active { display: flex; }
+
+/* ══════════════════════════════════
+   OPTION A — Brand top, form bottom
+══════════════════════════════════ */
+.opt-a { background: var(--bg); transition: background 0.35s; }
+
+.opt-a .status-bar {
+  background: var(--pri); color: var(--on-pri);
+}
+
+.brand-panel {
+  background: var(--pri);
+  padding: 20px 28px 36px;
+  flex-shrink: 0;
+  display: flex; flex-direction: column;
+  gap: 8px;
+  position: relative;
+  overflow: hidden;
+  transition: background 0.35s;
+}
+
+.brand-panel::after {
+  content: '';
+  position: absolute;
+  bottom: -60px; left: -20px; right: -20px;
+  height: 100px;
+  background: var(--bg);
+  border-radius: 50% 50% 0 0 / 60px 60px 0 0;
+  transition: background 0.35s;
+}
+
+.brand-deco {
+  position: absolute;
+  top: -30px; right: -30px;
+  width: 140px; height: 140px;
+  border-radius: 50%;
+  background: rgba(255,255,255,0.06);
+  pointer-events: none;
+}
+.brand-deco-2 {
+  position: absolute;
+  bottom: 20px; left: -40px;
+  width: 100px; height: 100px;
+  border-radius: 50%;
+  background: rgba(255,255,255,0.04);
+  pointer-events: none;
+}
+
+.brand-emoji { font-size: 32px; margin-bottom: 2px; position: relative; z-index: 1; }
+.brand-name {
+  font-family: 'Fraunces', serif;
+  font-size: 32px; font-weight: 700;
+  color: var(--on-pri);
+  letter-spacing: -0.025em;
+  line-height: 1;
+  position: relative; z-index: 1;
+  transition: color 0.35s;
+}
+.brand-tag {
+  font-family: 'Fraunces', serif;
+  font-style: italic; font-weight: 300;
+  font-size: 14px;
+  color: var(--on-pri);
+  opacity: 0.8;
+  position: relative; z-index: 1;
+  transition: color 0.35s;
+}
+
+.form-card {
+  background: var(--bg);
+  flex: 1;
+  padding: 12px 24px 24px;
+  display: flex; flex-direction: column;
+  overflow-y: auto; scrollbar-width: none;
+  transition: background 0.35s;
+}
+.form-card::-webkit-scrollbar { display: none; }
+
+/* ══════════════════════════════════
+   OPTION B — Immersive form
+══════════════════════════════════ */
+.opt-b {
+  transition: background 0.35s;
+}
+
+.lt .opt-b { background: var(--bg); }
+.dk .opt-b { background: var(--bg); }
+
+.opt-b .status-bar {
+  background: transparent;
+  color: var(--on-sv);
+}
+
+.immersive-bg {
+  position: absolute; inset: 0;
+  pointer-events: none; z-index: 0;
+}
+
+.lt .immersive-bg {
+  background: linear-gradient(160deg, var(--pri-c) 0%, var(--bg) 45%);
+}
+.dk .immersive-bg {
+  background:
+    radial-gradient(ellipse 80% 50% at 50% -10%, rgba(96,165,250,0.18) 0%, transparent 70%),
+    var(--bg);
+}
+
+.immersive-content {
+  position: relative; z-index: 1;
+  flex: 1;
+  display: flex; flex-direction: column;
+  padding: 0 28px 28px;
+  overflow-y: auto; scrollbar-width: none;
+}
+.immersive-content::-webkit-scrollbar { display: none; }
+
+.immersive-header {
+  padding: 16px 0 32px;
+  display: flex; flex-direction: column;
+  align-items: center; gap: 6px;
+}
+
+.immersive-logo {
+  width: 56px; height: 56px;
+  border-radius: 18px;
+  background: var(--pri);
+  display: flex; align-items: center; justify-content: center;
+  font-size: 26px;
+  box-shadow: 0 8px 24px rgba(37,99,235,0.35);
+  margin-bottom: 4px;
+  transition: background 0.35s, box-shadow 0.35s;
+}
+
+.dk .immersive-logo {
+  box-shadow: 0 8px 32px rgba(96,165,250,0.30);
+}
+
+.imm-app-name {
+  font-family: 'Fraunces', serif;
+  font-size: 24px; font-weight: 700;
+  color: var(--on-bg);
+  letter-spacing: -0.02em;
+  transition: color 0.35s;
+}
+
+/* ── Shared form elements ── */
+.form-title {
+  font-family: 'Fraunces', serif;
+  font-size: 26px; font-weight: 600;
+  color: var(--on-bg);
+  letter-spacing: -0.02em;
+  margin-bottom: 4px;
+  transition: color 0.35s;
+}
+.form-sub {
+  font-size: 13px; font-weight: 400;
+  color: var(--on-sv);
+  margin-bottom: 22px;
+  line-height: 1.4;
+  transition: color 0.35s;
+}
+
+.field-group { display: flex; flex-direction: column; gap: 12px; margin-bottom: 6px; }
+
+.field-wrap { display: flex; flex-direction: column; gap: 5px; }
+.field-lbl {
+  font-size: 11px; font-weight: 700;
+  letter-spacing: 0.05em; text-transform: uppercase;
+  color: var(--on-sv);
+  transition: color 0.35s;
+}
+
+/* Option A fields — outlined */
+.field-a {
+  background: var(--surf);
+  border: 1.5px solid var(--out);
+  border-radius: 14px;
+  padding: 13px 16px;
+  font-family: 'Plus Jakarta Sans', sans-serif;
+  font-size: 14px; font-weight: 500;
+  color: var(--on-sv);
+  outline: none;
+  width: 100%;
+  transition: background 0.35s, border-color 0.35s, color 0.35s;
+  cursor: text;
+  appearance: none;
+}
+.field-a:focus { border-color: var(--pri); color: var(--on-s); }
+.field-a::placeholder { color: var(--on-sv); opacity: 0.5; }
+
+/* Option B fields — filled */
+.field-b {
+  background: var(--field-bg);
+  border: 1.5px solid transparent;
+  border-radius: 14px;
+  padding: 13px 16px;
+  font-family: 'Plus Jakarta Sans', sans-serif;
+  font-size: 14px; font-weight: 500;
+  color: var(--on-sv);
+  outline: none;
+  width: 100%;
+  transition: background 0.35s, border-color 0.25s, color 0.35s;
+  cursor: text;
+  appearance: none;
+}
+.field-b:focus { border-color: var(--pri); color: var(--on-s); }
+.field-b::placeholder { color: var(--on-sv); opacity: 0.45; }
+
+/* Primary button */
+.btn-pri {
+  width: 100%;
+  background: var(--pri); color: var(--on-pri);
+  border: none; border-radius: 16px;
+  padding: 15px;
+  font-family: 'Plus Jakarta Sans', sans-serif;
+  font-size: 15px; font-weight: 700;
+  cursor: pointer; letter-spacing: 0.01em;
+  margin-top: 18px;
+  transition: background 0.35s, color 0.35s, filter 0.2s, transform 0.15s;
+  box-shadow: 0 4px 16px rgba(37,99,235,0.35);
+}
+.btn-pri:hover { filter: brightness(1.08); transform: translateY(-1px); }
+.dk .btn-pri { box-shadow: 0 4px 16px rgba(96,165,250,0.25); }
+
+/* Google button */
+.btn-google {
+  width: 100%;
+  background: var(--surf); color: var(--on-s);
+  border: 1.5px solid var(--out);
+  border-radius: 16px; padding: 13px;
+  font-family: 'Plus Jakarta Sans', sans-serif;
+  font-size: 14px; font-weight: 600;
+  cursor: pointer; margin-top: 10px;
+  display: flex; align-items: center; justify-content: center; gap: 10px;
+  transition: background 0.35s, color 0.35s, border-color 0.35s, filter 0.2s;
+}
+.btn-google:hover { filter: brightness(0.97); }
+
+.divider-row {
+  display: flex; align-items: center; gap: 12px;
+  margin: 16px 0 4px;
+}
+.divider-line { flex: 1; height: 1px; background: var(--out); transition: background 0.35s; }
+.divider-text { font-size: 11px; font-weight: 600; color: var(--on-sv); letter-spacing: 0.04em; transition: color 0.35s; }
+
+.link-row {
+  text-align: center; margin-top: 18px;
+  font-size: 13px; color: var(--on-sv);
+  transition: color 0.35s;
+}
+.link-row a { color: var(--pri); font-weight: 700; text-decoration: none; transition: color 0.35s; }
+
+/* ── Profile setup specific ── */
+.avatar-picker {
+  width: 72px; height: 72px;
+  border-radius: 50%;
+  background: var(--pri-c);
+  border: 3px dashed var(--pri);
+  display: flex; align-items: center; justify-content: center;
+  font-size: 28px;
+  margin: 0 auto 20px;
+  cursor: pointer;
+  transition: background 0.35s, border-color 0.35s;
+}
+
+.welcome-badge {
+  background: var(--ter-c);
+  color: var(--on-ter-c);
+  border-radius: 100px;
+  padding: 4px 12px;
+  font-size: 11px; font-weight: 700;
+  letter-spacing: 0.04em;
+  display: inline-block;
+  margin-bottom: 6px;
+  transition: background 0.35s, color 0.35s;
+}
+
+/* Option B immersive — no card, fields float */
+.opt-b .form-title { text-align: left; }
+.opt-b .form-sub { text-align: left; }
+</style>
+</head>
+<body>
+
+<div class="proto-banner">⚠ Prototype · Eliminar después de elegir opción de auth</div>
+
+<div class="controls">
+  <button class="ctrl-btn active" onclick="setScreen('login',this)">Login</button>
+  <button class="ctrl-btn" onclick="setScreen('register',this)">Registro</button>
+  <button class="ctrl-btn" onclick="setScreen('profile',this)">Perfil Setup</button>
+  <div class="divider"></div>
+  <button class="ctrl-btn" id="modeBtn" onclick="toggleMode()">☾ Dark mode</button>
+</div>
+
+<div class="phones-row">
+
+  <!-- ══ OPTION A ══ -->
+  <div class="phone-col">
+    <div class="option-label">Opción A</div>
+    <div class="option-name">Brand top · Form bottom</div>
+    <div class="phone lt" id="phoneA">
+
+      <!-- LOGIN -->
+      <div class="screen opt-a active" id="a-login">
+        <div class="status-bar"><span>12:30</span><span>▲ WiFi 🔋</span></div>
+        <div class="brand-panel">
+          <div class="brand-deco"></div>
+          <div class="brand-deco-2"></div>
+          <div class="brand-emoji">✈️</div>
+          <div class="brand-name">Plan Travel</div>
+          <div class="brand-tag">Tu próxima aventura te espera</div>
+        </div>
+        <div class="form-card">
+          <div style="height:28px"></div>
+          <div class="form-title">Bienvenido de vuelta</div>
+          <div class="form-sub">Iniciá sesión para ver tus viajes</div>
+          <div class="field-group">
+            <div class="field-wrap">
+              <div class="field-lbl">Email</div>
+              <input class="field-a" type="text" placeholder="tu@email.com">
+            </div>
+            <div class="field-wrap">
+              <div class="field-lbl">Contraseña</div>
+              <input class="field-a" type="password" placeholder="••••••••">
+            </div>
+          </div>
+          <button class="btn-pri">Iniciar sesión</button>
+          <div class="divider-row">
+            <div class="divider-line"></div>
+            <div class="divider-text">O</div>
+            <div class="divider-line"></div>
+          </div>
+          <button class="btn-google">
+            <span>G</span> Continuar con Google
+          </button>
+          <div class="link-row">¿No tenés cuenta? <a href="#">Registrate</a></div>
+        </div>
+      </div>
+
+      <!-- REGISTER -->
+      <div class="screen opt-a" id="a-register">
+        <div class="status-bar"><span>12:30</span><span>▲ WiFi 🔋</span></div>
+        <div class="brand-panel">
+          <div class="brand-deco"></div>
+          <div class="brand-deco-2"></div>
+          <div class="brand-emoji">🗺️</div>
+          <div class="brand-name">Plan Travel</div>
+          <div class="brand-tag">Creá tu cuenta, es gratis</div>
+        </div>
+        <div class="form-card">
+          <div style="height:28px"></div>
+          <div class="form-title">Crear cuenta</div>
+          <div class="form-sub">Empezá a planear tu próximo viaje</div>
+          <div class="field-group">
+            <div class="field-wrap">
+              <div class="field-lbl">Nombre completo</div>
+              <input class="field-a" type="text" placeholder="Nicolás Llousas">
+            </div>
+            <div class="field-wrap">
+              <div class="field-lbl">Email</div>
+              <input class="field-a" type="text" placeholder="tu@email.com">
+            </div>
+            <div class="field-wrap">
+              <div class="field-lbl">Contraseña</div>
+              <input class="field-a" type="password" placeholder="••••••••">
+            </div>
+          </div>
+          <button class="btn-pri">Crear cuenta</button>
+          <div class="link-row" style="margin-top:14px">¿Ya tenés cuenta? <a href="#">Iniciá sesión</a></div>
+        </div>
+      </div>
+
+      <!-- PROFILE SETUP -->
+      <div class="screen opt-a" id="a-profile">
+        <div class="status-bar"><span>12:30</span><span>▲ WiFi 🔋</span></div>
+        <div class="brand-panel" style="padding-bottom:40px">
+          <div class="brand-deco"></div>
+          <div class="brand-deco-2"></div>
+          <div class="brand-emoji">🙌</div>
+          <div class="brand-name">¡Ya casi!</div>
+          <div class="brand-tag">Completá tu perfil para continuar</div>
+        </div>
+        <div class="form-card">
+          <div style="height:24px"></div>
+          <div class="avatar-picker">📷</div>
+          <div class="form-title">Tu perfil</div>
+          <div class="form-sub">Así te van a ver tus compañeros de viaje</div>
+          <div class="field-group">
+            <div class="field-wrap">
+              <div class="field-lbl">Nombre para mostrar</div>
+              <input class="field-a" type="text" placeholder="Nico">
+            </div>
+            <div class="field-wrap">
+              <div class="field-lbl">Teléfono (opcional)</div>
+              <input class="field-a" type="text" placeholder="+54 9 11 0000-0000">
+            </div>
+          </div>
+          <button class="btn-pri">Continuar →</button>
+        </div>
+      </div>
+
+    </div>
+  </div>
+
+  <!-- ══ OPTION B ══ -->
+  <div class="phone-col">
+    <div class="option-label">Opción B</div>
+    <div class="option-name">Immersive form</div>
+    <div class="phone lt" id="phoneB">
+
+      <!-- LOGIN -->
+      <div class="screen opt-b active" id="b-login">
+        <div class="immersive-bg"></div>
+        <div class="status-bar" style="position:relative;z-index:1"><span>12:30</span><span>▲ WiFi 🔋</span></div>
+        <div class="immersive-content">
+          <div class="immersive-header">
+            <div class="immersive-logo">✈️</div>
+            <div class="imm-app-name">Plan Travel</div>
+          </div>
+          <div class="form-title">Bienvenido de vuelta</div>
+          <div class="form-sub">Iniciá sesión para ver tus viajes</div>
+          <div class="field-group">
+            <div class="field-wrap">
+              <div class="field-lbl">Email</div>
+              <input class="field-b" type="text" placeholder="tu@email.com">
+            </div>
+            <div class="field-wrap">
+              <div class="field-lbl">Contraseña</div>
+              <input class="field-b" type="password" placeholder="••••••••">
+            </div>
+          </div>
+          <button class="btn-pri">Iniciar sesión</button>
+          <div class="divider-row">
+            <div class="divider-line"></div>
+            <div class="divider-text">O</div>
+            <div class="divider-line"></div>
+          </div>
+          <button class="btn-google">
+            <span>G</span> Continuar con Google
+          </button>
+          <div class="link-row">¿No tenés cuenta? <a href="#">Registrate</a></div>
+        </div>
+      </div>
+
+      <!-- REGISTER -->
+      <div class="screen opt-b" id="b-register">
+        <div class="immersive-bg"></div>
+        <div class="status-bar" style="position:relative;z-index:1"><span>12:30</span><span>▲ WiFi 🔋</span></div>
+        <div class="immersive-content">
+          <div class="immersive-header">
+            <div class="immersive-logo">🗺️</div>
+            <div class="imm-app-name">Plan Travel</div>
+          </div>
+          <div class="form-title">Crear cuenta</div>
+          <div class="form-sub">Empezá a planear tu próximo viaje</div>
+          <div class="field-group">
+            <div class="field-wrap">
+              <div class="field-lbl">Nombre completo</div>
+              <input class="field-b" type="text" placeholder="Nicolás Llousas">
+            </div>
+            <div class="field-wrap">
+              <div class="field-lbl">Email</div>
+              <input class="field-b" type="text" placeholder="tu@email.com">
+            </div>
+            <div class="field-wrap">
+              <div class="field-lbl">Contraseña</div>
+              <input class="field-b" type="password" placeholder="••••••••">
+            </div>
+          </div>
+          <button class="btn-pri">Crear cuenta</button>
+          <div class="link-row" style="margin-top:14px">¿Ya tenés cuenta? <a href="#">Iniciá sesión</a></div>
+        </div>
+      </div>
+
+      <!-- PROFILE SETUP -->
+      <div class="screen opt-b" id="b-profile">
+        <div class="immersive-bg"></div>
+        <div class="status-bar" style="position:relative;z-index:1"><span>12:30</span><span>▲ WiFi 🔋</span></div>
+        <div class="immersive-content">
+          <div class="immersive-header">
+            <div class="immersive-logo">🙌</div>
+            <div class="imm-app-name">Plan Travel</div>
+          </div>
+          <div style="text-align:center;margin-bottom:20px">
+            <div class="welcome-badge">✨ Último paso</div>
+          </div>
+          <div class="avatar-picker">📷</div>
+          <div class="form-title">Tu perfil</div>
+          <div class="form-sub">Así te van a ver tus compañeros de viaje</div>
+          <div class="field-group">
+            <div class="field-wrap">
+              <div class="field-lbl">Nombre para mostrar</div>
+              <input class="field-b" type="text" placeholder="Nico">
+            </div>
+            <div class="field-wrap">
+              <div class="field-lbl">Teléfono (opcional)</div>
+              <input class="field-b" type="text" placeholder="+54 9 11 0000-0000">
+            </div>
+          </div>
+          <button class="btn-pri">Continuar →</button>
+        </div>
+      </div>
+
+    </div>
+  </div>
+
+</div>
+
+<script>
+  let currentMode = 'lt';
+  let currentScreen = 'login';
+
+  function setScreen(scr, btn) {
+    document.querySelectorAll('.ctrl-btn:not(#modeBtn)').forEach(b => b.classList.remove('active'));
+    btn.classList.add('active');
+    currentScreen = scr;
+
+    ['a','b'].forEach(opt => {
+      document.querySelectorAll(`#phone${opt.toUpperCase()} .screen`).forEach(s => s.classList.remove('active'));
+      const el = document.getElementById(`${opt}-${scr}`);
+      if (el) el.classList.add('active');
+    });
+  }
+
+  function toggleMode() {
+    currentMode = currentMode === 'lt' ? 'dk' : 'lt';
+    document.getElementById('modeBtn').textContent = currentMode === 'lt' ? '☾ Dark mode' : '☀ Light mode';
+    document.getElementById('phoneA').className = `phone ${currentMode}`;
+    document.getElementById('phoneB').className = `phone ${currentMode}`;
+  }
+</script>
+
+</body>
+</html>

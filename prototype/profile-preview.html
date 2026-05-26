@@ -1,0 +1,556 @@
+<!DOCTYPE html>
+<html lang="es">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>Plan Travel · Profile Screen Prototype</title>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link href="https://fonts.googleapis.com/css2?family=Fraunces:ital,opsz,wght@0,9..144,300;0,9..144,500;0,9..144,700;1,9..144,300&family=Plus+Jakarta+Sans:wght@300;400;500;600;700&display=swap" rel="stylesheet">
+<style>
+*, *::before, *::after { box-sizing: border-box; margin: 0; padding: 0; }
+
+body {
+  min-height: 100vh;
+  background: #0E0E0E;
+  display: flex; flex-direction: column;
+  align-items: center;
+  padding: 28px 24px 64px;
+  font-family: 'Plus Jakarta Sans', sans-serif;
+  gap: 20px;
+}
+
+.proto-banner {
+  font-size: 10px; font-weight: 700;
+  letter-spacing: 0.12em; text-transform: uppercase;
+  color: #555; border: 1px solid #2A2A2A;
+  padding: 5px 14px; border-radius: 100px;
+}
+
+.controls {
+  display: flex; gap: 8px; flex-wrap: wrap;
+  justify-content: center; align-items: center;
+}
+.ctrl-btn {
+  padding: 8px 18px; border-radius: 100px;
+  border: 1.5px solid #2E2E2E;
+  background: #1A1A1A; color: #666;
+  font-family: 'Plus Jakarta Sans', sans-serif;
+  font-size: 12px; font-weight: 700;
+  cursor: pointer; transition: all 0.22s ease;
+  letter-spacing: 0.03em;
+}
+.ctrl-btn:hover { background: #242424; color: #ccc; border-color: #444; }
+.ctrl-btn.active { background: #242424; color: #fff; border-color: #666; }
+.divider { width: 1px; height: 28px; background: #2A2A2A; display: inline-block; }
+
+.phones-row {
+  display: flex; gap: 32px;
+  flex-wrap: wrap; justify-content: center; align-items: flex-start;
+}
+.phone-col { display: flex; flex-direction: column; align-items: center; gap: 10px; }
+.option-label {
+  font-size: 11px; font-weight: 800;
+  letter-spacing: 0.08em; text-transform: uppercase; color: #555;
+}
+.option-name { font-size: 13px; font-weight: 600; color: #888; text-align: center; margin-top: -4px; }
+
+/* ── Phone ── */
+.phone {
+  width: 340px; height: 720px;
+  border-radius: 46px; overflow: hidden;
+  position: relative; display: flex; flex-direction: column;
+  box-shadow:
+    0 0 0 1px rgba(255,255,255,0.07),
+    0 32px 80px rgba(0,0,0,0.85),
+    inset 0 0 0 1px rgba(255,255,255,0.04);
+}
+
+/* ── Atlas tokens ── */
+.lt {
+  --bg: #F8FAFF; --surf: #FFFFFF; --surf-v: #EDF1FB;
+  --pri: #2563EB; --on-pri: #FFFFFF;
+  --pri-c: #DBEAFE; --on-pri-c: #1E3A8A;
+  --sec: #7C3AED; --sec-c: #EDE9FE; --on-sec-c: #4C1D95;
+  --ter: #D97706; --ter-c: #FEF3C7; --on-ter-c: #78350F;
+  --on-bg: #0F172A; --on-s: #0F172A; --on-sv: #475569;
+  --out: #C4CEDF;
+  --sh1: 0 2px 8px rgba(37,99,235,0.08), 0 1px 3px rgba(0,0,0,0.04);
+  --sh2: 0 4px 20px rgba(37,99,235,0.13), 0 2px 6px rgba(0,0,0,0.06);
+}
+.dk {
+  --bg: #0A0C14; --surf: #141A27; --surf-v: #1E283E;
+  --pri: #60A5FA; --on-pri: #0A1A3E;
+  --pri-c: #1E3A6E; --on-pri-c: #BAD4FF;
+  --sec: #A78BFA; --sec-c: #3D1C8E; --on-sec-c: #D4BBFF;
+  --ter: #FBB928; --ter-c: #3A2200; --on-ter-c: #FFE08A;
+  --on-bg: #E2E8FF; --on-s: #E2E8FF; --on-sv: #8A9ABF;
+  --out: #384260;
+  --sh1: 0 2px 8px rgba(0,0,0,0.4), 0 1px 3px rgba(96,165,250,0.08);
+  --sh2: 0 4px 20px rgba(0,0,0,0.55), 0 2px 6px rgba(96,165,250,0.12);
+}
+
+.phone { background: var(--bg); color: var(--on-bg); transition: background 0.35s, color 0.35s; }
+
+/* ── Shared ── */
+.status-bar {
+  padding: 14px 24px 6px;
+  display: flex; justify-content: space-between; align-items: center;
+  font-size: 11px; font-weight: 700; letter-spacing: 0.04em;
+  flex-shrink: 0;
+  transition: background 0.35s, color 0.35s;
+}
+
+.icon-btn {
+  width: 40px; height: 40px; border-radius: 50%;
+  border: none; background: transparent;
+  cursor: pointer; display: flex; align-items: center; justify-content: center;
+  font-size: 18px; transition: background 0.2s;
+  flex-shrink: 0;
+}
+
+.card {
+  background: var(--surf);
+  border-radius: 20px;
+  box-shadow: var(--sh1);
+  transition: background 0.35s, box-shadow 0.35s;
+}
+
+.info-row {
+  display: flex; align-items: center;
+  padding: 15px 18px;
+  gap: 14px;
+  border-bottom: 1px solid var(--out);
+  transition: border-color 0.35s;
+}
+.info-row:last-child { border-bottom: none; }
+
+.info-icon {
+  width: 36px; height: 36px; border-radius: 12px;
+  background: var(--pri-c);
+  display: flex; align-items: center; justify-content: center;
+  font-size: 16px; flex-shrink: 0;
+  transition: background 0.35s;
+}
+
+.info-label {
+  font-size: 11px; font-weight: 700;
+  letter-spacing: 0.05em; text-transform: uppercase;
+  color: var(--on-sv); margin-bottom: 2px;
+  transition: color 0.35s;
+}
+.info-value {
+  font-size: 14px; font-weight: 500;
+  color: var(--on-s);
+  transition: color 0.35s;
+}
+
+.sec-label {
+  font-size: 11px; font-weight: 800;
+  letter-spacing: 0.08em; text-transform: uppercase;
+  color: var(--on-sv); margin-bottom: 8px;
+  padding: 0 2px;
+  transition: color 0.35s;
+}
+
+/* ══════════════════════
+   OPTION A — Avatar hero
+══════════════════════ */
+
+.opt-a .status-bar { background: var(--bg); color: var(--on-sv); }
+
+.opt-a-topbar {
+  background: var(--bg);
+  padding: 4px 6px 10px;
+  display: flex; align-items: center; gap: 4px;
+  flex-shrink: 0;
+  transition: background 0.35s;
+}
+.opt-a-topbar .icon-btn { color: var(--on-sv); }
+.opt-a-topbar .icon-btn:hover { background: var(--surf-v); }
+
+.opt-a-topbar-title {
+  font-size: 17px; font-weight: 700;
+  color: var(--on-bg); flex: 1;
+  letter-spacing: -0.01em;
+  transition: color 0.35s;
+}
+
+.hero-section {
+  display: flex; flex-direction: column; align-items: center;
+  padding: 20px 20px 28px;
+  background: var(--bg);
+  transition: background 0.35s;
+}
+
+.avatar-circle {
+  width: 88px; height: 88px; border-radius: 50%;
+  background: var(--pri);
+  display: flex; align-items: center; justify-content: center;
+  font-family: 'Fraunces', serif;
+  font-size: 36px; font-weight: 700;
+  color: var(--on-pri);
+  box-shadow: 0 8px 24px rgba(37,99,235,0.3);
+  margin-bottom: 14px;
+  position: relative;
+  transition: background 0.35s, color 0.35s, box-shadow 0.35s;
+}
+.dk .avatar-circle { box-shadow: 0 8px 24px rgba(96,165,250,0.25); }
+
+.avatar-edit-badge {
+  position: absolute; bottom: 2px; right: 2px;
+  width: 26px; height: 26px; border-radius: 50%;
+  background: var(--surf);
+  border: 2px solid var(--bg);
+  display: flex; align-items: center; justify-content: center;
+  font-size: 12px;
+  box-shadow: var(--sh1);
+  transition: background 0.35s, border-color 0.35s;
+}
+
+.hero-name {
+  font-family: 'Fraunces', serif;
+  font-size: 26px; font-weight: 600;
+  color: var(--on-bg); letter-spacing: -0.02em;
+  margin-bottom: 4px;
+  transition: color 0.35s;
+}
+.hero-email {
+  font-size: 13px; color: var(--on-sv);
+  transition: color 0.35s;
+}
+
+.opt-a-content {
+  flex: 1; overflow-y: auto; scrollbar-width: none;
+  padding: 0 18px 24px;
+  display: flex; flex-direction: column; gap: 16px;
+  background: var(--bg);
+  transition: background 0.35s;
+}
+.opt-a-content::-webkit-scrollbar { display: none; }
+
+/* ══════════════════════════
+   OPTION B — Header panel
+══════════════════════════ */
+
+.opt-b .status-bar { background: var(--pri); color: var(--on-pri); }
+
+.brand-header {
+  background: var(--pri);
+  padding: 6px 8px 32px;
+  flex-shrink: 0;
+  position: relative; overflow: hidden;
+  transition: background 0.35s;
+}
+
+.brand-header-deco {
+  position: absolute;
+  top: -40px; right: -40px;
+  width: 160px; height: 160px;
+  border-radius: 50%;
+  background: rgba(255,255,255,0.06);
+  pointer-events: none;
+}
+.brand-header-deco2 {
+  position: absolute;
+  bottom: -20px; left: -20px;
+  width: 100px; height: 100px;
+  border-radius: 50%;
+  background: rgba(255,255,255,0.04);
+  pointer-events: none;
+}
+
+.brand-header-toprow {
+  display: flex; align-items: center;
+  padding: 0 4px 16px;
+  position: relative; z-index: 1;
+}
+.brand-header-toprow .icon-btn { color: var(--on-pri); }
+.brand-header-toprow .icon-btn:hover { background: rgba(255,255,255,0.12); }
+
+.brand-header-body {
+  display: flex; flex-direction: column; align-items: center;
+  gap: 10px;
+  position: relative; z-index: 1;
+}
+
+.brand-avatar {
+  width: 80px; height: 80px; border-radius: 50%;
+  background: rgba(255,255,255,0.2);
+  border: 3px solid rgba(255,255,255,0.4);
+  display: flex; align-items: center; justify-content: center;
+  font-family: 'Fraunces', serif;
+  font-size: 32px; font-weight: 700;
+  color: var(--on-pri);
+  position: relative;
+  transition: color 0.35s;
+}
+.brand-avatar-edit {
+  position: absolute; bottom: 0; right: 0;
+  width: 26px; height: 26px; border-radius: 50%;
+  background: var(--on-pri);
+  display: flex; align-items: center; justify-content: center;
+  font-size: 11px; color: var(--pri);
+  border: 2px solid var(--pri);
+  transition: background 0.35s, color 0.35s, border-color 0.35s;
+}
+
+.brand-name-text {
+  font-family: 'Fraunces', serif;
+  font-size: 24px; font-weight: 600;
+  color: var(--on-pri); letter-spacing: -0.02em;
+  transition: color 0.35s;
+}
+.brand-member-badge {
+  background: rgba(255,255,255,0.18);
+  color: var(--on-pri);
+  border-radius: 100px;
+  padding: 4px 12px;
+  font-size: 11px; font-weight: 700;
+  letter-spacing: 0.04em;
+}
+
+.opt-b-content {
+  flex: 1; overflow-y: auto; scrollbar-width: none;
+  background: var(--bg);
+  padding: 20px 18px 24px;
+  display: flex; flex-direction: column; gap: 16px;
+  margin-top: -16px;
+  border-radius: 20px 20px 0 0;
+  position: relative; z-index: 2;
+  box-shadow: 0 -2px 12px rgba(0,0,0,0.08);
+  transition: background 0.35s;
+}
+.opt-b-content::-webkit-scrollbar { display: none; }
+
+/* Shared bottom: edit button, group card, danger zone */
+.edit-btn {
+  width: 100%;
+  background: var(--pri); color: var(--on-pri);
+  border: none; border-radius: 16px;
+  padding: 14px;
+  font-family: 'Plus Jakarta Sans', sans-serif;
+  font-size: 14px; font-weight: 700;
+  cursor: pointer; letter-spacing: 0.01em;
+  transition: background 0.35s, color 0.35s, filter 0.2s;
+  box-shadow: 0 4px 16px rgba(37,99,235,0.3);
+}
+.edit-btn:hover { filter: brightness(1.08); }
+.dk .edit-btn { box-shadow: 0 4px 16px rgba(96,165,250,0.2); }
+
+.group-mini-card {
+  background: var(--surf);
+  border-radius: 16px;
+  border-left: 4px solid var(--pri);
+  padding: 14px 16px;
+  box-shadow: var(--sh1);
+  transition: background 0.35s, border-color 0.35s, box-shadow 0.35s;
+}
+.group-mini-label {
+  font-size: 10px; font-weight: 800;
+  letter-spacing: 0.08em; text-transform: uppercase;
+  color: var(--pri); margin-bottom: 4px;
+  transition: color 0.35s;
+}
+.group-mini-name {
+  font-family: 'Fraunces', serif;
+  font-size: 16px; font-weight: 600;
+  color: var(--on-s); letter-spacing: -0.01em;
+  transition: color 0.35s;
+}
+.group-mini-sub {
+  font-size: 12px; color: var(--on-sv);
+  margin-top: 2px;
+  transition: color 0.35s;
+}
+
+.danger-btn {
+  width: 100%;
+  background: transparent;
+  color: #EF4444;
+  border: 1.5px solid #EF444440;
+  border-radius: 16px; padding: 13px;
+  font-family: 'Plus Jakarta Sans', sans-serif;
+  font-size: 14px; font-weight: 600;
+  cursor: pointer; letter-spacing: 0.01em;
+  transition: background 0.2s, border-color 0.2s;
+}
+.danger-btn:hover { background: #EF44440D; border-color: #EF4444; }
+</style>
+</head>
+<body>
+
+<div class="proto-banner">⚠ Prototype · Eliminar después de elegir layout de perfil</div>
+
+<div class="controls">
+  <button class="ctrl-btn" id="modeBtn" onclick="toggleMode()">☾ Dark mode</button>
+</div>
+
+<div class="phones-row">
+
+  <!-- ══ OPTION A: Avatar hero ══ -->
+  <div class="phone-col">
+    <div class="option-label">Opción A</div>
+    <div class="option-name">Avatar hero centrado</div>
+
+    <div class="phone lt" id="phoneA">
+
+      <!-- Status bar -->
+      <div class="status-bar opt-a">
+        <span>12:30</span><span>▲ WiFi 🔋</span>
+      </div>
+
+      <!-- TopAppBar surface -->
+      <div class="opt-a-topbar">
+        <button class="icon-btn">←</button>
+        <span class="opt-a-topbar-title">Perfil</span>
+        <button class="icon-btn" style="color:var(--pri);font-size:14px;font-weight:700;">Editar</button>
+      </div>
+
+      <!-- Avatar hero -->
+      <div class="hero-section">
+        <div class="avatar-circle">
+          N
+          <div class="avatar-edit-badge">✏</div>
+        </div>
+        <div class="hero-name">Nicolás L.</div>
+        <div class="hero-email">nico.llousas@gmail.com</div>
+      </div>
+
+      <!-- Content -->
+      <div class="opt-a-content">
+
+        <div>
+          <div class="sec-label">Información personal</div>
+          <div class="card">
+            <div class="info-row">
+              <div class="info-icon">👤</div>
+              <div>
+                <div class="info-label">Nombre</div>
+                <div class="info-value">Nicolás Llousas</div>
+              </div>
+            </div>
+            <div class="info-row">
+              <div class="info-icon">📧</div>
+              <div>
+                <div class="info-label">Email</div>
+                <div class="info-value">nico.llousas@gmail.com</div>
+              </div>
+            </div>
+            <div class="info-row">
+              <div class="info-icon">📱</div>
+              <div>
+                <div class="info-label">Teléfono</div>
+                <div class="info-value">+54 9 11 2345-6789</div>
+              </div>
+            </div>
+          </div>
+        </div>
+
+        <div>
+          <div class="sec-label">Mi grupo</div>
+          <div class="group-mini-card">
+            <div class="group-mini-label">Grupo activo</div>
+            <div class="group-mini-name">Viaje a Bariloche 🏔️</div>
+            <div class="group-mini-sub">4 integrantes · Miembro</div>
+          </div>
+        </div>
+
+        <button class="danger-btn">🚪 Cerrar sesión</button>
+
+      </div>
+    </div>
+  </div>
+
+  <!-- ══ OPTION B: Header panel ══ -->
+  <div class="phone-col">
+    <div class="option-label">Opción B</div>
+    <div class="option-name">Header panel azul</div>
+
+    <div class="phone lt" id="phoneB">
+
+      <!-- Status bar -->
+      <div class="status-bar" style="background:var(--pri);color:var(--on-pri)">
+        <span>12:30</span><span>▲ WiFi 🔋</span>
+      </div>
+
+      <!-- Brand header -->
+      <div class="brand-header">
+        <div class="brand-header-deco"></div>
+        <div class="brand-header-deco2"></div>
+
+        <div class="brand-header-toprow">
+          <button class="icon-btn">←</button>
+          <div style="flex:1"></div>
+          <button class="icon-btn" style="font-size:13px;font-weight:700;color:var(--on-pri);width:auto;padding:0 10px;border-radius:20px;">Editar</button>
+        </div>
+
+        <div class="brand-header-body">
+          <div class="brand-avatar">
+            N
+            <div class="brand-avatar-edit">✏</div>
+          </div>
+          <div class="brand-name-text">Nicolás L.</div>
+          <div class="brand-member-badge">✈ Miembro activo</div>
+        </div>
+      </div>
+
+      <!-- Content card sliding up -->
+      <div class="opt-b-content">
+
+        <div>
+          <div class="sec-label">Información personal</div>
+          <div class="card">
+            <div class="info-row">
+              <div class="info-icon">👤</div>
+              <div>
+                <div class="info-label">Nombre</div>
+                <div class="info-value">Nicolás Llousas</div>
+              </div>
+            </div>
+            <div class="info-row">
+              <div class="info-icon">📧</div>
+              <div>
+                <div class="info-label">Email</div>
+                <div class="info-value">nico.llousas@gmail.com</div>
+              </div>
+            </div>
+            <div class="info-row">
+              <div class="info-icon">📱</div>
+              <div>
+                <div class="info-label">Teléfono</div>
+                <div class="info-value">+54 9 11 2345-6789</div>
+              </div>
+            </div>
+          </div>
+        </div>
+
+        <div>
+          <div class="sec-label">Mi grupo</div>
+          <div class="group-mini-card">
+            <div class="group-mini-label">Grupo activo</div>
+            <div class="group-mini-name">Viaje a Bariloche 🏔️</div>
+            <div class="group-mini-sub">4 integrantes · Miembro</div>
+          </div>
+        </div>
+
+        <button class="danger-btn">🚪 Cerrar sesión</button>
+
+      </div>
+    </div>
+  </div>
+
+</div>
+
+<script>
+  let mode = 'lt';
+  function toggleMode() {
+    mode = mode === 'lt' ? 'dk' : 'lt';
+    document.getElementById('modeBtn').textContent = mode === 'lt' ? '☾ Dark mode' : '☀ Light mode';
+    document.getElementById('phoneA').className = `phone ${mode}`;
+    document.getElementById('phoneB').className = `phone ${mode}`;
+  }
+</script>
+
+</body>
+</html>

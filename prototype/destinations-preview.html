@@ -1,0 +1,526 @@
+<!DOCTYPE html>
+<html lang="es">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>Plan Travel · Destinations Screen Prototype</title>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link href="https://fonts.googleapis.com/css2?family=Fraunces:ital,opsz,wght@0,9..144,300;0,9..144,500;0,9..144,700;1,9..144,300&family=Plus+Jakarta+Sans:wght@300;400;500;600;700&display=swap" rel="stylesheet">
+<style>
+*, *::before, *::after { box-sizing: border-box; margin: 0; padding: 0; }
+
+body {
+  min-height: 100vh;
+  background: #0E0E0E;
+  display: flex; flex-direction: column;
+  align-items: center;
+  padding: 28px 24px 64px;
+  font-family: 'Plus Jakarta Sans', sans-serif;
+  gap: 20px;
+}
+
+.proto-banner {
+  font-size: 10px; font-weight: 700;
+  letter-spacing: 0.12em; text-transform: uppercase;
+  color: #555; border: 1px solid #2A2A2A;
+  padding: 5px 14px; border-radius: 100px;
+}
+
+.controls {
+  display: flex; gap: 8px; flex-wrap: wrap;
+  justify-content: center; align-items: center;
+}
+.ctrl-btn {
+  padding: 8px 18px; border-radius: 100px;
+  border: 1.5px solid #2E2E2E;
+  background: #1A1A1A; color: #666;
+  font-family: 'Plus Jakarta Sans', sans-serif;
+  font-size: 12px; font-weight: 700;
+  cursor: pointer; transition: all 0.22s ease;
+  letter-spacing: 0.03em;
+}
+.ctrl-btn:hover { background: #242424; color: #ccc; border-color: #444; }
+.ctrl-btn.active { background: #242424; color: #fff; border-color: #666; }
+.divider { width: 1px; height: 28px; background: #2A2A2A; display: inline-block; }
+
+.phones-row {
+  display: flex; gap: 32px;
+  flex-wrap: wrap; justify-content: center; align-items: flex-start;
+}
+.phone-col { display: flex; flex-direction: column; align-items: center; gap: 10px; }
+.option-label {
+  font-size: 11px; font-weight: 800;
+  letter-spacing: 0.08em; text-transform: uppercase; color: #555;
+}
+.option-name { font-size: 13px; font-weight: 600; color: #888; text-align: center; margin-top: -4px; }
+
+/* ── Phone ── */
+.phone {
+  width: 340px; height: 720px;
+  border-radius: 46px; overflow: hidden;
+  position: relative; display: flex; flex-direction: column;
+  box-shadow:
+    0 0 0 1px rgba(255,255,255,0.07),
+    0 32px 80px rgba(0,0,0,0.85),
+    inset 0 0 0 1px rgba(255,255,255,0.04);
+}
+
+/* ── Atlas tokens ── */
+.lt {
+  --bg: #F8FAFF; --surf: #FFFFFF; --surf-v: #EDF1FB;
+  --pri: #2563EB; --on-pri: #FFFFFF;
+  --pri-c: #DBEAFE; --on-pri-c: #1E3A8A;
+  --sec: #7C3AED; --sec-c: #EDE9FE; --on-sec-c: #4C1D95;
+  --ter: #D97706; --ter-c: #FEF3C7; --on-ter-c: #78350F;
+  --on-bg: #0F172A; --on-s: #0F172A; --on-sv: #475569;
+  --out: #C4CEDF;
+  --sh1: 0 2px 8px rgba(37,99,235,0.08), 0 1px 3px rgba(0,0,0,0.04);
+  --sh2: 0 4px 20px rgba(37,99,235,0.13), 0 2px 6px rgba(0,0,0,0.06);
+}
+.dk {
+  --bg: #0A0C14; --surf: #141A27; --surf-v: #1E283E;
+  --pri: #60A5FA; --on-pri: #0A1A3E;
+  --pri-c: #1E3A6E; --on-pri-c: #BAD4FF;
+  --sec: #A78BFA; --sec-c: #3D1C8E; --on-sec-c: #D4BBFF;
+  --ter: #FBB928; --ter-c: #3A2200; --on-ter-c: #FFE08A;
+  --on-bg: #E2E8FF; --on-s: #E2E8FF; --on-sv: #8A9ABF;
+  --out: #384260;
+  --sh1: 0 2px 8px rgba(0,0,0,0.4), 0 1px 3px rgba(96,165,250,0.08);
+  --sh2: 0 4px 20px rgba(0,0,0,0.55), 0 2px 6px rgba(96,165,250,0.12);
+}
+
+.phone { background: var(--bg); color: var(--on-bg); transition: background 0.35s, color 0.35s; }
+
+/* ── Shared ── */
+.status-bar {
+  padding: 14px 24px 6px;
+  display: flex; justify-content: space-between; align-items: center;
+  font-size: 11px; font-weight: 700; letter-spacing: 0.04em;
+  flex-shrink: 0;
+  transition: background 0.35s, color 0.35s;
+}
+
+.scroll-area {
+  flex: 1; overflow-y: auto; scrollbar-width: none;
+  padding: 10px 14px 24px;
+  display: flex; flex-direction: column; gap: 10px;
+  background: var(--bg);
+  transition: background 0.35s;
+}
+.scroll-area::-webkit-scrollbar { display: none; }
+
+/* ══════════════════════════════════════════
+   OPTION A  ─  Lista con acento izquierdo
+══════════════════════════════════════════ */
+
+.a-large-bar {
+  background: var(--bg); padding: 4px 8px 0; flex-shrink: 0;
+  transition: background 0.35s;
+}
+.a-large-bar-row { display: flex; align-items: center; height: 44px; }
+.a-large-bar-title {
+  font-family: 'Fraunces', serif;
+  font-size: 34px; font-weight: 600;
+  letter-spacing: -0.02em; color: var(--on-bg);
+  padding: 2px 16px 12px; line-height: 1;
+  transition: color 0.35s;
+}
+
+/* Chip filter row — Option A */
+.a-chips-row {
+  display: flex; gap: 7px; overflow-x: auto; scrollbar-width: none;
+  padding: 0 14px 4px; flex-shrink: 0;
+  background: var(--bg); transition: background 0.35s;
+}
+.a-chips-row::-webkit-scrollbar { display: none; }
+.a-chip {
+  border: 1.5px solid var(--out);
+  background: var(--surf); color: var(--on-sv);
+  border-radius: 100px; padding: 6px 14px;
+  font-size: 12px; font-weight: 700; white-space: nowrap;
+  cursor: pointer; flex-shrink: 0;
+  transition: all 0.22s;
+}
+.a-chip.sel {
+  background: var(--pri); color: var(--on-pri);
+  border-color: var(--pri);
+}
+
+/* Destination card — Option A */
+.a-dest-card {
+  background: var(--surf);
+  border-radius: 18px; box-shadow: var(--sh1);
+  display: flex; overflow: hidden;
+  transition: background 0.35s, box-shadow 0.35s;
+}
+.a-card-accent { width: 4px; flex-shrink: 0; background: var(--pri); transition: background 0.35s; }
+.a-card-body { flex: 1; padding: 12px 12px 12px 14px; display: flex; gap: 12px; }
+.a-dest-icon {
+  width: 40px; height: 40px; border-radius: 14px;
+  background: var(--pri-c);
+  display: flex; align-items: center; justify-content: center;
+  font-size: 20px; flex-shrink: 0;
+  transition: background 0.35s;
+}
+.a-dest-text { flex: 1; }
+.a-dest-name {
+  font-family: 'Fraunces', serif;
+  font-size: 16px; font-weight: 600;
+  letter-spacing: -0.01em; color: var(--on-s);
+  transition: color 0.35s;
+}
+.a-dest-rec {
+  font-size: 12px; color: var(--on-sv);
+  margin-top: 3px; line-height: 1.4;
+  display: -webkit-box; -webkit-line-clamp: 2; -webkit-box-orient: vertical; overflow: hidden;
+  transition: color 0.35s;
+}
+.a-dest-footer { display: flex; align-items: center; justify-content: space-between; margin-top: 6px; }
+.status-chip {
+  border-radius: 100px; padding: 2px 9px;
+  font-size: 10px; font-weight: 800; text-transform: uppercase; letter-spacing: 0.04em;
+}
+.status-pending { background: var(--surf-v); color: var(--on-sv); transition: background 0.35s, color 0.35s; }
+.status-visited { background: var(--ter-c); color: var(--on-ter-c); transition: background 0.35s, color 0.35s; }
+
+/* Location pin icon inline */
+.loc-icon { color: var(--pri); font-size: 14px; transition: color 0.35s; }
+
+/* Region label */
+.a-region-label {
+  font-size: 10px; font-weight: 800; letter-spacing: 0.08em; text-transform: uppercase;
+  color: var(--on-sv); padding: 0 2px; transition: color 0.35s;
+  display: flex; align-items: center; gap: 5px;
+}
+
+/* Empty state */
+.empty-state {
+  display: flex; flex-direction: column; align-items: center;
+  padding: 32px 24px; gap: 8px;
+}
+.empty-icon { font-size: 36px; }
+.empty-text { font-size: 14px; color: var(--on-sv); text-align: center; transition: color 0.35s; }
+
+/* ══════════════════════════════════════
+   OPTION B  ─  Grilla 2 columnas + tabs
+══════════════════════════════════════ */
+
+.b-large-bar {
+  background: var(--bg); padding: 4px 8px 0; flex-shrink: 0;
+  transition: background 0.35s;
+}
+.b-large-bar-row { display: flex; align-items: center; height: 44px; }
+.b-large-bar-title {
+  font-family: 'Fraunces', serif;
+  font-size: 34px; font-weight: 600;
+  letter-spacing: -0.02em; color: var(--on-bg);
+  padding: 2px 16px 12px; line-height: 1;
+  transition: color 0.35s;
+}
+
+/* Pill tabs — Option B */
+.b-tabs-container {
+  padding: 0 14px 8px; flex-shrink: 0;
+  background: var(--bg); transition: background 0.35s;
+}
+.b-tabs-track {
+  display: flex; gap: 0;
+  background: var(--surf-v); border-radius: 14px; padding: 3px;
+  overflow-x: auto; scrollbar-width: none;
+}
+.b-tabs-track::-webkit-scrollbar { display: none; }
+.b-tab {
+  border: none; background: transparent;
+  color: var(--on-sv); border-radius: 11px; padding: 6px 12px;
+  font-family: 'Plus Jakarta Sans', sans-serif;
+  font-size: 12px; font-weight: 700; white-space: nowrap;
+  cursor: pointer; flex-shrink: 0;
+  transition: all 0.22s;
+}
+.b-tab.sel {
+  background: var(--pri); color: var(--on-pri);
+  box-shadow: 0 2px 8px rgba(37,99,235,0.25);
+}
+.dk .b-tab.sel { box-shadow: 0 2px 8px rgba(96,165,250,0.2); }
+
+.b-scroll {
+  flex: 1; overflow-y: auto; scrollbar-width: none;
+  padding: 6px 14px 24px;
+  background: var(--bg); transition: background 0.35s;
+}
+.b-scroll::-webkit-scrollbar { display: none; }
+
+/* 2-column grid */
+.b-grid {
+  display: grid; grid-template-columns: 1fr 1fr; gap: 10px;
+}
+
+.b-dest-card {
+  background: var(--surf); border-radius: 18px;
+  box-shadow: var(--sh1); overflow: hidden;
+  display: flex; flex-direction: column;
+  transition: background 0.35s, box-shadow 0.35s;
+}
+.b-card-top {
+  height: 76px; display: flex; align-items: center; justify-content: center;
+  font-size: 34px; position: relative;
+  transition: background 0.35s;
+}
+.lt .b-card-top-1 { background: linear-gradient(135deg, #DBEAFE, #EDE9FE); }
+.lt .b-card-top-2 { background: linear-gradient(135deg, #FEF3C7, #DBEAFE); }
+.lt .b-card-top-3 { background: linear-gradient(135deg, #EDE9FE, #FEF3C7); }
+.lt .b-card-top-4 { background: linear-gradient(135deg, #DBEAFE, #D1FAE5); }
+.lt .b-card-top-5 { background: linear-gradient(135deg, #FEF3C7, #EDE9FE); }
+.lt .b-card-top-6 { background: linear-gradient(135deg, #D1FAE5, #DBEAFE); }
+.dk .b-card-top-1 { background: linear-gradient(135deg, #1E3A6E, #3D1C8E); }
+.dk .b-card-top-2 { background: linear-gradient(135deg, #3A2200, #1E3A6E); }
+.dk .b-card-top-3 { background: linear-gradient(135deg, #3D1C8E, #3A2200); }
+.dk .b-card-top-4 { background: linear-gradient(135deg, #1E3A6E, #064E3B); }
+.dk .b-card-top-5 { background: linear-gradient(135deg, #3A2200, #3D1C8E); }
+.dk .b-card-top-6 { background: linear-gradient(135deg, #064E3B, #1E3A6E); }
+
+.b-status-dot {
+  position: absolute; top: 8px; right: 8px;
+  width: 8px; height: 8px; border-radius: 50%;
+}
+.dot-pending { background: var(--on-sv); }
+.dot-visited { background: var(--ter); }
+
+.b-card-foot { padding: 9px 10px 10px; }
+.b-dest-name {
+  font-family: 'Fraunces', serif;
+  font-size: 13px; font-weight: 700;
+  letter-spacing: -0.01em; color: var(--on-s);
+  line-height: 1.2; margin-bottom: 4px;
+  transition: color 0.35s;
+}
+.b-dest-status { font-size: 10px; font-weight: 700; }
+.b-status-v { color: var(--ter); transition: color 0.35s; }
+.b-status-p { color: var(--on-sv); transition: color 0.35s; }
+
+</style>
+</head>
+<body>
+
+<div class="proto-banner">⚠ Prototype · DestinationScreen · Elegir una opción antes de implementar</div>
+
+<div class="controls">
+  <button class="ctrl-btn" id="modeBtn" onclick="toggleMode()">☾ Dark mode</button>
+</div>
+
+<div class="phones-row">
+
+  <!-- ══ OPTION A ══ -->
+  <div class="phone-col">
+    <div class="option-label">Opción A</div>
+    <div class="option-name">Lista con acento izquierdo</div>
+
+    <div class="phone lt" id="phoneA">
+      <div class="status-bar" style="background:var(--bg);color:var(--on-sv);">
+        <span>12:30</span><span>▲ WiFi 🔋</span>
+      </div>
+
+      <div class="a-large-bar">
+        <div class="a-large-bar-row"></div>
+        <div class="a-large-bar-title">Destinos</div>
+      </div>
+
+      <!-- Filter chips -->
+      <div class="a-chips-row">
+        <div class="a-chip sel">Todas</div>
+        <div class="a-chip">Patagonia</div>
+        <div class="a-chip">Costa Atlántica</div>
+        <div class="a-chip">Noroeste</div>
+        <div class="a-chip">Cuyo</div>
+      </div>
+
+      <div class="scroll-area">
+        <div class="a-region-label">
+          <span class="loc-icon">📍</span> Patagonia
+        </div>
+
+        <!-- Card 1 — pending -->
+        <div class="a-dest-card">
+          <div class="a-card-accent"></div>
+          <div class="a-card-body">
+            <div class="a-dest-icon">🏔️</div>
+            <div class="a-dest-text">
+              <div class="a-dest-name">Bariloche</div>
+              <div class="a-dest-rec">Lago Nahuel Huapi, cerro Catedral y chocolate artesanal. Ideal en invierno para ski.</div>
+              <div class="a-dest-footer">
+                <span class="status-chip status-pending">Pendiente</span>
+              </div>
+            </div>
+          </div>
+        </div>
+
+        <!-- Card 2 — visited -->
+        <div class="a-dest-card">
+          <div class="a-card-accent" style="background:var(--ter)"></div>
+          <div class="a-card-body">
+            <div class="a-dest-icon" style="background:var(--ter-c)">🌊</div>
+            <div class="a-dest-text">
+              <div class="a-dest-name">Puerto Madryn</div>
+              <div class="a-dest-rec">Observación de ballenas en temporada. Playa El Doradillo, fauna marina única.</div>
+              <div class="a-dest-footer">
+                <span class="status-chip status-visited">Visitado ✓</span>
+              </div>
+            </div>
+          </div>
+        </div>
+
+        <!-- Card 3 — pending -->
+        <div class="a-dest-card">
+          <div class="a-card-accent"></div>
+          <div class="a-card-body">
+            <div class="a-dest-icon">🏞️</div>
+            <div class="a-dest-text">
+              <div class="a-dest-name">El Chaltén</div>
+              <div class="a-dest-rec">Capital del trekking en Argentina. Monte Fitz Roy y Laguna de los Tres.</div>
+              <div class="a-dest-footer">
+                <span class="status-chip status-pending">Pendiente</span>
+              </div>
+            </div>
+          </div>
+        </div>
+
+        <!-- Card 4 — visited -->
+        <div class="a-dest-card">
+          <div class="a-card-accent" style="background:var(--ter)"></div>
+          <div class="a-card-body">
+            <div class="a-dest-icon" style="background:var(--ter-c)">🐧</div>
+            <div class="a-dest-text">
+              <div class="a-dest-name">Ushuaia</div>
+              <div class="a-dest-rec">El fin del mundo. Canal Beagle, glaciares y el tren del fin del mundo.</div>
+              <div class="a-dest-footer">
+                <span class="status-chip status-visited">Visitado ✓</span>
+              </div>
+            </div>
+          </div>
+        </div>
+      </div>
+    </div>
+  </div>
+
+  <!-- ══ OPTION B ══ -->
+  <div class="phone-col">
+    <div class="option-label">Opción B</div>
+    <div class="option-name">Grilla 2 columnas · tabs de región</div>
+
+    <div class="phone lt" id="phoneB">
+      <div class="status-bar" style="background:var(--bg);color:var(--on-sv);">
+        <span>12:30</span><span>▲ WiFi 🔋</span>
+      </div>
+
+      <div class="b-large-bar">
+        <div class="b-large-bar-row"></div>
+        <div class="b-large-bar-title">Destinos</div>
+      </div>
+
+      <!-- Pill tabs -->
+      <div class="b-tabs-container">
+        <div class="b-tabs-track">
+          <button class="b-tab sel">Todas</button>
+          <button class="b-tab">Patagonia</button>
+          <button class="b-tab">Costa Atlántica</button>
+          <button class="b-tab">Noroeste</button>
+          <button class="b-tab">Cuyo</button>
+        </div>
+      </div>
+
+      <div class="b-scroll">
+        <div class="b-grid">
+
+          <!-- Cell 1 -->
+          <div class="b-dest-card">
+            <div class="b-card-top b-card-top-1">
+              🏔️
+              <div class="b-status-dot dot-pending"></div>
+            </div>
+            <div class="b-card-foot">
+              <div class="b-dest-name">Bariloche</div>
+              <div class="b-dest-status b-status-p">● Pendiente</div>
+            </div>
+          </div>
+
+          <!-- Cell 2 -->
+          <div class="b-dest-card">
+            <div class="b-card-top b-card-top-2">
+              🌊
+              <div class="b-status-dot dot-visited"></div>
+            </div>
+            <div class="b-card-foot">
+              <div class="b-dest-name">Puerto Madryn</div>
+              <div class="b-dest-status b-status-v">✓ Visitado</div>
+            </div>
+          </div>
+
+          <!-- Cell 3 -->
+          <div class="b-dest-card">
+            <div class="b-card-top b-card-top-3">
+              🏞️
+              <div class="b-status-dot dot-pending"></div>
+            </div>
+            <div class="b-card-foot">
+              <div class="b-dest-name">El Chaltén</div>
+              <div class="b-dest-status b-status-p">● Pendiente</div>
+            </div>
+          </div>
+
+          <!-- Cell 4 -->
+          <div class="b-dest-card">
+            <div class="b-card-top b-card-top-4">
+              🐧
+              <div class="b-status-dot dot-visited"></div>
+            </div>
+            <div class="b-card-foot">
+              <div class="b-dest-name">Ushuaia</div>
+              <div class="b-dest-status b-status-v">✓ Visitado</div>
+            </div>
+          </div>
+
+          <!-- Cell 5 -->
+          <div class="b-dest-card">
+            <div class="b-card-top b-card-top-5">
+              🏖️
+              <div class="b-status-dot dot-pending"></div>
+            </div>
+            <div class="b-card-foot">
+              <div class="b-dest-name">Mar del Plata</div>
+              <div class="b-dest-status b-status-p">● Pendiente</div>
+            </div>
+          </div>
+
+          <!-- Cell 6 -->
+          <div class="b-dest-card">
+            <div class="b-card-top b-card-top-6">
+              🌵
+              <div class="b-status-dot dot-visited"></div>
+            </div>
+            <div class="b-card-foot">
+              <div class="b-dest-name">Mendoza</div>
+              <div class="b-dest-status b-status-v">✓ Visitado</div>
+            </div>
+          </div>
+
+        </div>
+      </div>
+    </div>
+  </div>
+
+</div>
+
+<script>
+  let mode = 'lt';
+  function toggleMode() {
+    mode = mode === 'lt' ? 'dk' : 'lt';
+    document.getElementById('modeBtn').textContent = mode === 'lt' ? '☾ Dark mode' : '☀ Light mode';
+    document.getElementById('modeBtn').classList.toggle('active', mode === 'dk');
+    document.getElementById('phoneA').className = `phone ${mode}`;
+    document.getElementById('phoneB').className = `phone ${mode}`;
+  }
+</script>
+
+</body>
+</html>

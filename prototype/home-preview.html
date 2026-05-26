@@ -1,0 +1,805 @@
+<!DOCTYPE html>
+<html lang="es">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>Plan Travel · Inicio · Prototype</title>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link href="https://fonts.googleapis.com/css2?family=Fraunces:ital,opsz,wght@0,9..144,300;0,9..144,500;0,9..144,700;1,9..144,300&family=Plus+Jakarta+Sans:wght@300;400;500;600;700&display=swap" rel="stylesheet">
+<style>
+*, *::before, *::after { box-sizing: border-box; margin: 0; padding: 0; }
+
+body {
+  min-height: 100vh;
+  background: #0E0E0E;
+  display: flex; flex-direction: column;
+  align-items: center;
+  padding: 28px 24px 64px;
+  font-family: 'Plus Jakarta Sans', sans-serif;
+  gap: 20px;
+}
+
+.proto-banner {
+  font-size: 10px; font-weight: 700;
+  letter-spacing: 0.12em; text-transform: uppercase;
+  color: #555; border: 1px solid #2A2A2A;
+  padding: 5px 14px; border-radius: 100px;
+}
+
+.controls {
+  display: flex; gap: 8px; flex-wrap: wrap;
+  justify-content: center; align-items: center;
+}
+.ctrl-btn {
+  padding: 8px 18px; border-radius: 100px;
+  border: 1.5px solid #2E2E2E;
+  background: #1A1A1A; color: #666;
+  font-family: 'Plus Jakarta Sans', sans-serif;
+  font-size: 12px; font-weight: 700;
+  cursor: pointer; transition: all 0.22s ease;
+  letter-spacing: 0.03em;
+}
+.ctrl-btn:hover { background: #242424; color: #ccc; border-color: #444; }
+.ctrl-btn.active { background: #242424; color: #fff; border-color: #666; }
+.divider { width: 1px; height: 28px; background: #2A2A2A; display: inline-block; }
+
+.phones-row {
+  display: flex; gap: 32px;
+  flex-wrap: wrap; justify-content: center; align-items: flex-start;
+}
+.phone-col { display: flex; flex-direction: column; align-items: center; gap: 10px; }
+.option-label {
+  font-size: 11px; font-weight: 800;
+  letter-spacing: 0.08em; text-transform: uppercase; color: #555;
+}
+.option-name { font-size: 13px; font-weight: 600; color: #888; text-align: center; margin-top: -4px; }
+
+/* ── Phone frame ── */
+.phone {
+  width: 340px; height: 720px;
+  border-radius: 46px; overflow: hidden;
+  position: relative; display: flex; flex-direction: column;
+  box-shadow:
+    0 0 0 1px rgba(255,255,255,0.07),
+    0 32px 80px rgba(0,0,0,0.85),
+    inset 0 0 0 1px rgba(255,255,255,0.04);
+}
+
+/* ── Atlas tokens ── */
+.lt {
+  --bg: #F8FAFF; --surf: #FFFFFF; --surf-v: #EDF1FB;
+  --pri: #2563EB; --on-pri: #FFFFFF;
+  --pri-c: #DBEAFE; --on-pri-c: #1E3A8A;
+  --sec: #7C3AED; --sec-c: #EDE9FE; --on-sec-c: #4C1D95;
+  --ter: #D97706; --ter-c: #FEF3C7; --on-ter-c: #78350F;
+  --on-bg: #0F172A; --on-s: #0F172A; --on-sv: #475569;
+  --out: #C4CEDF;
+  --sh1: 0 2px 8px rgba(37,99,235,0.08), 0 1px 3px rgba(0,0,0,0.04);
+  --sh2: 0 4px 20px rgba(37,99,235,0.14), 0 2px 6px rgba(0,0,0,0.06);
+}
+.dk {
+  --bg: #0A0C14; --surf: #141A27; --surf-v: #1E283E;
+  --pri: #60A5FA; --on-pri: #0A1A3E;
+  --pri-c: #1E3A6E; --on-pri-c: #BAD4FF;
+  --sec: #A78BFA; --sec-c: #3D1C8E; --on-sec-c: #D4BBFF;
+  --ter: #FBB928; --ter-c: #3A2200; --on-ter-c: #FFE08A;
+  --on-bg: #E2E8FF; --on-s: #E2E8FF; --on-sv: #8A9ABF;
+  --out: #384260;
+  --sh1: 0 2px 8px rgba(0,0,0,0.4), 0 1px 3px rgba(96,165,250,0.08);
+  --sh2: 0 4px 20px rgba(0,0,0,0.55), 0 2px 6px rgba(96,165,250,0.12);
+}
+
+.phone { background: var(--bg); color: var(--on-bg); transition: background 0.35s, color 0.35s; }
+
+/* ── Utility ── */
+.hidden { display: none !important; }
+
+/* ── Status bar ── */
+.status-bar {
+  padding: 14px 24px 6px;
+  display: flex; justify-content: space-between; align-items: center;
+  font-size: 11px; font-weight: 700; letter-spacing: 0.04em;
+  flex-shrink: 0;
+  background: var(--pri); color: var(--on-pri);
+  transition: background 0.35s, color 0.35s;
+}
+.status-icons { display: flex; gap: 6px; }
+
+/* ── Icon button ── */
+.icon-btn {
+  width: 40px; height: 40px; border-radius: 50%;
+  border: none; background: transparent;
+  cursor: pointer; display: flex; align-items: center; justify-content: center;
+  font-size: 19px; transition: background 0.2s; flex-shrink: 0;
+  color: var(--on-pri);
+}
+.icon-btn:hover { background: rgba(255,255,255,0.12); }
+
+/* ── Section label ── */
+.sec-label {
+  font-size: 10px; font-weight: 800;
+  letter-spacing: 0.09em; text-transform: uppercase;
+  color: var(--on-sv); margin-bottom: 10px; padding: 0 2px;
+  transition: color 0.35s;
+}
+
+/* ── Chip ── */
+.chip {
+  border-radius: 100px; padding: 4px 11px;
+  font-size: 11px; font-weight: 700;
+  display: flex; align-items: center; gap: 4px;
+  transition: background 0.35s, color 0.35s;
+}
+.chip-pri { background: var(--pri-c); color: var(--on-pri-c); }
+.chip-ter { background: var(--ter-c); color: var(--on-ter-c); }
+.chip-sec { background: var(--sec-c); color: var(--on-sec-c); }
+
+/* ── Horizontal tile scroll ── */
+.tiles-scroll {
+  display: flex; gap: 10px; overflow-x: auto; scrollbar-width: none;
+  padding-bottom: 4px; margin: 0 -16px; padding-left: 16px; padding-right: 16px;
+}
+.tiles-scroll::-webkit-scrollbar { display: none; }
+.tile {
+  background: var(--surf); border-radius: 18px; box-shadow: var(--sh1);
+  padding: 13px 12px; flex-shrink: 0; width: 132px;
+  display: flex; flex-direction: column; gap: 6px;
+  transition: background 0.35s, box-shadow 0.35s, transform 0.18s; cursor: pointer;
+}
+.tile:hover { transform: translateY(-3px); box-shadow: var(--sh2); }
+.tile-emoji { font-size: 24px; }
+.tile-tag {
+  border-radius: 100px; padding: 2px 8px;
+  font-size: 9px; font-weight: 800; letter-spacing: 0.06em; text-transform: uppercase;
+  display: inline-block; width: fit-content;
+  background: var(--pri-c); color: var(--on-pri-c);
+  transition: background 0.35s, color 0.35s;
+}
+.tile-name { font-size: 12px; font-weight: 600; color: var(--on-s); line-height: 1.3; transition: color 0.35s; }
+.tile-sub { font-size: 10px; color: var(--on-sv); transition: color 0.35s; }
+
+/* ── Bottom nav ── */
+.bottom-nav {
+  background: var(--surf); border-top: 1px solid var(--out);
+  display: flex; padding: 6px 4px 22px; flex-shrink: 0;
+  transition: background 0.35s, border-color 0.35s;
+}
+.nav-item {
+  flex: 1; display: flex; flex-direction: column; align-items: center; gap: 2px;
+  padding: 6px 4px; cursor: pointer; border-radius: 14px; transition: background 0.2s;
+}
+.nav-item:hover { background: var(--surf-v); }
+.nav-pill {
+  width: 36px; height: 3px; border-radius: 100px;
+  background: transparent; margin-bottom: 2px; transition: background 0.35s;
+}
+.nav-item.sel .nav-pill { background: var(--pri); }
+.nav-icon { font-size: 22px; line-height: 1; }
+.nav-lbl { font-size: 10px; font-weight: 600; letter-spacing: 0.02em; color: var(--on-sv); transition: color 0.35s; }
+.nav-item.sel .nav-lbl { color: var(--pri); }
+.nav-item.sel .nav-icon { filter: drop-shadow(0 0 5px var(--pri)); }
+
+/* ═══════════════════════════════════════
+   OPTION A — Limpia · Tarjetas
+═══════════════════════════════════════ */
+
+.a-topbar {
+  background: var(--pri); padding: 4px 8px 12px;
+  display: flex; align-items: center; gap: 4px; flex-shrink: 0;
+  transition: background 0.35s;
+}
+.a-topbar-title {
+  flex: 1; font-size: 18px; font-weight: 700; letter-spacing: -0.01em;
+  color: var(--on-pri); padding-left: 4px; transition: color 0.35s;
+}
+.a-user-avatar {
+  width: 34px; height: 34px; border-radius: 50%;
+  background: rgba(255,255,255,0.2);
+  display: flex; align-items: center; justify-content: center;
+  font-family: 'Fraunces', serif; font-size: 14px; font-weight: 700;
+  color: var(--on-pri); cursor: pointer; flex-shrink: 0;
+}
+
+.a-content {
+  flex: 1; overflow-y: auto; scrollbar-width: none;
+  background: var(--bg); padding: 20px 16px 12px;
+  display: flex; flex-direction: column; gap: 18px;
+  transition: background 0.35s;
+}
+.a-content::-webkit-scrollbar { display: none; }
+
+/* Greeting */
+.a-greet-eyebrow {
+  font-size: 12px; font-weight: 500; color: var(--on-sv);
+  letter-spacing: 0.01em; margin-bottom: 2px; transition: color 0.35s;
+}
+.a-greet-name {
+  font-family: 'Fraunces', serif;
+  font-size: 38px; font-weight: 700; line-height: 1.05;
+  letter-spacing: -0.025em; color: var(--on-bg); transition: color 0.35s;
+}
+.a-greet-name .accent { color: var(--pri); transition: color 0.35s; }
+.a-greet-tagline {
+  font-family: 'Fraunces', serif; font-style: italic; font-weight: 300;
+  font-size: 14px; color: var(--on-sv); margin-top: 5px; transition: color 0.35s;
+}
+
+/* Group card — left accent */
+.a-group-card {
+  background: var(--surf); border-radius: 18px; box-shadow: var(--sh2);
+  border-left: 4px solid var(--pri); padding: 15px 16px 15px 14px;
+  transition: background 0.35s, box-shadow 0.35s, border-color 0.35s;
+}
+.a-group-eyebrow {
+  font-size: 10px; font-weight: 800; letter-spacing: 0.1em; text-transform: uppercase;
+  color: var(--pri); margin-bottom: 4px; transition: color 0.35s;
+}
+.a-group-name {
+  font-family: 'Fraunces', serif; font-size: 20px; font-weight: 600;
+  color: var(--on-s); letter-spacing: -0.01em; margin-bottom: 11px; transition: color 0.35s;
+}
+.chips-row { display: flex; gap: 7px; flex-wrap: wrap; }
+
+/* Quick actions — 3 tonal buttons */
+.a-actions { display: flex; gap: 8px; }
+.a-act {
+  flex: 1; border: none; border-radius: 15px; padding: 13px 6px;
+  font-family: 'Plus Jakarta Sans', sans-serif;
+  font-size: 10px; font-weight: 700; letter-spacing: 0.01em; line-height: 1.3;
+  cursor: pointer; display: flex; flex-direction: column;
+  align-items: center; gap: 5px; text-align: center;
+  transition: transform 0.15s, filter 0.15s;
+}
+.a-act:hover { transform: translateY(-2px); filter: brightness(1.04); }
+.a-act.gastos  { background: var(--ter-c); color: var(--on-ter-c); }
+.a-act.destinos { background: var(--sec-c); color: var(--on-sec-c); }
+.a-act.invitar  { background: var(--pri-c); color: var(--on-pri-c); }
+.a-act-icon { font-size: 20px; }
+
+/* Empty state */
+.a-empty-card {
+  background: var(--surf); border-radius: 20px; box-shadow: var(--sh1);
+  padding: 26px 22px; text-align: center;
+  display: flex; flex-direction: column; align-items: center; gap: 10px;
+  transition: background 0.35s;
+}
+.a-empty-icon { font-size: 46px; }
+.a-empty-title {
+  font-family: 'Fraunces', serif; font-size: 20px; font-weight: 600;
+  color: var(--on-s); letter-spacing: -0.01em; transition: color 0.35s;
+}
+.a-empty-desc { font-size: 12px; color: var(--on-sv); line-height: 1.55; transition: color 0.35s; }
+.a-pri-btn {
+  background: var(--pri); color: var(--on-pri); border: none;
+  border-radius: 13px; padding: 11px 0; width: 100%;
+  font-family: 'Plus Jakarta Sans', sans-serif;
+  font-size: 13px; font-weight: 700; cursor: pointer;
+  transition: background 0.35s, color 0.35s, filter 0.2s;
+}
+.a-pri-btn:hover { filter: brightness(1.08); }
+.a-sec-btn {
+  background: transparent; border: 1.5px solid var(--out);
+  border-radius: 13px; padding: 10px 0; width: 100%;
+  font-family: 'Plus Jakarta Sans', sans-serif;
+  font-size: 13px; font-weight: 600; cursor: pointer;
+  color: var(--on-sv); transition: border-color 0.35s, color 0.35s;
+}
+.a-sec-btn:hover { border-color: var(--pri); color: var(--pri); }
+
+/* ═══════════════════════════════════════
+   OPTION B — Inmersiva · Contextual
+═══════════════════════════════════════ */
+
+.b-header {
+  background: var(--pri); flex-shrink: 0;
+  padding: 4px 8px 42px; position: relative; overflow: hidden;
+  transition: background 0.35s;
+}
+.b-deco1 {
+  position: absolute; top: -60px; right: -50px;
+  width: 210px; height: 210px; border-radius: 50%;
+  background: rgba(255,255,255,0.07); pointer-events: none;
+}
+.b-deco2 {
+  position: absolute; bottom: -25px; left: -30px;
+  width: 150px; height: 150px; border-radius: 50%;
+  background: rgba(255,255,255,0.04); pointer-events: none;
+}
+
+.b-toprow {
+  display: flex; align-items: center; height: 44px; padding: 0 4px;
+  position: relative; z-index: 1;
+}
+.b-user-avatar {
+  width: 34px; height: 34px; border-radius: 50%;
+  background: rgba(255,255,255,0.2);
+  display: flex; align-items: center; justify-content: center;
+  font-family: 'Fraunces', serif; font-size: 14px; font-weight: 700;
+  color: var(--on-pri); cursor: pointer; flex-shrink: 0;
+}
+
+.b-greet-block {
+  position: relative; z-index: 1; padding: 6px 10px 0;
+}
+.b-greet-sub {
+  font-family: 'Fraunces', serif; font-style: italic; font-weight: 300;
+  font-size: 14px; color: rgba(255,255,255,0.72); margin-bottom: 1px;
+}
+.b-greet-name {
+  font-family: 'Fraunces', serif; font-size: 36px; font-weight: 700;
+  color: var(--on-pri); letter-spacing: -0.025em; line-height: 1.05;
+}
+
+/* With-group block inside header */
+.b-group-block {
+  position: relative; z-index: 1;
+  display: flex; flex-direction: column; align-items: center;
+  gap: 5px; padding: 14px 10px 0;
+}
+.b-av-stack { display: flex; }
+.b-av {
+  width: 30px; height: 30px; border-radius: 50%;
+  border: 2px solid var(--pri);
+  display: flex; align-items: center; justify-content: center;
+  font-family: 'Fraunces', serif; font-size: 11px; font-weight: 700;
+  margin-left: -8px; transition: border-color 0.35s;
+}
+.b-av:first-child { margin-left: 0; }
+.b-av.blue  { background: rgba(255,255,255,0.25); color: var(--on-pri); }
+.b-av.purp  { background: rgba(255,255,255,0.18); color: var(--on-pri); }
+.b-av.ora   { background: rgba(255,255,255,0.22); color: var(--on-pri); }
+.b-av.more  { background: rgba(255,255,255,0.12); color: var(--on-pri); font-family: 'Plus Jakarta Sans', sans-serif; font-size: 9px; font-weight: 800; }
+.b-group-name {
+  font-family: 'Fraunces', serif; font-size: 19px; font-weight: 700;
+  color: var(--on-pri); letter-spacing: -0.015em; transition: color 0.35s;
+}
+.b-member-badge {
+  background: rgba(255,255,255,0.18); color: var(--on-pri);
+  border-radius: 100px; padding: 3px 12px;
+  font-size: 11px; font-weight: 700; letter-spacing: 0.04em;
+}
+
+/* No-group block inside header */
+.b-nogroup-header-block {
+  position: relative; z-index: 1;
+  display: flex; flex-direction: column; align-items: center;
+  gap: 4px; padding: 12px 10px 0;
+}
+.b-nogroup-header-icon { font-size: 34px; opacity: 0.85; }
+.b-nogroup-header-text { font-size: 12px; color: rgba(255,255,255,0.6); }
+
+/* Sliding content area */
+.b-content {
+  flex: 1; overflow-y: auto; scrollbar-width: none;
+  background: var(--bg); padding: 18px 14px 12px;
+  margin-top: -22px; border-radius: 22px 22px 0 0;
+  position: relative; z-index: 2;
+  box-shadow: 0 -4px 20px rgba(0,0,0,0.1);
+  display: flex; flex-direction: column; gap: 16px;
+  transition: background 0.35s;
+}
+.b-content::-webkit-scrollbar { display: none; }
+
+/* 3 action buttons */
+.b-actions { display: flex; gap: 8px; }
+.b-act {
+  flex: 1; border: none; border-radius: 16px; padding: 14px 6px;
+  font-family: 'Plus Jakarta Sans', sans-serif;
+  font-size: 10px; font-weight: 700; letter-spacing: 0.02em; line-height: 1.3;
+  cursor: pointer; display: flex; flex-direction: column;
+  align-items: center; gap: 6px; text-align: center;
+  transition: transform 0.15s, filter 0.15s;
+}
+.b-act:hover { transform: translateY(-3px); filter: brightness(1.05); }
+.b-act.gastos   { background: var(--ter-c); color: var(--on-ter-c); }
+.b-act.destinos { background: var(--sec-c); color: var(--on-sec-c); }
+.b-act.invitar  { background: var(--pri-c); color: var(--on-pri-c); }
+.b-act-emoji { font-size: 22px; }
+
+/* Expense summary card */
+.b-summary-card {
+  background: var(--surf); border-radius: 18px; box-shadow: var(--sh1);
+  padding: 14px 16px; display: flex; align-items: center; gap: 14px;
+  cursor: pointer; transition: background 0.35s, box-shadow 0.35s, transform 0.18s;
+}
+.b-summary-card:hover { transform: translateY(-2px); box-shadow: var(--sh2); }
+.b-summary-icon {
+  width: 46px; height: 46px; border-radius: 14px;
+  background: var(--ter-c); color: var(--on-ter-c);
+  display: flex; align-items: center; justify-content: center;
+  font-size: 22px; flex-shrink: 0; transition: background 0.35s, color 0.35s;
+}
+.b-summary-info { flex: 1; }
+.b-summary-label { font-size: 11px; font-weight: 600; color: var(--on-sv); margin-bottom: 2px; transition: color 0.35s; }
+.b-summary-amount {
+  font-family: 'Fraunces', serif; font-size: 24px; font-weight: 700;
+  color: var(--on-s); letter-spacing: -0.02em; line-height: 1; transition: color 0.35s;
+}
+.b-summary-sub { font-size: 10px; color: var(--on-sv); margin-top: 2px; transition: color 0.35s; }
+.b-summary-arr { font-size: 22px; color: var(--out); transition: color 0.35s; }
+
+/* CTA cards for no-group */
+.b-cta-card {
+  background: var(--surf); border: 1.5px solid var(--out);
+  border-radius: 16px; padding: 13px 14px;
+  display: flex; align-items: center; gap: 12px;
+  cursor: pointer; box-shadow: var(--sh1);
+  transition: background 0.2s, border-color 0.22s, box-shadow 0.22s;
+}
+.b-cta-card:hover { border-color: var(--pri); box-shadow: 0 0 0 2px rgba(37,99,235,0.08), var(--sh1); }
+.dk .b-cta-card:hover { box-shadow: 0 0 0 2px rgba(96,165,250,0.12), var(--sh1); }
+.b-cta-icon {
+  width: 40px; height: 40px; border-radius: 13px;
+  display: flex; align-items: center; justify-content: center;
+  font-size: 19px; flex-shrink: 0;
+  transition: background 0.35s, color 0.35s;
+}
+.b-cta-text { flex: 1; }
+.b-cta-label { font-size: 14px; font-weight: 700; color: var(--on-s); transition: color 0.35s; }
+.b-cta-desc { font-size: 11px; color: var(--on-sv); margin-top: 2px; transition: color 0.35s; }
+.b-cta-arr { font-size: 20px; color: var(--out); transition: color 0.35s; }
+
+</style>
+</head>
+<body>
+
+<div class="proto-banner">⚠ Prototype · HomeScreen · Eliminar después de elegir opción</div>
+
+<div class="controls">
+  <button class="ctrl-btn active" id="btnGroup" onclick="setState('group',this)">✈ Con grupo</button>
+  <button class="ctrl-btn" id="btnNoGroup" onclick="setState('nogroup',this)">🚫 Sin grupo</button>
+  <div class="divider"></div>
+  <button class="ctrl-btn" id="modeBtn" onclick="toggleMode()">☾ Dark</button>
+</div>
+
+<div class="phones-row">
+
+  <!-- ══════════════════════════════
+       OPCIÓN A — Limpia · Tarjetas
+  ══════════════════════════════ -->
+  <div class="phone-col">
+    <div class="option-label">Opción A</div>
+    <div class="option-name">Limpia · Tarjetas</div>
+    <div class="phone lt" id="phoneA">
+
+      <div class="status-bar">
+        <span>12:30</span>
+        <div class="status-icons"><span>▲▲▲</span><span>WiFi</span><span>🔋</span></div>
+      </div>
+
+      <div class="a-topbar">
+        <button class="icon-btn">☰</button>
+        <span class="a-topbar-title">✈ Plan Travel</span>
+        <div class="a-user-avatar">N</div>
+      </div>
+
+      <div class="a-content">
+
+        <!-- Greeting -->
+        <div>
+          <div class="a-greet-eyebrow">Buenos días,</div>
+          <div class="a-greet-name">Nicolás <span class="accent">✈</span></div>
+          <div class="a-greet-tagline">¿A dónde vamos hoy?</div>
+        </div>
+
+        <!-- STATE: Con grupo -->
+        <div id="a-with-group">
+
+          <div class="a-group-card">
+            <div class="a-group-eyebrow">Grupo activo</div>
+            <div class="a-group-name">Viaje a Bariloche 🏔️</div>
+            <div class="chips-row">
+              <div class="chip chip-pri">👥 4 integrantes</div>
+              <div class="chip chip-ter">💰 $2.400</div>
+            </div>
+          </div>
+
+          <div style="margin-top:18px">
+            <div class="sec-label">Acciones rápidas</div>
+            <div class="a-actions">
+              <button class="a-act gastos">
+                <span class="a-act-icon">💸</span>
+                Agregar<br>gasto
+              </button>
+              <button class="a-act destinos">
+                <span class="a-act-icon">📍</span>
+                Ver<br>destinos
+              </button>
+              <button class="a-act invitar">
+                <span class="a-act-icon">📨</span>
+                Invitar<br>persona
+              </button>
+            </div>
+          </div>
+
+          <div>
+            <div class="sec-label">Esta semana</div>
+            <div class="tiles-scroll">
+              <div class="tile">
+                <div class="tile-emoji">💸</div>
+                <div class="tile-tag" style="background:var(--ter-c);color:var(--on-ter-c)">Finanzas</div>
+                <div class="tile-name">2 gastos sin dividir</div>
+                <div class="tile-sub">$2.400 pendiente</div>
+              </div>
+              <div class="tile">
+                <div class="tile-emoji">🏞️</div>
+                <div class="tile-tag" style="background:var(--sec-c);color:var(--on-sec-c)">Destinos</div>
+                <div class="tile-name">Trekking Cerro Catedral</div>
+                <div class="tile-sub">A 12 km</div>
+              </div>
+              <div class="tile">
+                <div class="tile-emoji">👥</div>
+                <div class="tile-tag">Grupo</div>
+                <div class="tile-name">Invitá más personas</div>
+                <div class="tile-sub">4 de 10 lugares</div>
+              </div>
+            </div>
+          </div>
+
+        </div><!-- /a-with-group -->
+
+        <!-- STATE: Sin grupo -->
+        <div id="a-no-group" class="hidden">
+          <div class="a-empty-card">
+            <div class="a-empty-icon">✈️</div>
+            <div class="a-empty-title">¡Empieza tu aventura!</div>
+            <div class="a-empty-desc">Creá un grupo de viaje o pedile a alguien que te comparta su código de invitación para empezar a planear.</div>
+            <button class="a-pri-btn">Crear grupo</button>
+            <button class="a-sec-btn">Tengo un código</button>
+          </div>
+        </div>
+
+      </div><!-- /a-content -->
+
+      <div class="bottom-nav">
+        <div class="nav-item sel">
+          <div class="nav-pill"></div>
+          <div class="nav-icon">🏠</div>
+          <div class="nav-lbl">Inicio</div>
+        </div>
+        <div class="nav-item">
+          <div class="nav-pill"></div>
+          <div class="nav-icon">👥</div>
+          <div class="nav-lbl">Grupos</div>
+        </div>
+        <div class="nav-item">
+          <div class="nav-pill"></div>
+          <div class="nav-icon">📍</div>
+          <div class="nav-lbl">Destinos</div>
+        </div>
+        <div class="nav-item">
+          <div class="nav-pill"></div>
+          <div class="nav-icon">💰</div>
+          <div class="nav-lbl">Gastos</div>
+        </div>
+      </div>
+
+    </div><!-- /phoneA -->
+  </div>
+
+  <!-- ══════════════════════════════
+       OPCIÓN B — Inmersiva · Contextual
+  ══════════════════════════════ -->
+  <div class="phone-col">
+    <div class="option-label">Opción B</div>
+    <div class="option-name">Inmersiva · Contextual</div>
+    <div class="phone lt" id="phoneB">
+
+      <div class="status-bar">
+        <span>12:30</span>
+        <div class="status-icons"><span>▲▲▲</span><span>WiFi</span><span>🔋</span></div>
+      </div>
+
+      <!-- Immersive header -->
+      <div class="b-header">
+        <div class="b-deco1"></div>
+        <div class="b-deco2"></div>
+
+        <div class="b-toprow">
+          <button class="icon-btn">☰</button>
+          <div style="flex:1"></div>
+          <div class="b-user-avatar">N</div>
+        </div>
+
+        <div class="b-greet-block">
+          <div class="b-greet-sub">Buenos días,</div>
+          <div class="b-greet-name">Nicolás ✈</div>
+        </div>
+
+        <!-- With-group: avatar stack + group name -->
+        <div class="b-group-block" id="b-header-with-group">
+          <div class="b-av-stack">
+            <div class="b-av blue">N</div>
+            <div class="b-av purp">M</div>
+            <div class="b-av ora">C</div>
+            <div class="b-av more">+1</div>
+          </div>
+          <div class="b-group-name">Viaje a Bariloche 🏔️</div>
+          <div class="b-member-badge">4 integrantes</div>
+        </div>
+
+        <!-- No-group: just icon + hint -->
+        <div class="b-nogroup-header-block hidden" id="b-header-no-group">
+          <div class="b-nogroup-header-icon">🌍</div>
+          <div class="b-nogroup-header-text">Todavía no tenés un grupo de viaje</div>
+        </div>
+
+      </div><!-- /b-header -->
+
+      <!-- Content slides up -->
+      <div class="b-content">
+
+        <!-- STATE: Con grupo -->
+        <div id="b-with-group">
+
+          <div>
+            <div class="sec-label">Acciones rápidas</div>
+            <div class="b-actions">
+              <button class="b-act gastos">
+                <span class="b-act-emoji">💸</span>
+                Agregar<br>gasto
+              </button>
+              <button class="b-act destinos">
+                <span class="b-act-emoji">📍</span>
+                Ver<br>destinos
+              </button>
+              <button class="b-act invitar">
+                <span class="b-act-emoji">📨</span>
+                Invitar<br>persona
+              </button>
+            </div>
+          </div>
+
+          <div class="b-summary-card">
+            <div class="b-summary-icon">💰</div>
+            <div class="b-summary-info">
+              <div class="b-summary-label">Tu saldo pendiente</div>
+              <div class="b-summary-amount">$2.400</div>
+              <div class="b-summary-sub">2 gastos sin dividir</div>
+            </div>
+            <div class="b-summary-arr">›</div>
+          </div>
+
+          <div>
+            <div class="sec-label">Esta semana</div>
+            <div class="tiles-scroll">
+              <div class="tile">
+                <div class="tile-emoji">🏞️</div>
+                <div class="tile-tag" style="background:var(--sec-c);color:var(--on-sec-c)">Destinos</div>
+                <div class="tile-name">Trekking Cerro Catedral</div>
+                <div class="tile-sub">A 12 km</div>
+              </div>
+              <div class="tile">
+                <div class="tile-emoji">🍽️</div>
+                <div class="tile-tag" style="background:var(--ter-c);color:var(--on-ter-c)">Gastronomía</div>
+                <div class="tile-name">Cena en el centro</div>
+                <div class="tile-sub">Recomendado</div>
+              </div>
+              <div class="tile">
+                <div class="tile-emoji">⛷️</div>
+                <div class="tile-tag">Actividad</div>
+                <div class="tile-name">Ski Cerro Chapelco</div>
+                <div class="tile-sub">20 km</div>
+              </div>
+            </div>
+          </div>
+
+        </div><!-- /b-with-group -->
+
+        <!-- STATE: Sin grupo -->
+        <div id="b-no-group" class="hidden" style="display:flex;flex-direction:column;gap:10px">
+
+          <div style="text-align:center;padding:6px 4px 2px">
+            <div style="font-family:'Fraunces',serif;font-size:19px;font-weight:600;color:var(--on-s);letter-spacing:-0.01em;margin-bottom:4px;transition:color 0.35s">¿Listo para viajar?</div>
+            <div style="font-size:12px;color:var(--on-sv);line-height:1.5;transition:color 0.35s">Creá tu primer grupo o unite a uno ya existente</div>
+          </div>
+
+          <div class="b-cta-card">
+            <div class="b-cta-icon" style="background:var(--pri-c);color:var(--on-pri-c)">＋</div>
+            <div class="b-cta-text">
+              <div class="b-cta-label">Crear grupo</div>
+              <div class="b-cta-desc">Invitá amigos y empezá a planear</div>
+            </div>
+            <div class="b-cta-arr">›</div>
+          </div>
+
+          <div class="b-cta-card">
+            <div class="b-cta-icon" style="background:var(--sec-c);color:var(--on-sec-c)">🔗</div>
+            <div class="b-cta-text">
+              <div class="b-cta-label">Tengo un código</div>
+              <div class="b-cta-desc">Ingresá el código que te compartieron</div>
+            </div>
+            <div class="b-cta-arr">›</div>
+          </div>
+
+          <div class="b-cta-card">
+            <div class="b-cta-icon" style="background:var(--ter-c);color:var(--on-ter-c)">📷</div>
+            <div class="b-cta-text">
+              <div class="b-cta-label">Escanear QR</div>
+              <div class="b-cta-desc">Escaneá el QR de una invitación</div>
+            </div>
+            <div class="b-cta-arr">›</div>
+          </div>
+
+        </div><!-- /b-no-group -->
+
+      </div><!-- /b-content -->
+
+      <div class="bottom-nav">
+        <div class="nav-item sel">
+          <div class="nav-pill"></div>
+          <div class="nav-icon">🏠</div>
+          <div class="nav-lbl">Inicio</div>
+        </div>
+        <div class="nav-item">
+          <div class="nav-pill"></div>
+          <div class="nav-icon">👥</div>
+          <div class="nav-lbl">Grupos</div>
+        </div>
+        <div class="nav-item">
+          <div class="nav-pill"></div>
+          <div class="nav-icon">📍</div>
+          <div class="nav-lbl">Destinos</div>
+        </div>
+        <div class="nav-item">
+          <div class="nav-pill"></div>
+          <div class="nav-icon">💰</div>
+          <div class="nav-lbl">Gastos</div>
+        </div>
+      </div>
+
+    </div><!-- /phoneB -->
+  </div>
+
+</div><!-- /phones-row -->
+
+<script>
+  let mode = 'lt';
+  let state = 'group';
+
+  function applyMode() {
+    ['phoneA', 'phoneB'].forEach(id => {
+      const p = document.getElementById(id);
+      p.classList.remove('lt', 'dk');
+      p.classList.add(mode);
+    });
+    document.getElementById('modeBtn').textContent = mode === 'lt' ? '☾ Dark' : '☀ Light';
+  }
+
+  function toggleMode() {
+    mode = mode === 'lt' ? 'dk' : 'lt';
+    applyMode();
+  }
+
+  function setState(newState, btn) {
+    state = newState;
+    document.querySelectorAll('.ctrl-btn').forEach(b => {
+      if (b.id !== 'modeBtn') b.classList.remove('active');
+    });
+    btn.classList.add('active');
+
+    const hasGroup = state === 'group';
+
+    // Option A
+    toggle('a-with-group', hasGroup);
+    toggle('a-no-group', !hasGroup);
+
+    // Option B header
+    toggle('b-header-with-group', hasGroup);
+    toggle('b-header-no-group', !hasGroup);
+
+    // Option B content
+    toggle('b-with-group', hasGroup);
+    toggle('b-no-group', !hasGroup);
+  }
+
+  function toggle(id, visible) {
+    const el = document.getElementById(id);
+    if (visible) el.classList.remove('hidden');
+    else el.classList.add('hidden');
+  }
+</script>
+
+</body>
+</html>
