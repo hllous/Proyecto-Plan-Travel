@@ -26,7 +26,7 @@ import androidx.compose.material.icons.filled.DarkMode
 import androidx.compose.material.icons.filled.Home
 import androidx.compose.material.icons.filled.LightMode
 import androidx.compose.material.icons.filled.LocationOn
-import androidx.compose.material.icons.filled.Logout
+import androidx.compose.material.icons.automirrored.filled.Logout
 import androidx.compose.material.icons.filled.Menu
 import androidx.compose.material.icons.filled.People
 import androidx.compose.material.icons.filled.Person
@@ -330,6 +330,7 @@ fun MainAppContent(
                         authViewModel = authViewModel,
                         onLogout = onLogout,
                         onBack = { navController.navigateUp() },
+                        groupViewModel = groupViewModel,
                     )
                 }
             }
@@ -431,7 +432,7 @@ fun DrawerContent(
                     onClick = { onThemeChange(!isDarkTheme) },
                 )
                 NavigationDrawerItem(
-                    icon = { Icon(Icons.Default.Logout, contentDescription = null) },
+                    icon = { Icon(Icons.AutoMirrored.Filled.Logout, contentDescription = null) },
                     label = { Text("Cerrar sesión") },
                     selected = false,
                     onClick = onLogout,

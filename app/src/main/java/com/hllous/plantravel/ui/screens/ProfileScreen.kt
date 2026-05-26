@@ -44,15 +44,23 @@ import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.unit.dp
 import com.hllous.plantravel.presentation.auth.AuthState
 import com.hllous.plantravel.presentation.auth.AuthViewModel
+import com.hllous.plantravel.presentation.group.GroupViewModel
 import com.hllous.plantravel.ui.theme.FrauncesFamily
 import com.hllous.plantravel.ui.utils.displayInitials
 
 @Composable
-fun ProfileScreen(authViewModel: AuthViewModel, onLogout: () -> Unit, onBack: () -> Unit = {}) {
+fun ProfileScreen(
+    authViewModel: AuthViewModel,
+    onLogout: () -> Unit,
+    onBack: () -> Unit = {},
+    groupViewModel: GroupViewModel? = null,
+) {
     val state by authViewModel.state.collectAsState()
     val userEmail by authViewModel.userEmail.collectAsState()
     val displayName = (state as? AuthState.Authenticated)?.displayName ?: ""
     val initials = displayInitials(displayName)
+    val currentGroup by groupViewModel?.currentGroup?.collectAsState() ?: androidx.compose.runtime.remember { androidx.compose.runtime.mutableStateOf(null) }
+    val members by groupViewModel?.members?.collectAsState() ?: androidx.compose.runtime.remember { androidx.compose.runtime.mutableStateOf(emptyList()) }
 
     Column(Modifier.fillMaxSize()) {
         // Blue brand panel
@@ -184,11 +192,25 @@ fun ProfileScreen(authViewModel: AuthViewModel, onLogout: () -> Unit, onBack: ()
                                 )
                             }
                             Spacer(Modifier.height(4.dp))
-                            Text(
-                                "Sin grupo activo",
-                                style = MaterialTheme.typography.bodyMedium,
-                                color = MaterialTheme.colorScheme.onSurfaceVariant
-                            )
+                            if (currentGroup != null) {
+                                Text(
+                                    currentGroup!!.name,
+                                    style = MaterialTheme.typography.bodyMedium,
+                                    fontWeight = FontWeight.Medium,
+                                    color = MaterialTheme.colorScheme.onSurface
+                                )
+                                Text(
+                                    "${members.size} integrante${if (members.size != 1) "s" else ""}",
+                                    style = MaterialTheme.typography.bodySmall,
+                                    color = MaterialTheme.colorScheme.onSurfaceVariant
+                                )
+                            } else {
+                                Text(
+                                    "Sin grupo activo",
+                                    style = MaterialTheme.typography.bodyMedium,
+                                    color = MaterialTheme.colorScheme.onSurfaceVariant
+                                )
+                            }
                         }
                     }
                 }
