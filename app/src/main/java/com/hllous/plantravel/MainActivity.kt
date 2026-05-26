@@ -63,6 +63,7 @@ import androidx.compose.ui.draw.clip
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.unit.dp
 import androidx.hilt.navigation.compose.hiltViewModel
+import androidx.navigation.NavGraph.Companion.findStartDestination
 import androidx.navigation.NavHostController
 import androidx.navigation.compose.NavHost
 import androidx.navigation.compose.composable
@@ -321,7 +322,15 @@ fun MainAppContent(
                 composable("qr_scanner") {
                     QrScannerScreen(
                         viewModel = viewModel,
-                        onDone = { navController.navigate("groups") },
+                        onDone = {
+                            navController.navigate("groups") {
+                                popUpTo(navController.graph.findStartDestination().id) {
+                                    saveState = true
+                                }
+                                launchSingleTop = true
+                                restoreState = true
+                            }
+                        },
                         onBack = { navController.navigateUp() },
                     )
                 }
@@ -445,29 +454,26 @@ fun DrawerContent(
 @Composable
 fun BottomNavBar(currentRoute: String, navController: NavHostController) {
     NavigationBar {
-        NavigationBarItem(
-            icon = { Icon(Icons.Default.Home, contentDescription = "Inicio") },
-            label = { Text("Inicio") },
-            selected = currentRoute == "home",
-            onClick = { navController.navigate("home") { launchSingleTop = true } },
-        )
-        NavigationBarItem(
-            icon = { Icon(Icons.Default.People, contentDescription = "Grupos") },
-            label = { Text("Grupos") },
-            selected = currentRoute == "groups",
-            onClick = { navController.navigate("groups") { launchSingleTop = true } },
-        )
-        NavigationBarItem(
-            icon = { Icon(Icons.Default.LocationOn, contentDescription = "Destinos") },
-            label = { Text("Destinos") },
-            selected = currentRoute == "destinations",
-            onClick = { navController.navigate("destinations") { launchSingleTop = true } },
-        )
-        NavigationBarItem(
-            icon = { Icon(Icons.Default.AccountBalanceWallet, contentDescription = "Gastos") },
-            label = { Text("Gastos") },
-            selected = currentRoute == "gastos",
-            onClick = { navController.navigate("gastos") { launchSingleTop = true } },
-        )
+        listOf(
+            Triple("home", Icons.Default.Home, "Inicio"),
+            Triple("groups", Icons.Default.People, "Grupos"),
+            Triple("destinations", Icons.Default.LocationOn, "Destinos"),
+            Triple("gastos", Icons.Default.AccountBalanceWallet, "Gastos"),
+        ).forEach { (route, icon, label) ->
+            NavigationBarItem(
+                icon = { Icon(icon, contentDescription = label) },
+                label = { Text(label) },
+                selected = currentRoute == route,
+                onClick = {
+                    navController.navigate(route) {
+                        popUpTo(navController.graph.findStartDestination().id) {
+                            saveState = true
+                        }
+                        launchSingleTop = true
+                        restoreState = true
+                    }
+                },
+            )
+        }
     }
 }
