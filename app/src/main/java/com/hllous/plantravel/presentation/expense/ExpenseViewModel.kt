@@ -71,6 +71,7 @@ class ExpenseViewModel @Inject constructor(
         .stateIn(viewModelScope, SharingStarted.WhileSubscribed(5000), null)
 
     private val _expenseRetryTrigger = MutableStateFlow(0)
+    private val _assignmentRetryTrigger = MutableStateFlow(0)
 
     val expenseItemsUiState: StateFlow<UiState<List<ExpenseItem>>> = _expenseRetryTrigger
         .flatMapLatest {
@@ -87,9 +88,14 @@ class ExpenseViewModel @Inject constructor(
         .map { if (it is UiState.Success) it.data else emptyList() }
         .stateIn(viewModelScope, SharingStarted.WhileSubscribed(5000), emptyList())
 
-    val assignments: StateFlow<List<ItemAssignment>> = selectedGroupHolder.selectedGroupId
-        .flatMapLatest { groupId ->
-            if (groupId == null) flowOf(emptyList()) else repository.observeAssignments(groupId)
+    // Wrapping with _assignmentRetryTrigger lets us force a re-fetch after any local
+    // write, instead of waiting for a Realtime event that may arrive late or not at all.
+    val assignments: StateFlow<List<ItemAssignment>> = _assignmentRetryTrigger
+        .flatMapLatest {
+            selectedGroupHolder.selectedGroupId.flatMapLatest { groupId ->
+                if (groupId == null) flowOf(emptyList())
+                else repository.observeAssignments(groupId)
+            }
         }
         .stateIn(viewModelScope, SharingStarted.WhileSubscribed(5000), emptyList())
 
@@ -104,6 +110,10 @@ class ExpenseViewModel @Inject constructor(
 
     fun reloadExpenseItems() {
         _expenseRetryTrigger.value++
+    }
+
+    fun reloadAssignments() {
+        _assignmentRetryTrigger.value++
     }
 
     fun selectGroup(groupId: String) {
@@ -144,6 +154,7 @@ class ExpenseViewModel @Inject constructor(
                 _message.value = "Error al agregar gasto"
                 return@launch
             }
+            reloadExpenseItems()
             recalculateSettlementSilently(groupId)
         }
     }
@@ -158,12 +169,19 @@ class ExpenseViewModel @Inject constructor(
             val result = runCatching { assignItemToMemberUseCase(itemId, memberId, quantity) }
             if (result.isFailure) {
                 val e = result.exceptionOrNull()
-                _message.value = if (e is IllegalStateException) "El item ya no existe" else "Error al asignar"
+                _message.value = when {
+                    e is IllegalStateException -> "El item ya no existe"
+                    e?.message?.contains("Over-assignment", ignoreCase = true) == true ||
+                    e?.message?.contains("check_violation", ignoreCase = true) == true ->
+                        "La cantidad asignada supera la cantidad del item"
+                    else -> "Error al asignar"
+                }
                 return@launch
             }
             val outcome = result.getOrThrow()
             when (outcome) {
                 AssignmentOutcome.Accepted -> {
+                    reloadAssignments()
                     val groupId = selectedGroupHolder.selectedGroupId.value
                     if (groupId != null) recalculateSettlementSilently(groupId)
                 }
@@ -182,6 +200,7 @@ class ExpenseViewModel @Inject constructor(
                 _message.value = "Error al eliminar gasto"
                 return@launch
             }
+            reloadExpenseItems()
             val groupId = selectedGroupHolder.selectedGroupId.value
             if (groupId != null) recalculateSettlementSilently(groupId)
         }

@@ -15,6 +15,7 @@ import io.github.jan.supabase.SupabaseClient
 import io.github.jan.supabase.auth.auth
 import io.github.jan.supabase.postgrest.from
 import io.github.jan.supabase.postgrest.query.Columns
+import io.github.jan.supabase.postgrest.query.filter.FilterOperator
 import io.github.jan.supabase.realtime.PostgresAction
 import io.github.jan.supabase.realtime.channel
 import io.github.jan.supabase.realtime.postgresChangeFlow
@@ -381,8 +382,13 @@ class SupabaseTravelRepositoryImpl @Inject constructor(
         send(fetchExpenseItems(groupId))
 
         val channel = supabase.channel("expense-items-$groupId-${UUID.randomUUID()}")
+        // Filter server-side so RLS only needs to evaluate rows for this group.
+        // Without a filter, auth.uid() must be available in the Realtime context for
+        // is_group_member() to return true; a timing gap can cause all events to be
+        // silently dropped. The explicit filter bypasses that risk.
         val changes = channel.postgresChangeFlow<PostgresAction>(schema = "public") {
             table = "expense_items"
+            filter("group_id", FilterOperator.EQ, groupId)
         }
         channel.subscribe(blockUntilSubscribed = true)
 
@@ -396,6 +402,9 @@ class SupabaseTravelRepositoryImpl @Inject constructor(
     override fun observeAssignments(groupId: String): Flow<List<ItemAssignment>> = channelFlow {
         send(fetchAssignments(groupId))
 
+        // item_assignments has no group_id column so we cannot filter by group here.
+        // The ViewModel calls reloadAssignments() after every local write as a fallback;
+        // this channel handles cross-device push updates.
         val channel = supabase.channel("assignments-$groupId-${UUID.randomUUID()}")
         val changes = channel.postgresChangeFlow<PostgresAction>(schema = "public") {
             table = "item_assignments"
