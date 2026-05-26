@@ -7,6 +7,7 @@ import androidx.activity.compose.setContent
 import androidx.activity.enableEdgeToEdge
 import androidx.activity.viewModels
 import androidx.compose.foundation.background
+import androidx.compose.foundation.Canvas
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
@@ -48,8 +49,8 @@ import androidx.compose.material3.Surface
 import androidx.compose.material3.Text
 import androidx.compose.material3.TopAppBar
 import androidx.compose.material3.rememberDrawerState
-import androidx.compose.runtime.Composable
 import androidx.compose.runtime.LaunchedEffect
+import androidx.compose.runtime.Composable
 import androidx.compose.runtime.collectAsState
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateOf
@@ -60,8 +61,21 @@ import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
+import androidx.compose.ui.geometry.Offset
+import androidx.compose.ui.geometry.Size
+import androidx.compose.ui.graphics.BlendMode
+import androidx.compose.ui.graphics.CompositingStrategy
+import androidx.compose.ui.graphics.Color
+import androidx.compose.ui.graphics.asImageBitmap
+import androidx.compose.ui.graphics.graphicsLayer
+import androidx.compose.ui.layout.boundsInRoot
+import androidx.compose.ui.layout.onGloballyPositioned
+import androidx.compose.ui.layout.onSizeChanged
+import androidx.compose.ui.platform.LocalView
 import androidx.compose.ui.text.font.FontWeight
+import androidx.compose.ui.unit.IntSize
 import androidx.compose.ui.unit.dp
+import androidx.core.view.drawToBitmap
 import androidx.hilt.navigation.compose.hiltViewModel
 import androidx.navigation.NavGraph.Companion.findStartDestination
 import androidx.navigation.NavHostController
@@ -91,6 +105,7 @@ import io.github.jan.supabase.SupabaseClient
 import io.github.jan.supabase.auth.handleDeeplinks
 import kotlinx.coroutines.launch
 import javax.inject.Inject
+import kotlin.math.hypot
 
 @AndroidEntryPoint
 class MainActivity : ComponentActivity() {
@@ -102,10 +117,75 @@ class MainActivity : ComponentActivity() {
         super.onCreate(savedInstanceState)
         handleDeepLink(intent)
         enableEdgeToEdge()
+        val prefs = getSharedPreferences(THEME_PREFS, MODE_PRIVATE)
+        val initialDarkTheme = prefs.getBoolean(THEME_PREF_KEY, false)
         setContent {
-            var isDarkTheme by rememberSaveable { mutableStateOf(false) }
-            ProyectoPlanTravelTheme(darkTheme = isDarkTheme) {
-                PlanTravelApp(isDarkTheme = isDarkTheme, onThemeChange = { isDarkTheme = it })
+            val view = LocalView.current
+            var isDarkTheme by rememberSaveable { mutableStateOf(initialDarkTheme) }
+            var overlayBitmap by remember { mutableStateOf<androidx.compose.ui.graphics.ImageBitmap?>(null) }
+            var overlayOrigin by remember { mutableStateOf<Offset?>(null) }
+            val revealProgress = remember { androidx.compose.animation.core.Animatable(1f) }
+            var revealJob by remember { mutableStateOf<kotlinx.coroutines.Job?>(null) }
+            var rootSize by remember { mutableStateOf(IntSize.Zero) }
+            val scope = rememberCoroutineScope()
+
+            val handleThemeChange: (Boolean, Offset?) -> Unit = handleThemeChange@{ targetDark, origin ->
+                if (targetDark == isDarkTheme && overlayBitmap == null) return@handleThemeChange
+                revealJob?.cancel()
+                overlayBitmap = view.drawToBitmap().asImageBitmap()
+                overlayOrigin = origin
+                isDarkTheme = targetDark
+                prefs.edit().putBoolean(THEME_PREF_KEY, targetDark).apply()
+                revealJob = scope.launch {
+                    revealProgress.snapTo(0f)
+                    revealProgress.animateTo(
+                        1f,
+                        animationSpec = androidx.compose.animation.core.tween(
+                            durationMillis = 520,
+                            easing = androidx.compose.animation.core.FastOutSlowInEasing
+                        )
+                    )
+                    overlayBitmap = null
+                    overlayOrigin = null
+                }
+            }
+
+            Box(
+                modifier = Modifier
+                    .fillMaxSize()
+                    .onSizeChanged { rootSize = it }
+            ) {
+                ProyectoPlanTravelTheme(darkTheme = isDarkTheme) {
+                    PlanTravelApp(
+                        isDarkTheme = isDarkTheme,
+                        onThemeChange = handleThemeChange
+                    )
+                }
+                val bitmap = overlayBitmap
+                if (bitmap != null) {
+                    val origin = overlayOrigin ?: Offset(
+                        rootSize.width / 2f,
+                        rootSize.height / 2f
+                    )
+                    Canvas(
+                        modifier = Modifier
+                            .fillMaxSize()
+                            .graphicsLayer { compositingStrategy = CompositingStrategy.Offscreen }
+                    ) {
+                        val maxRadius = maxRevealRadius(origin, size)
+                        val radius = revealProgress.value * maxRadius
+                        drawImage(
+                            image = bitmap,
+                            dstSize = IntSize(size.width.toInt(), size.height.toInt())
+                        )
+                        drawCircle(
+                            color = Color.Transparent,
+                            radius = radius,
+                            center = origin,
+                            blendMode = BlendMode.Clear
+                        )
+                    }
+                }
             }
         }
     }
@@ -128,8 +208,19 @@ class MainActivity : ComponentActivity() {
     }
 }
 
+private const val THEME_PREFS = "plan_travel_prefs"
+private const val THEME_PREF_KEY = "dark_theme"
+
+private fun maxRevealRadius(origin: Offset, size: Size): Float {
+    val topLeft = hypot(origin.x, origin.y)
+    val topRight = hypot(size.width - origin.x, origin.y)
+    val bottomLeft = hypot(origin.x, size.height - origin.y)
+    val bottomRight = hypot(size.width - origin.x, size.height - origin.y)
+    return maxOf(topLeft, topRight, bottomLeft, bottomRight)
+}
+
 @Composable
-fun PlanTravelApp(isDarkTheme: Boolean, onThemeChange: (Boolean) -> Unit) {
+fun PlanTravelApp(isDarkTheme: Boolean, onThemeChange: (Boolean, Offset?) -> Unit) {
     val authViewModel = hiltViewModel<AuthViewModel>()
     val authState by authViewModel.state.collectAsState()
     val userEmail by authViewModel.userEmail.collectAsState()
@@ -159,17 +250,25 @@ fun PlanTravelApp(isDarkTheme: Boolean, onThemeChange: (Boolean) -> Unit) {
         composable("login") {
             LoginScreen(
                 viewModel = authViewModel,
-                onNavigateToRegister = { navController.navigate("register") }
+                isDarkTheme = isDarkTheme,
+                onThemeChange = onThemeChange,
+                onNavigateToRegister = { navController.navigate("register") },
             )
         }
         composable("register") {
             RegisterScreen(
                 viewModel = authViewModel,
-                onNavigateToLogin = { navController.navigateUp() }
+                isDarkTheme = isDarkTheme,
+                onThemeChange = onThemeChange,
+                onNavigateToLogin = { navController.navigateUp() },
             )
         }
         composable("profile_setup") {
-            ProfileSetupScreen(viewModel = authViewModel)
+            ProfileSetupScreen(
+                viewModel = authViewModel,
+                isDarkTheme = isDarkTheme,
+                onThemeChange = onThemeChange,
+            )
         }
         composable("main") {
             MainAppContent(
@@ -190,7 +289,7 @@ fun PlanTravelApp(isDarkTheme: Boolean, onThemeChange: (Boolean) -> Unit) {
 @Composable
 fun MainAppContent(
     isDarkTheme: Boolean,
-    onThemeChange: (Boolean) -> Unit,
+    onThemeChange: (Boolean, Offset?) -> Unit,
     onLogout: () -> Unit,
     pendingInviteCode: String? = null,
     onPendingInviteConsumed: () -> Unit = {},
@@ -311,6 +410,7 @@ fun MainAppContent(
                     GroupsScreen(
                         groupViewModel = groupViewModel,
                         mainViewModel = viewModel,
+                        onNavigateToQr = { navController.navigate("qr_scanner") },
                     )
                 }
                 composable("destinations") {
@@ -352,7 +452,7 @@ fun DrawerContent(
     displayName: String,
     userEmail: String?,
     isDarkTheme: Boolean,
-    onThemeChange: (Boolean) -> Unit,
+    onThemeChange: (Boolean, Offset?) -> Unit,
     onLogout: () -> Unit,
     onNavigate: (String) -> Unit,
 ) {
@@ -429,6 +529,7 @@ fun DrawerContent(
                     .padding(12.dp),
                 verticalArrangement = Arrangement.spacedBy(4.dp),
             ) {
+                var themeToggleCenter by remember { mutableStateOf<Offset?>(null) }
                 NavigationDrawerItem(
                     icon = {
                         Icon(
@@ -438,7 +539,10 @@ fun DrawerContent(
                     },
                     label = { Text(if (isDarkTheme) "Modo claro" else "Modo oscuro") },
                     selected = false,
-                    onClick = { onThemeChange(!isDarkTheme) },
+                    onClick = { onThemeChange(!isDarkTheme, themeToggleCenter) },
+                    modifier = Modifier.onGloballyPositioned { coords ->
+                        themeToggleCenter = coords.boundsInRoot().center
+                    }
                 )
                 NavigationDrawerItem(
                     icon = { Icon(Icons.AutoMirrored.Filled.Logout, contentDescription = null) },

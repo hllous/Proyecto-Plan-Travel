@@ -35,6 +35,7 @@ import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
+import androidx.compose.ui.geometry.Offset
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.input.KeyboardType
 import androidx.compose.ui.unit.dp
@@ -46,7 +47,11 @@ import com.hllous.plantravel.ui.components.AuthTextField
 import com.hllous.plantravel.ui.theme.FrauncesFamily
 
 @Composable
-fun ProfileSetupScreen(viewModel: AuthViewModel) {
+fun ProfileSetupScreen(
+    viewModel: AuthViewModel,
+    isDarkTheme: Boolean,
+    onThemeChange: (Boolean, Offset?) -> Unit
+) {
     val state by viewModel.state.collectAsState()
     var displayName by rememberSaveable { mutableStateOf("") }
     var phone by rememberSaveable { mutableStateOf("") }
@@ -57,7 +62,9 @@ fun ProfileSetupScreen(viewModel: AuthViewModel) {
         AuthBrandPanel(
             emoji = "🙌",
             title = "¡Ya casi!",
-            tagline = "Completá tu perfil para continuar"
+            tagline = "Completá tu perfil para continuar",
+            isDarkTheme = isDarkTheme,
+            onThemeChange = onThemeChange,
         )
 
         Surface(

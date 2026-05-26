@@ -28,6 +28,7 @@ import androidx.compose.runtime.saveable.rememberSaveable
 import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
+import androidx.compose.ui.geometry.Offset
 import androidx.compose.ui.text.SpanStyle
 import androidx.compose.ui.text.buildAnnotatedString
 import androidx.compose.ui.text.font.FontWeight
@@ -46,6 +47,8 @@ import com.hllous.plantravel.ui.theme.FrauncesFamily
 @Composable
 fun RegisterScreen(
     viewModel: AuthViewModel,
+    isDarkTheme: Boolean,
+    onThemeChange: (Boolean, Offset?) -> Unit,
     onNavigateToLogin: () -> Unit
 ) {
     val state by viewModel.state.collectAsState()
@@ -59,7 +62,9 @@ fun RegisterScreen(
         AuthBrandPanel(
             emoji = "🗺️",
             title = "Plan Travel",
-            tagline = "Creá tu cuenta, es gratis"
+            tagline = "Creá tu cuenta, es gratis",
+            isDarkTheme = isDarkTheme,
+            onThemeChange = onThemeChange,
         )
 
         Surface(

@@ -97,12 +97,17 @@ import com.hllous.plantravel.ui.utils.memberInitial
 @Composable
 fun GroupsScreen(
     groupViewModel: GroupViewModel,
-    mainViewModel: MainViewModel
+    mainViewModel: MainViewModel,
+    onNavigateToQr: () -> Unit,
 ) {
     val currentGroup by groupViewModel.currentGroup.collectAsState()
 
     if (currentGroup == null) {
-        NoGroupContent(groupViewModel = groupViewModel, mainViewModel = mainViewModel)
+        NoGroupContent(
+            groupViewModel = groupViewModel,
+            mainViewModel = mainViewModel,
+            onNavigateToQr = onNavigateToQr
+        )
     } else {
         GroupDetailContent(
             group = currentGroup!!,
@@ -117,7 +122,8 @@ fun GroupsScreen(
 @Composable
 private fun NoGroupContent(
     groupViewModel: GroupViewModel,
-    mainViewModel: MainViewModel
+    mainViewModel: MainViewModel,
+    onNavigateToQr: () -> Unit
 ) {
     var showCreateForm by rememberSaveable { mutableStateOf(false) }
     var showJoinForm by rememberSaveable { mutableStateOf(false) }
@@ -262,6 +268,20 @@ private fun NoGroupContent(
                         ) { Text("Unirme") }
                     }
                 }
+
+                CtaCard(
+                    label = "Escanear QR",
+                    description = "Escaneá una invitación de grupo",
+                    icon = {
+                        Icon(
+                            Icons.Default.QrCode, null,
+                            Modifier.size(20.dp),
+                            tint = MaterialTheme.colorScheme.onPrimaryContainer
+                        )
+                    },
+                    isExpanded = false,
+                    onClick = onNavigateToQr
+                )
             }
         }
     }
@@ -617,7 +637,7 @@ private fun MemberAvatarStack(members: List<GroupMember>) {
                 ) {
                     Text(
                         memberInitial(member.name),
-                        color = memberColor(member.id),
+                        color = Color.White,
                         fontFamily = FrauncesFamily,
                         fontWeight = FontWeight.Bold,
                         style = MaterialTheme.typography.labelMedium
@@ -674,7 +694,7 @@ private fun MemberDetailRow(
         ) {
             Text(
                 memberInitial(member.name),
-                color = memberColor(member.id),
+                color = Color.White,
                 fontWeight = FontWeight.ExtraBold,
                 style = MaterialTheme.typography.labelMedium
             )

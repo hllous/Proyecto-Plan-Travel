@@ -136,6 +136,8 @@ class GroupViewModel @Inject constructor(
                 return@launch
             }
             selectedGroupHolder.selectedGroupId.value = result.getOrThrow()
+            reloadGroups()
+            reloadMembers()
             _message.value = "Grupo creado"
         }
     }
@@ -165,6 +167,8 @@ class GroupViewModel @Inject constructor(
             runCatching { deleteGroupUseCase(groupId) }
                 .onSuccess {
                     selectedGroupHolder.selectedGroupId.value = null
+                    reloadGroups()
+                    reloadMembers()
                     _message.value = "Grupo eliminado"
                 }
                 .onFailure { _message.value = "Error al eliminar grupo" }
@@ -186,6 +190,8 @@ class GroupViewModel @Inject constructor(
             runCatching { leaveGroupUseCase(groupId) }
                 .onSuccess {
                     selectedGroupHolder.selectedGroupId.value = null
+                    reloadGroups()
+                    reloadMembers()
                     _message.value = "Abandonaste el grupo"
                 }
                 .onFailure { _message.value = "Error al abandonar el grupo" }

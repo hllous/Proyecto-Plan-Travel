@@ -39,11 +39,16 @@ import androidx.compose.material3.Text
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.collectAsState
 import androidx.compose.runtime.getValue
+import androidx.compose.runtime.mutableStateOf
+import androidx.compose.runtime.remember
+import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.geometry.Offset
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.graphics.vector.ImageVector
+import androidx.compose.ui.layout.boundsInRoot
+import androidx.compose.ui.layout.onGloballyPositioned
 import androidx.compose.ui.text.font.FontStyle
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.style.TextAlign
@@ -65,13 +70,14 @@ fun HomeScreen(
     displayName: String,
     groupViewModel: GroupViewModel,
     isDarkTheme: Boolean = false,
-    onThemeChange: (Boolean) -> Unit = {},
+    onThemeChange: (Boolean, Offset?) -> Unit = { _, _ -> },
     onProfileClick: () -> Unit = {},
 ) {
     val currentGroup by groupViewModel.currentGroup.collectAsState()
     val members by groupViewModel.members.collectAsState()
     val hour = LocalTime.now().hour
     val greeting = greetingForHour(hour)
+    var themeToggleCenter by remember { mutableStateOf<Offset?>(null) }
 
     Column(Modifier.fillMaxSize()) {
         // ── Immersive primary header ───────────────────────────────
@@ -103,7 +109,12 @@ fun HomeScreen(
                         .padding(horizontal = 4.dp),
                     verticalAlignment = Alignment.CenterVertically
                 ) {
-                    IconButton(onClick = { onThemeChange(!isDarkTheme) }) {
+                    IconButton(
+                        onClick = { onThemeChange(!isDarkTheme, themeToggleCenter) },
+                        modifier = Modifier.onGloballyPositioned { coords ->
+                            themeToggleCenter = coords.boundsInRoot().center
+                        }
+                    ) {
                         Icon(
                             if (isDarkTheme) Icons.Default.LightMode else Icons.Default.DarkMode,
                             contentDescription = if (isDarkTheme) "Modo claro" else "Modo oscuro",
@@ -111,20 +122,21 @@ fun HomeScreen(
                         )
                     }
                     Spacer(Modifier.weight(1f))
-                    Box(
-                        Modifier
-                            .size(34.dp)
-                            .background(Color.White.copy(alpha = 0.2f), CircleShape)
-                            .clickable(onClick = onProfileClick),
-                        contentAlignment = Alignment.Center
+                    Surface(
+                        modifier = Modifier.size(34.dp),
+                        shape = CircleShape,
+                        color = Color.White.copy(alpha = 0.2f),
+                        onClick = onProfileClick
                     ) {
-                        Text(
-                            text = displayName.firstOrNull()?.uppercase() ?: "N",
-                            style = MaterialTheme.typography.labelMedium,
-                            fontFamily = FrauncesFamily,
-                            fontWeight = FontWeight.Bold,
-                            color = MaterialTheme.colorScheme.onPrimary
-                        )
+                        Box(contentAlignment = Alignment.Center, modifier = Modifier.fillMaxSize()) {
+                            Text(
+                                text = displayName.firstOrNull()?.uppercase() ?: "N",
+                                style = MaterialTheme.typography.labelMedium,
+                                fontFamily = FrauncesFamily,
+                                fontWeight = FontWeight.Bold,
+                                color = MaterialTheme.colorScheme.onPrimary
+                            )
+                        }
                     }
                     Spacer(Modifier.width(8.dp))
                 }
@@ -297,7 +309,7 @@ private fun HomeGroupContent(navController: NavHostController) {
                     containerColor = MaterialTheme.colorScheme.tertiaryContainer,
                     contentColor = MaterialTheme.colorScheme.onTertiaryContainer,
                     modifier = Modifier.weight(1f),
-                    onClick = { navController.navigate("gastos") }
+                    onClick = { navController.navigateSingleTopTo("gastos") }
                 )
                 HomeActionButton(
                     emoji = "📍",
@@ -305,7 +317,7 @@ private fun HomeGroupContent(navController: NavHostController) {
                     containerColor = MaterialTheme.colorScheme.secondaryContainer,
                     contentColor = MaterialTheme.colorScheme.onSecondaryContainer,
                     modifier = Modifier.weight(1f),
-                    onClick = { navController.navigate("destinations") }
+                    onClick = { navController.navigateSingleTopTo("destinations") }
                 )
                 HomeActionButton(
                     emoji = "📨",
@@ -313,7 +325,7 @@ private fun HomeGroupContent(navController: NavHostController) {
                     containerColor = MaterialTheme.colorScheme.primaryContainer,
                     contentColor = MaterialTheme.colorScheme.onPrimaryContainer,
                     modifier = Modifier.weight(1f),
-                    onClick = { navController.navigate("groups") }
+                    onClick = { navController.navigateSingleTopTo("groups") }
                 )
             }
         }
@@ -332,7 +344,7 @@ private fun HomeGroupContent(navController: NavHostController) {
                         subtitle = "Ir a gastos",
                         tagContainerColor = MaterialTheme.colorScheme.tertiaryContainer,
                         tagContentColor = MaterialTheme.colorScheme.onTertiaryContainer,
-                        onClick = { navController.navigate("gastos") }
+                        onClick = { navController.navigateSingleTopTo("gastos") }
                     )
                 }
                 item {
@@ -343,7 +355,7 @@ private fun HomeGroupContent(navController: NavHostController) {
                         subtitle = "Ver recomendaciones",
                         tagContainerColor = MaterialTheme.colorScheme.secondaryContainer,
                         tagContentColor = MaterialTheme.colorScheme.onSecondaryContainer,
-                        onClick = { navController.navigate("destinations") }
+                        onClick = { navController.navigateSingleTopTo("destinations") }
                     )
                 }
                 item {
@@ -354,7 +366,7 @@ private fun HomeGroupContent(navController: NavHostController) {
                         subtitle = "Ver código",
                         tagContainerColor = MaterialTheme.colorScheme.primaryContainer,
                         tagContentColor = MaterialTheme.colorScheme.onPrimaryContainer,
-                        onClick = { navController.navigate("groups") }
+                        onClick = { navController.navigateSingleTopTo("groups") }
                     )
                 }
             }
@@ -392,7 +404,7 @@ private fun HomeNoGroupContent(navController: NavHostController) {
             iconTint = MaterialTheme.colorScheme.onPrimaryContainer,
             label = "Crear grupo",
             description = "Invitá amigos y empezá a planear",
-            onClick = { navController.navigate("groups") }
+            onClick = { navController.navigateSingleTopTo("groups") }
         )
         HomeCTACard(
             icon = Icons.Default.Link,
@@ -400,7 +412,7 @@ private fun HomeNoGroupContent(navController: NavHostController) {
             iconTint = MaterialTheme.colorScheme.onSecondaryContainer,
             label = "Tengo un código",
             description = "Ingresá el código que te compartieron",
-            onClick = { navController.navigate("groups") }
+            onClick = { navController.navigateSingleTopTo("groups") }
         )
         HomeCTACard(
             icon = Icons.Default.QrCode,
@@ -408,7 +420,7 @@ private fun HomeNoGroupContent(navController: NavHostController) {
             iconTint = MaterialTheme.colorScheme.onTertiaryContainer,
             label = "Escanear QR",
             description = "Escaneá el QR de una invitación",
-            onClick = { navController.navigate("groups") }
+            onClick = { navController.navigate("qr_scanner") }
         )
     }
 }
@@ -556,5 +568,12 @@ private fun HomeCTACard(
                 modifier = Modifier.size(20.dp)
             )
         }
+    }
+}
+
+private fun NavHostController.navigateSingleTopTo(route: String) {
+    navigate(route) {
+        launchSingleTop = true
+        restoreState = true
     }
 }

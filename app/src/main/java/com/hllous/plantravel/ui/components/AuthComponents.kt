@@ -16,6 +16,11 @@ import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.foundation.text.BasicTextField
 import androidx.compose.foundation.text.KeyboardOptions
+import androidx.compose.material.icons.Icons
+import androidx.compose.material.icons.filled.DarkMode
+import androidx.compose.material.icons.filled.LightMode
+import androidx.compose.material3.Icon
+import androidx.compose.material3.IconButton
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.Text
 import androidx.compose.runtime.Composable
@@ -27,8 +32,11 @@ import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.focus.onFocusChanged
 import androidx.compose.ui.geometry.Rect
+import androidx.compose.ui.geometry.Offset
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.graphics.Path
+import androidx.compose.ui.layout.boundsInRoot
+import androidx.compose.ui.layout.onGloballyPositioned
 import androidx.compose.ui.text.TextStyle
 import androidx.compose.ui.text.font.FontStyle
 import androidx.compose.ui.text.font.FontWeight
@@ -46,10 +54,13 @@ fun AuthBrandPanel(
     emoji: String,
     title: String,
     tagline: String,
-    modifier: Modifier = Modifier
+    modifier: Modifier = Modifier,
+    isDarkTheme: Boolean = false,
+    onThemeChange: ((Boolean, Offset?) -> Unit)? = null,
 ) {
     val bgColor = MaterialTheme.colorScheme.background
     val primaryColor = MaterialTheme.colorScheme.primary
+    var themeToggleCenter by remember { mutableStateOf<Offset?>(null) }
 
     Box(
         modifier = modifier
@@ -71,6 +82,25 @@ fun AuthBrandPanel(
                 .offset(x = (-40).dp, y = (-20).dp)
                 .background(Color.White.copy(alpha = 0.04f), CircleShape)
         )
+
+        if (onThemeChange != null) {
+            IconButton(
+                onClick = { onThemeChange(!isDarkTheme, themeToggleCenter) },
+                modifier = Modifier
+                    .align(Alignment.TopEnd)
+                    .statusBarsPadding()
+                    .padding(top = 6.dp, end = 12.dp)
+                    .onGloballyPositioned { coords ->
+                        themeToggleCenter = coords.boundsInRoot().center
+                    }
+            ) {
+                Icon(
+                    if (isDarkTheme) Icons.Default.LightMode else Icons.Default.DarkMode,
+                    contentDescription = if (isDarkTheme) "Modo claro" else "Modo oscuro",
+                    tint = MaterialTheme.colorScheme.onPrimary
+                )
+            }
+        }
 
         // Content — bottom padding reserves space above the arch
         Column(
