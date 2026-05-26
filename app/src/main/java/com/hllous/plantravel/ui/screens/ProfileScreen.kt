@@ -21,7 +21,7 @@ import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.foundation.verticalScroll
 import androidx.compose.material.icons.Icons
-import androidx.compose.material.icons.filled.Edit
+import androidx.compose.material.icons.automirrored.filled.ArrowBack
 import androidx.compose.material.icons.filled.Email
 import androidx.compose.material.icons.filled.People
 import androidx.compose.material.icons.filled.Person
@@ -48,7 +48,7 @@ import com.hllous.plantravel.ui.theme.FrauncesFamily
 import com.hllous.plantravel.ui.utils.displayInitials
 
 @Composable
-fun ProfileScreen(authViewModel: AuthViewModel, onLogout: () -> Unit) {
+fun ProfileScreen(authViewModel: AuthViewModel, onLogout: () -> Unit, onBack: () -> Unit = {}) {
     val state by authViewModel.state.collectAsState()
     val userEmail by authViewModel.userEmail.collectAsState()
     val displayName = (state as? AuthState.Authenticated)?.displayName ?: ""
@@ -64,15 +64,15 @@ fun ProfileScreen(authViewModel: AuthViewModel, onLogout: () -> Unit) {
                 .padding(bottom = 40.dp)
         ) {
             IconButton(
-                onClick = {},
+                onClick = onBack,
                 modifier = Modifier
-                    .align(Alignment.TopEnd)
+                    .align(Alignment.TopStart)
                     .padding(8.dp)
             ) {
                 Icon(
-                    Icons.Default.Edit,
-                    contentDescription = "Editar perfil",
-                    tint = MaterialTheme.colorScheme.onPrimary.copy(alpha = 0.7f)
+                    Icons.AutoMirrored.Filled.ArrowBack,
+                    contentDescription = "Volver",
+                    tint = MaterialTheme.colorScheme.onPrimary
                 )
             }
             Column(

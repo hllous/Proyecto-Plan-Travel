@@ -36,3 +36,20 @@ fun greetingForHour(hour: Int): String = when (hour) {
     in 12..19 -> "Buenas tardes"
     else -> "Buenas noches"
 }
+
+fun formatExpiry(expiresAtMillis: Long): String {
+    val diff = expiresAtMillis - System.currentTimeMillis()
+    return when {
+        diff <= 0 -> "Vencido"
+        diff < 60 * 60 * 1000L -> "Vence en menos de 1 hora"
+        diff < 24 * 60 * 60 * 1000L -> {
+            val hours = diff / (60 * 60 * 1000L)
+            "Vence en $hours hora${if (hours != 1L) "s" else ""}"
+        }
+        diff < 48 * 60 * 60 * 1000L -> "Vence mañana"
+        else -> {
+            val days = diff / (24 * 60 * 60 * 1000L)
+            "Vence en $days días"
+        }
+    }
+}

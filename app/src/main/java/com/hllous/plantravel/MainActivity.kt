@@ -11,6 +11,7 @@ import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.Spacer
+import androidx.compose.foundation.layout.WindowInsets
 import androidx.compose.foundation.layout.fillMaxHeight
 import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.fillMaxWidth
@@ -63,12 +64,10 @@ import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.unit.dp
 import androidx.hilt.navigation.compose.hiltViewModel
 import androidx.navigation.NavHostController
-import androidx.navigation.NavType
 import androidx.navigation.compose.NavHost
 import androidx.navigation.compose.composable
 import androidx.navigation.compose.currentBackStackEntryAsState
 import androidx.navigation.compose.rememberNavController
-import androidx.navigation.navArgument
 import com.hllous.plantravel.presentation.MainViewModel
 import com.hllous.plantravel.presentation.auth.AuthState
 import com.hllous.plantravel.presentation.auth.AuthViewModel
@@ -76,7 +75,6 @@ import com.hllous.plantravel.presentation.expense.ExpenseViewModel
 import com.hllous.plantravel.presentation.group.GroupViewModel
 import com.hllous.plantravel.ui.screens.DestinationScreen
 import com.hllous.plantravel.ui.screens.ExpenseScreen
-import com.hllous.plantravel.ui.screens.GroupDetailScreen
 import com.hllous.plantravel.ui.screens.GroupsScreen
 import com.hllous.plantravel.ui.screens.HomeScreen
 import com.hllous.plantravel.ui.screens.LoginScreen
@@ -263,9 +261,10 @@ fun MainAppContent(
         Scaffold(
             modifier = Modifier.fillMaxSize(),
             containerColor = MaterialTheme.colorScheme.background,
+            contentWindowInsets = WindowInsets(0, 0, 0, 0),
             topBar = {
                 if (currentRoute != "qr_scanner" && currentRoute != "profile" &&
-                    currentRoute != "groups" && !currentRoute.startsWith("group_detail") &&
+                    currentRoute != "home" && currentRoute != "groups" &&
                     currentRoute != "destinations" && currentRoute != "gastos") {
                     TopAppBar(
                         title = {
@@ -284,9 +283,7 @@ fun MainAppContent(
                 }
             },
             bottomBar = {
-                if (currentRoute != "qr_scanner" && currentRoute != "profile" &&
-                    !currentRoute.startsWith("group_detail")
-                ) {
+                if (currentRoute != "qr_scanner" && currentRoute != "profile") {
                     BottomNavBar(currentRoute = currentRoute, navController = navController)
                 }
             },
@@ -304,13 +301,15 @@ fun MainAppContent(
                         navController = navController,
                         displayName = displayName,
                         groupViewModel = groupViewModel,
+                        isDarkTheme = isDarkTheme,
+                        onThemeChange = onThemeChange,
+                        onProfileClick = { navController.navigate("profile") },
                     )
                 }
                 composable("groups") {
                     GroupsScreen(
                         groupViewModel = groupViewModel,
                         mainViewModel = viewModel,
-                        navController = navController,
                     )
                 }
                 composable("destinations") {
@@ -327,18 +326,10 @@ fun MainAppContent(
                     )
                 }
                 composable("profile") {
-                    ProfileScreen(authViewModel = authViewModel, onLogout = onLogout)
-                }
-                composable(
-                    route = "group_detail/{groupId}",
-                    arguments = listOf(navArgument("groupId") { type = NavType.StringType }),
-                ) { backStackEntry ->
-                    val groupId = backStackEntry.arguments?.getString("groupId") ?: return@composable
-                    GroupDetailScreen(
-                        groupId = groupId,
-                        groupViewModel = groupViewModel,
-                        mainViewModel = viewModel,
-                        navController = navController
+                    ProfileScreen(
+                        authViewModel = authViewModel,
+                        onLogout = onLogout,
+                        onBack = { navController.navigateUp() },
                     )
                 }
             }
