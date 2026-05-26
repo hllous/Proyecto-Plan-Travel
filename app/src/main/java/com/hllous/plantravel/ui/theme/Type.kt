@@ -2,33 +2,27 @@ package com.hllous.plantravel.ui.theme
 
 import androidx.compose.material3.Typography
 import androidx.compose.ui.text.TextStyle
+import androidx.compose.ui.text.font.Font
 import androidx.compose.ui.text.font.FontFamily
 import androidx.compose.ui.text.font.FontStyle
 import androidx.compose.ui.text.font.FontWeight
-import androidx.compose.ui.text.googlefonts.Font
-import androidx.compose.ui.text.googlefonts.GoogleFont
 import androidx.compose.ui.unit.sp
 import com.hllous.plantravel.R
 
-private val fontProvider = GoogleFont.Provider(
-    providerAuthority = "com.google.android.gms.fonts",
-    providerPackage = "com.google.android.gms",
-    certificates = R.array.com_google_android_gms_fonts_certs,
-)
-
 val FrauncesFamily: FontFamily = FontFamily(
-    Font(GoogleFont("Fraunces"), fontProvider, FontWeight.Light),
-    Font(GoogleFont("Fraunces"), fontProvider, FontWeight.Light, FontStyle.Italic),
-    Font(GoogleFont("Fraunces"), fontProvider, FontWeight.Medium),
-    Font(GoogleFont("Fraunces"), fontProvider, FontWeight.Bold),
+    Font(R.font.fraunces_light, FontWeight.Light),
+    Font(R.font.fraunces_light_italic, FontWeight.Light, FontStyle.Italic),
+    Font(R.font.fraunces_regular, FontWeight.Normal),
+    Font(R.font.fraunces_semibold, FontWeight.SemiBold),
+    Font(R.font.fraunces_bold, FontWeight.Bold),
 )
 
 val PlusJakartaSansFamily: FontFamily = FontFamily(
-    Font(GoogleFont("Plus Jakarta Sans"), fontProvider, FontWeight.Light),
-    Font(GoogleFont("Plus Jakarta Sans"), fontProvider, FontWeight.Normal),
-    Font(GoogleFont("Plus Jakarta Sans"), fontProvider, FontWeight.Medium),
-    Font(GoogleFont("Plus Jakarta Sans"), fontProvider, FontWeight.SemiBold),
-    Font(GoogleFont("Plus Jakarta Sans"), fontProvider, FontWeight.Bold),
+    Font(R.font.plus_jakarta_sans_light, FontWeight.Light),
+    Font(R.font.plus_jakarta_sans_regular, FontWeight.Normal),
+    Font(R.font.plus_jakarta_sans_medium, FontWeight.Medium),
+    Font(R.font.plus_jakarta_sans_semibold, FontWeight.SemiBold),
+    Font(R.font.plus_jakarta_sans_bold, FontWeight.Bold),
 )
 
 val Typography = Typography(
@@ -41,7 +35,7 @@ val Typography = Typography(
     ),
     displayMedium = TextStyle(
         fontFamily = FrauncesFamily,
-        fontWeight = FontWeight.Medium,
+        fontWeight = FontWeight.Normal,
         fontSize = 45.sp,
         lineHeight = 52.sp,
     ),
@@ -59,13 +53,13 @@ val Typography = Typography(
     ),
     headlineMedium = TextStyle(
         fontFamily = FrauncesFamily,
-        fontWeight = FontWeight.Medium,
+        fontWeight = FontWeight.SemiBold,
         fontSize = 28.sp,
         lineHeight = 36.sp,
     ),
     headlineSmall = TextStyle(
         fontFamily = FrauncesFamily,
-        fontWeight = FontWeight.Medium,
+        fontWeight = FontWeight.SemiBold,
         fontSize = 24.sp,
         lineHeight = 32.sp,
     ),
