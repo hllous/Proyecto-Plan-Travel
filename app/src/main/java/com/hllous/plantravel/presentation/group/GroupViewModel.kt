@@ -21,6 +21,7 @@ import kotlinx.coroutines.flow.SharingStarted
 import kotlinx.coroutines.flow.StateFlow
 import kotlinx.coroutines.flow.asStateFlow
 import kotlinx.coroutines.flow.catch
+import kotlinx.coroutines.flow.combine
 import kotlinx.coroutines.flow.flatMapLatest
 import kotlinx.coroutines.flow.flowOf
 import kotlinx.coroutines.flow.map
@@ -43,6 +44,7 @@ class GroupViewModel @Inject constructor(
     val selectedGroupId: StateFlow<String?> = selectedGroupHolder.selectedGroupId.asStateFlow()
 
     private val _groupsRetryTrigger = MutableStateFlow(0)
+    private val _membersRetryTrigger = MutableStateFlow(0)
 
     val groupsUiState: StateFlow<UiState<List<TravelGroup>>> = _groupsRetryTrigger
         .flatMapLatest {
@@ -56,7 +58,14 @@ class GroupViewModel @Inject constructor(
         .map { if (it is UiState.Success) it.data else emptyList() }
         .stateIn(viewModelScope, SharingStarted.WhileSubscribed(5000), emptyList())
 
-    val members: StateFlow<List<GroupMember>> = selectedGroupHolder.selectedGroupId
+    val currentGroup: StateFlow<TravelGroup?> = groups
+        .map { it.firstOrNull() }
+        .stateIn(viewModelScope, SharingStarted.WhileSubscribed(5000), null)
+
+    val members: StateFlow<List<GroupMember>> = combine(
+        selectedGroupHolder.selectedGroupId,
+        _membersRetryTrigger
+    ) { id, _ -> id }
         .flatMapLatest { groupId ->
             if (groupId == null) flowOf(emptyList())
             else repository.observeMembers(groupId)
@@ -67,6 +76,28 @@ class GroupViewModel @Inject constructor(
         .map { list -> list.firstOrNull { it.userId == sessionProvider.userId }?.role }
         .stateIn(viewModelScope, SharingStarted.WhileSubscribed(5000), null)
 
+    init {
+        // Bridge realtime lag: force a fresh fetch whenever selectedGroupId diverges
+        // from the currently loaded groups list so the screen transitions immediately.
+        viewModelScope.launch {
+            selectedGroupHolder.selectedGroupId.collect { id ->
+                when {
+                    // Joined/created a group but realtime hasn't delivered it yet
+                    id != null && groups.value.none { it.id == id } -> reloadGroups()
+                    // Left/deleted a group but realtime hasn't removed it yet
+                    id == null && groups.value.isNotEmpty() -> reloadGroups()
+                }
+            }
+        }
+        viewModelScope.launch {
+            currentGroup.collect { group ->
+                if (group != null) {
+                    selectedGroupHolder.selectedGroupId.value = group.id
+                }
+            }
+        }
+    }
+
     private val _message = MutableStateFlow<String?>(null)
     val message: StateFlow<String?> = _message
 
@@ -75,6 +106,10 @@ class GroupViewModel @Inject constructor(
 
     fun reloadGroups() {
         _groupsRetryTrigger.value++
+    }
+
+    fun reloadMembers() {
+        _membersRetryTrigger.value++
     }
 
     fun selectGroup(groupId: String) {
@@ -113,7 +148,10 @@ class GroupViewModel @Inject constructor(
                 return@launch
             }
             runCatching { updateGroupNameUseCase(groupId, name) }
-                .onSuccess { _message.value = "Nombre del grupo actualizado" }
+                .onSuccess {
+                    reloadGroups()
+                    _message.value = "Nombre del grupo actualizado"
+                }
                 .onFailure { _message.value = "Error al actualizar nombre" }
         }
     }
@@ -171,7 +209,10 @@ class GroupViewModel @Inject constructor(
     fun deleteMember(memberId: String) {
         viewModelScope.launch {
             runCatching { deleteMemberUseCase(memberId) }
-                .onSuccess { _message.value = "Integrante eliminado" }
+                .onSuccess {
+                    reloadMembers()
+                    _message.value = "Integrante eliminado"
+                }
                 .onFailure { _message.value = "Error al eliminar integrante" }
         }
     }

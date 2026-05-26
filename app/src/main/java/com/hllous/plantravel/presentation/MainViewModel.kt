@@ -16,6 +16,7 @@ import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.SharingStarted
 import kotlinx.coroutines.flow.StateFlow
 import kotlinx.coroutines.flow.asStateFlow
+import kotlinx.coroutines.flow.combine
 import kotlinx.coroutines.flow.flatMapLatest
 import kotlinx.coroutines.flow.flowOf
 import kotlinx.coroutines.flow.stateIn
@@ -33,6 +34,8 @@ class MainViewModel @Inject constructor(
 
     val selectedGroupId: StateFlow<String?> = selectedGroupHolder.selectedGroupId.asStateFlow()
 
+    private val _invitesRetryTrigger = MutableStateFlow(0)
+
     private val _message = MutableStateFlow<String?>(null)
     val message: StateFlow<String?> = _message
 
@@ -45,7 +48,10 @@ class MainViewModel @Inject constructor(
     private val _recommendations = MutableStateFlow<List<DestinationRecommendation>>(emptyList())
     val recommendations: StateFlow<List<DestinationRecommendation>> = _recommendations
 
-    val invites: StateFlow<List<InviteToken>> = selectedGroupHolder.selectedGroupId
+    val invites: StateFlow<List<InviteToken>> = combine(
+        selectedGroupHolder.selectedGroupId,
+        _invitesRetryTrigger
+    ) { id, _ -> id }
         .flatMapLatest { groupId ->
             if (groupId == null) flowOf(emptyList()) else repository.observeInvites(groupId)
         }
@@ -55,6 +61,10 @@ class MainViewModel @Inject constructor(
         viewModelScope.launch {
             runCatching { _regions.value = repository.getRegions() }
         }
+    }
+
+    fun reloadInvites() {
+        _invitesRetryTrigger.value++
     }
 
     fun selectGroup(groupId: String) {
@@ -87,7 +97,10 @@ class MainViewModel @Inject constructor(
                 return@launch
             }
             runCatching { generateInviteUseCase(groupId) }
-                .onSuccess { _message.value = "Invitacion generada" }
+                .onSuccess {
+                    reloadInvites()
+                    _message.value = "Invitacion generada"
+                }
                 .onFailure { _message.value = "Error al generar invitacion" }
         }
     }
@@ -95,7 +108,10 @@ class MainViewModel @Inject constructor(
     fun deleteInvite(code: String) {
         viewModelScope.launch {
             runCatching { deleteInviteUseCase(code) }
-                .onSuccess { _message.value = "Invitacion eliminada" }
+                .onSuccess {
+                    reloadInvites()
+                    _message.value = "Invitacion eliminada"
+                }
                 .onFailure { _message.value = "Error al eliminar invitacion" }
         }
     }

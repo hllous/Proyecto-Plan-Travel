@@ -30,6 +30,9 @@ class FakeTravelRepository(
     initialGroups: List<TravelGroup> = emptyList(),
     initialMembers: Map<String, List<GroupMember>> = emptyMap(),
     initialExpenseItems: Map<String, List<ExpenseItem>> = emptyMap(),
+    val customObserveGroups: (() -> Flow<List<TravelGroup>>)? = null,
+    val customObserveMembers: ((String) -> Flow<List<GroupMember>>)? = null,
+    val customObserveInvites: ((String) -> Flow<List<InviteToken>>)? = null,
 ) : TravelRepository {
 
     private val _groups = MutableStateFlow(initialGroups)
@@ -39,10 +42,11 @@ class FakeTravelRepository(
     var lastConsumeUserId: String? = null
     var calculateSettlementCallCount = 0
 
-    override fun observeGroups(): Flow<List<TravelGroup>> = _groups
+    override fun observeGroups(): Flow<List<TravelGroup>> = customObserveGroups?.invoke() ?: _groups
     override fun observeMembers(groupId: String): Flow<List<GroupMember>> =
-        _membersByGroup.map { it[groupId] ?: emptyList() }
-    override fun observeInvites(groupId: String): Flow<List<InviteToken>> = flowOf(emptyList())
+        customObserveMembers?.invoke(groupId) ?: _membersByGroup.map { it[groupId] ?: emptyList() }
+    override fun observeInvites(groupId: String): Flow<List<InviteToken>> =
+        customObserveInvites?.invoke(groupId) ?: flowOf(emptyList())
     override fun observeExpenseItems(groupId: String): Flow<List<ExpenseItem>> =
         _itemsByGroup.map { it[groupId] ?: emptyList() }
     override fun observeAssignments(groupId: String): Flow<List<ItemAssignment>> = flowOf(emptyList())

@@ -4,15 +4,23 @@ import com.hllous.plantravel.FakeSessionProvider
 import com.hllous.plantravel.FakeTravelRepository
 import com.hllous.plantravel.MainDispatcherRule
 import com.hllous.plantravel.domain.model.ConsumeInviteFailure
+import com.hllous.plantravel.domain.model.InviteToken
 import com.hllous.plantravel.domain.usecase.ConsumeInviteUseCase
 import com.hllous.plantravel.domain.usecase.DeleteInviteUseCase
 import com.hllous.plantravel.domain.usecase.GenerateInviteUseCase
 import com.hllous.plantravel.presentation.group.SelectedGroupHolder
+import kotlinx.coroutines.CoroutineScope
+import kotlinx.coroutines.ExperimentalCoroutinesApi
+import kotlinx.coroutines.flow.flow
+import kotlinx.coroutines.launch
+import kotlinx.coroutines.test.UnconfinedTestDispatcher
 import org.junit.Assert.assertEquals
 import org.junit.Assert.assertNull
+import org.junit.Assert.assertTrue
 import org.junit.Rule
 import org.junit.Test
 
+@OptIn(ExperimentalCoroutinesApi::class)
 class MainViewModelTest {
 
     @get:Rule
@@ -118,5 +126,58 @@ class MainViewModelTest {
         vm.deleteInvite("FAKECODE")
 
         assertEquals("Error al eliminar invitacion", vm.message.value)
+    }
+
+    @Test
+    fun generateInviteShowsCodeEvenWithoutRealtime() {
+        val invite = InviteToken(code = "ABC123", groupId = "g1", link = "plantravel://invite/ABC123", expiresAtMillis = Long.MAX_VALUE)
+        var subscriptionCount = 0
+        val holder = SelectedGroupHolder().also { it.selectedGroupId.value = "g1" }
+        val repo = FakeTravelRepository(
+            customObserveInvites = {
+                flow {
+                    subscriptionCount++
+                    emit(if (subscriptionCount >= 2) listOf(invite) else emptyList())
+                }
+            }
+        )
+        val vm = viewModel(repo = repo, holder = holder)
+        val scope = CoroutineScope(UnconfinedTestDispatcher())
+        val job = scope.launch { vm.invites.collect { } }
+
+        assertTrue(vm.invites.value.isEmpty())
+
+        vm.generateInvite()
+
+        assertTrue(vm.invites.value.isNotEmpty())
+        assertEquals("ABC123", vm.invites.value.first().code)
+
+        job.cancel()
+    }
+
+    @Test
+    fun deleteInviteRemovesCodeEvenWithoutRealtime() {
+        val invite = InviteToken(code = "ABC123", groupId = "g1", link = "plantravel://invite/ABC123", expiresAtMillis = Long.MAX_VALUE)
+        var subscriptionCount = 0
+        val holder = SelectedGroupHolder().also { it.selectedGroupId.value = "g1" }
+        val repo = FakeTravelRepository(
+            customObserveInvites = {
+                flow {
+                    subscriptionCount++
+                    emit(if (subscriptionCount >= 2) emptyList() else listOf(invite))
+                }
+            }
+        )
+        val vm = viewModel(repo = repo, holder = holder)
+        val scope = CoroutineScope(UnconfinedTestDispatcher())
+        val job = scope.launch { vm.invites.collect { } }
+
+        assertEquals(1, vm.invites.value.size)
+
+        vm.deleteInvite("ABC123")
+
+        assertTrue(vm.invites.value.isEmpty())
+
+        job.cancel()
     }
 }
