@@ -56,7 +56,6 @@ fun DestinationScreen(viewModel: MainViewModel, navController: NavHostController
                     )
                 },
                 scrollBehavior = scrollBehavior,
-                windowInsets = WindowInsets(0),
             )
         },
     ) { innerPadding ->

@@ -117,7 +117,6 @@ fun ExpenseScreen(viewModel: ExpenseViewModel, navController: NavHostController)
                         )
                     },
                     scrollBehavior = scrollBehavior,
-                    windowInsets = WindowInsets(0),
                 )
             },
             floatingActionButton = {
