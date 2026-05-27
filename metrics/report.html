@@ -1,0 +1,358 @@
+<!DOCTYPE html>
+<html lang="es">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Métricas de Calidad — ProyectoPlanTravel</title>
+<script src="https://cdn.jsdelivr.net/npm/chart.js@4.4.0/dist/chart.umd.min.js"></script>
+<style>
+  :root {
+    --bg: #0f1117; --surface: #1a1d27; --surface2: #22263a;
+    --accent: #6c63ff; --green: #4caf50; --yellow: #ffc107; --red: #f44336;
+    --text: #e8eaf6; --muted: #9e9eb8; --border: #2e3255;
+    --radius: 12px; --font: 'Segoe UI', system-ui, sans-serif;
+  }
+  * { box-sizing: border-box; margin: 0; padding: 0; }
+  body { background: var(--bg); color: var(--text); font-family: var(--font); padding: 32px 24px; }
+  h1 { font-size: 1.8rem; font-weight: 700; margin-bottom: 4px; }
+  .subtitle { color: var(--muted); font-size: 0.9rem; margin-bottom: 36px; }
+  .grid { display: grid; grid-template-columns: repeat(auto-fit, minmax(200px, 1fr)); gap: 16px; margin-bottom: 36px; }
+  .card { background: var(--surface); border: 1px solid var(--border); border-radius: var(--radius); padding: 24px; }
+  .card-label { font-size: 0.75rem; text-transform: uppercase; letter-spacing: .08em; color: var(--muted); margin-bottom: 8px; }
+  .card-value { font-size: 2.4rem; font-weight: 800; }
+  .card-sub { font-size: 0.8rem; color: var(--muted); margin-top: 4px; }
+  .green { color: var(--green); } .yellow { color: var(--yellow); } .red { color: var(--red); }
+  .accent { color: var(--accent); }
+  section { background: var(--surface); border: 1px solid var(--border); border-radius: var(--radius);
+             padding: 24px; margin-bottom: 24px; }
+  section h2 { font-size: 1.1rem; font-weight: 600; margin-bottom: 20px; border-bottom: 1px solid var(--border); padding-bottom: 12px; }
+  .chart-wrap { position: relative; height: 320px; }
+  table { width: 100%; border-collapse: collapse; font-size: 0.85rem; }
+  th { text-align: left; padding: 8px 12px; color: var(--muted); font-weight: 600;
+        font-size: 0.75rem; text-transform: uppercase; border-bottom: 1px solid var(--border); }
+  td { padding: 9px 12px; border-bottom: 1px solid var(--border); vertical-align: middle; }
+  tr:last-child td { border-bottom: none; }
+  tr:hover td { background: var(--surface2); }
+  .mono { font-family: monospace; font-size: 0.82rem; }
+  .bar-wrap { display: inline-block; width: 100px; height: 8px; background: var(--surface2);
+               border-radius: 4px; vertical-align: middle; margin-right: 8px; }
+  .bar-fill { height: 100%; border-radius: 4px; }
+  .bar-good { background: var(--green); } .bar-mid { background: var(--yellow); } .bar-bad { background: var(--red); }
+  .tag { display: inline-block; padding: 2px 8px; border-radius: 4px; font-size: 0.75rem;
+          font-weight: 600; background: var(--surface2); color: var(--accent); }
+  footer { text-align: center; color: var(--muted); font-size: 0.8rem; margin-top: 32px; }
+</style>
+</head>
+<body>
+
+<h1>Métricas de Calidad de Software</h1>
+<p class="subtitle">Proyecto: ProyectoPlanTravel &nbsp;·&nbsp; Generado: 2026-05-27 18:23 &nbsp;·&nbsp; Branch: testing/quality-metrics</p>
+
+<div class="grid">
+  <div class="card">
+    <div class="card-label">Cobertura de Líneas</div>
+    <div class="card-value red">12.1%</div>
+    <div class="card-sub">413 / 3,420 líneas cubiertas</div>
+  </div>
+  <div class="card">
+    <div class="card-label">Cobertura de Métodos</div>
+    <div class="card-value red">19.5%</div>
+    <div class="card-sub">JaCoCo unit tests (JVM)</div>
+  </div>
+  <div class="card">
+    <div class="card-label">Cobertura de Ramas</div>
+    <div class="card-value red">13.8%</div>
+    <div class="card-sub">Branches cubiertas</div>
+  </div>
+  <div class="card">
+    <div class="card-label">Densidad de Defectos</div>
+    <div class="card-value accent">2.51</div>
+    <div class="card-sub">defectos por cada 1,000 LOC</div>
+  </div>
+  <div class="card">
+    <div class="card-label">LOC Producción</div>
+    <div class="card-value">5,988</div>
+    <div class="card-sub">Líneas no-vacías en src/main/</div>
+  </div>
+  <div class="card">
+    <div class="card-label">Commits Defecto</div>
+    <div class="card-value">15</div>
+    <div class="card-sub">de 52 commits totales</div>
+  </div>
+</div>
+
+<!-- Coverage chart -->
+<section>
+  <h2>Métrica 1 — Cobertura de Código (JaCoCo)</h2>
+  <div class="chart-wrap">
+    <canvas id="coverageChart"></canvas>
+  </div>
+</section>
+
+<!-- Coverage table -->
+<section>
+  <h2>Cobertura por Paquete</h2>
+  <table>
+    <thead><tr><th>Paquete</th><th>Líneas cubiertas</th><th>Líneas no cubiertas</th><th>Cobertura</th></tr></thead>
+    <tbody><tr>
+              <td>domain.settlement</td>
+              <td>56</td>
+              <td>0</td>
+              <td>
+                <div class="bar-wrap">
+                  <div class="bar-fill bar-good"
+                       style="width:100.0%"></div>
+                </div>
+                100.0%
+              </td>
+            </tr><tr>
+              <td>domain.usecase</td>
+              <td>46</td>
+              <td>0</td>
+              <td>
+                <div class="bar-wrap">
+                  <div class="bar-fill bar-good"
+                       style="width:100.0%"></div>
+                </div>
+                100.0%
+              </td>
+            </tr><tr>
+              <td>presentation.group</td>
+              <td>72</td>
+              <td>4</td>
+              <td>
+                <div class="bar-wrap">
+                  <div class="bar-fill bar-good"
+                       style="width:94.7%"></div>
+                </div>
+                94.7%
+              </td>
+            </tr><tr>
+              <td>domain.model</td>
+              <td>41</td>
+              <td>4</td>
+              <td>
+                <div class="bar-wrap">
+                  <div class="bar-fill bar-good"
+                       style="width:91.1%"></div>
+                </div>
+                91.1%
+              </td>
+            </tr><tr>
+              <td>presentation.expense</td>
+              <td>59</td>
+              <td>6</td>
+              <td>
+                <div class="bar-wrap">
+                  <div class="bar-fill bar-good"
+                       style="width:90.8%"></div>
+                </div>
+                90.8%
+              </td>
+            </tr><tr>
+              <td>presentation.auth</td>
+              <td>28</td>
+              <td>4</td>
+              <td>
+                <div class="bar-wrap">
+                  <div class="bar-fill bar-good"
+                       style="width:87.5%"></div>
+                </div>
+                87.5%
+              </td>
+            </tr><tr>
+              <td>presentation</td>
+              <td>33</td>
+              <td>7</td>
+              <td>
+                <div class="bar-wrap">
+                  <div class="bar-fill bar-good"
+                       style="width:82.5%"></div>
+                </div>
+                82.5%
+              </td>
+            </tr><tr>
+              <td>ui.utils</td>
+              <td>22</td>
+              <td>13</td>
+              <td>
+                <div class="bar-wrap">
+                  <div class="bar-fill bar-good"
+                       style="width:62.9%"></div>
+                </div>
+                62.9%
+              </td>
+            </tr><tr>
+              <td>ui.theme</td>
+              <td>56</td>
+              <td>164</td>
+              <td>
+                <div class="bar-wrap">
+                  <div class="bar-fill bar-mid"
+                       style="width:25.5%"></div>
+                </div>
+                25.5%
+              </td>
+            </tr><tr>
+              <td>presentation.destination</td>
+              <td>0</td>
+              <td>1</td>
+              <td>
+                <div class="bar-wrap">
+                  <div class="bar-fill bar-bad"
+                       style="width:0.0%"></div>
+                </div>
+                0.0%
+              </td>
+            </tr><tr>
+              <td>presentation.itinerary</td>
+              <td>0</td>
+              <td>1</td>
+              <td>
+                <div class="bar-wrap">
+                  <div class="bar-fill bar-bad"
+                       style="width:0.0%"></div>
+                </div>
+                0.0%
+              </td>
+            </tr><tr>
+              <td>ui.screens</td>
+              <td>0</td>
+              <td>2018</td>
+              <td>
+                <div class="bar-wrap">
+                  <div class="bar-fill bar-bad"
+                       style="width:0.0%"></div>
+                </div>
+                0.0%
+              </td>
+            </tr><tr>
+              <td>ui.components</td>
+              <td>0</td>
+              <td>223</td>
+              <td>
+                <div class="bar-wrap">
+                  <div class="bar-fill bar-bad"
+                       style="width:0.0%"></div>
+                </div>
+                0.0%
+              </td>
+            </tr><tr>
+              <td>data.auth</td>
+              <td>0</td>
+              <td>55</td>
+              <td>
+                <div class="bar-wrap">
+                  <div class="bar-fill bar-bad"
+                       style="width:0.0%"></div>
+                </div>
+                0.0%
+              </td>
+            </tr><tr>
+              <td>di</td>
+              <td>0</td>
+              <td>13</td>
+              <td>
+                <div class="bar-wrap">
+                  <div class="bar-fill bar-bad"
+                       style="width:0.0%"></div>
+                </div>
+                0.0%
+              </td>
+            </tr><tr>
+              <td>data.repository</td>
+              <td>0</td>
+              <td>165</td>
+              <td>
+                <div class="bar-wrap">
+                  <div class="bar-fill bar-bad"
+                       style="width:0.0%"></div>
+                </div>
+                0.0%
+              </td>
+            </tr><tr>
+              <td>com.hllous.plantravel</td>
+              <td>0</td>
+              <td>329</td>
+              <td>
+                <div class="bar-wrap">
+                  <div class="bar-fill bar-bad"
+                       style="width:0.0%"></div>
+                </div>
+                0.0%
+              </td>
+            </tr></tbody>
+  </table>
+</section>
+
+<!-- Defect density chart -->
+<section>
+  <h2>Métrica 2 — Densidad de Defectos</h2>
+  <div class="chart-wrap" style="height:200px">
+    <canvas id="defectChart"></canvas>
+  </div>
+  <p style="margin-top:16px; color:var(--muted); font-size:0.82rem;">
+    Fórmula: defectos / (LOC / 1,000) = 15 / (5,988 / 1,000) = <strong style="color:var(--text)">2.51</strong><br>
+    Criterio de defecto: commit que contiene las palabras clave <span class="tag">fix</span> <span class="tag">bug</span>
+    <span class="tag">corregir</span> <span class="tag">error</span> <span class="tag">hotfix</span> <span class="tag">crash</span>
+  </p>
+</section>
+
+<!-- Defect commits table -->
+<section>
+  <h2>Commits Clasificados como Defectos (15)</h2>
+  <table>
+    <thead><tr><th>Mensaje de commit</th></tr></thead>
+    <tbody><tr><td class="mono">7436c24 Fix realtime expense updates</td></tr><tr><td class="mono">e0ae658 Fix theme persistence and UI flow</td></tr><tr><td class="mono">f27311d Corregir consumo de invite token y mejorar sharing</td></tr><tr><td class="mono">0f41888 Corregir recarga de tabs y habilitar Realtime para actualizaciones en ti</td></tr><tr><td class="mono">cdeae74 Mostrar grupo activo en ProfileScreen y corregir deprecaciÃ³n de Logout </td></tr><tr><td class="mono">24f924d Corregir status bar solapado en DestinationScreen y ExpenseScreen</td></tr><tr><td class="mono">981dfb8 Corregir bugs detectados en diagnÃ³stico de #10</td></tr><tr><td class="mono">b72e33f Corregir bugs del flujo de tests detectados en diagnÃ³stico de #25</td></tr><tr><td class="mono">5267c0c Corregir bugs del flujo de grupos detectados en diagnÃ³stico de #24</td></tr><tr><td class="mono">a79e751 Corregir bugs del flujo de gastos detectados en diagnÃ³stico de #23</td></tr><tr><td class="mono">b39818c Corregir bugs del flujo de invitaciones detectados en diagnÃ³stico de #2</td></tr><tr><td class="mono">63e5f2c Corregir bugs del flujo de grupos detectados en diagnÃ³stico de #21</td></tr><tr><td class="mono">a7287a9 Corregir bugs del esqueleto Supabase detectados en diagnÃ³stico de #20</td></tr><tr><td class="mono">9df84d2 Corregir vulnerabilidades de seguridad en funciones de BD</td></tr><tr><td class="mono">b25741b Corregir dos bugs en el flujo de auth post-login</td></tr></tbody>
+  </table>
+</section>
+
+<footer>Prototipo académico &nbsp;·&nbsp; Métricas calculadas sobre código fuente Kotlin + historial Git</footer>
+
+<script>
+const labels  = ['domain.settlement', 'domain.usecase', 'presentation.group', 'domain.model', 'presentation.expense', 'presentation.auth', 'presentation', 'ui.utils', 'ui.theme', 'presentation.destination', 'presentation.itinerary', 'ui.screens', 'ui.components', 'data.auth', 'di', 'data.repository', 'com.hllous.plantravel'];
+const covered = [56, 46, 72, 41, 59, 28, 33, 22, 56, 0, 0, 0, 0, 0, 0, 0, 0];
+const missed  = [0, 0, 4, 4, 6, 4, 7, 13, 164, 1, 1, 2018, 223, 55, 13, 165, 329];
+const pcts    = [100.0, 100.0, 94.7, 91.1, 90.8, 87.5, 82.5, 62.9, 25.5, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0];
+
+new Chart(document.getElementById('coverageChart'), {
+  type: 'bar',
+  data: {
+    labels,
+    datasets: [
+      { label: 'Líneas cubiertas', data: covered, backgroundColor: '#4caf50cc', borderRadius: 4 },
+      { label: 'Líneas no cubiertas', data: missed,  backgroundColor: '#f4433666', borderRadius: 4 }
+    ]
+  },
+  options: {
+    responsive: true, maintainAspectRatio: false,
+    plugins: { legend: { labels: { color: '#e8eaf6' } } },
+    scales: {
+      x: { stacked: true, ticks: { color: '#9e9eb8', maxRotation: 45 }, grid: { color: '#2e3255' } },
+      y: { stacked: true, ticks: { color: '#9e9eb8' }, grid: { color: '#2e3255' } }
+    }
+  }
+});
+
+new Chart(document.getElementById('defectChart'), {
+  type: 'doughnut',
+  data: {
+    labels: ['Commits defecto', 'Commits limpios'],
+    datasets: [{
+      data: [15, 37],
+      backgroundColor: ['#f44336bb', '#4caf5066'],
+      borderColor: ['#f44336', '#4caf50'],
+      borderWidth: 2
+    }]
+  },
+  options: {
+    responsive: true, maintainAspectRatio: false,
+    plugins: {
+      legend: { position: 'right', labels: { color: '#e8eaf6' } },
+      tooltip: { callbacks: { label: ctx => ` ${ctx.label}: ${ctx.raw} (${(ctx.raw/52*100).toFixed(1)}%)` } }
+    }
+  }
+});
+</script>
+</body>
+</html>
