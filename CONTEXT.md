@@ -62,8 +62,16 @@ _Avoid_: File, attachment, record
 
 ### Expenses & Settlement
 
+**Expense Group**:
+A named container of Expense Items within a Travel Group, with its own independent settlement and total. Created and deleted by any Group Member. Has exactly two states: Open (editable) or Finalized (read-only).
+_Avoid_: Expense category, expense tab, sub-group
+
+**Expense Group State**:
+Open or Finalized. An Open Expense Group accepts new Expense Items and assignment changes. A Finalized Expense Group is read-only; finalizing it triggers push notifications to all Group Members for any remaining Unassigned Quantity. Only the ADMIN can finalize an Expense Group.
+_Avoid_: Active, closed, archived
+
 **Expense Item**:
-A shared purchase or planned cost inside a travel group, with a total price and an item quantity.
+A shared purchase or planned cost inside an Expense Group, with a total price and an item quantity.
 _Avoid_: Product, line item
 
 **Item Quantity**:
@@ -79,8 +87,20 @@ The part of an Expense Item's Item Quantity that has not been assigned to any gr
 _Avoid_: Admin remainder, leftover charge
 
 **Member Settlement**:
-The amount a group member owes for their Assigned Quantity across the group's Expense Items. Rounding cents are spread across assigned members by ascending member id, not assigned to the group admin.
+The amount a group member owes for their Assigned Quantity across the Expense Items of a single Expense Group. Rounding cents are spread across assigned members by ascending member id, not assigned to the group admin.
 _Avoid_: Balance, bill
+
+**Peer-to-Peer Debt**:
+The calculated amount one Group Member owes another, derived by running a debt-simplification algorithm over all Member Settlements within an Expense Group. Produces the minimum number of transfers required to settle all debts. Displayed as directed pairs: "A owes B $X".
+_Avoid_: Transfer, payment direction, net balance
+
+**MP Alias**:
+The MercadoPago alias stored on a User Profile. Used as the recipient identifier when constructing a Payment Deep Link. Set once globally; shared across all Travel Groups the user belongs to.
+_Avoid_: CBU, CVU, account, MP handle
+
+**Payment Deep Link**:
+A `mercadopago://` URI pre-filled with the creditor's MP Alias and the Peer-to-Peer Debt amount, opening the MercadoPago app to the send-money screen. Generated automatically from the settled Peer-to-Peer Debt when the debtor taps "Pay via MercadoPago". Payment confirmation remains a manual Payment Status acknowledgement.
+_Avoid_: Checkout link, payment URL, MP link
 
 **Settlement Warning**:
 Structured information about an Expense Item that cannot be fully settled, such as an Unassigned Quantity and its unassigned amount. UI text is derived from this warning outside the domain.
@@ -91,7 +111,7 @@ The typed result of an attempt to set an Assigned Quantity for a group member. E
 _Avoid_: assignment result, validation result, error code
 
 **Payment Status**:
-Whether a Group Member has marked their Member Settlement as paid. Set by the member themselves; confirmed by the group ADMIN. Does not represent a real money transfer — it is a shared acknowledgement only.
+Whether a Group Member has marked a Peer-to-Peer Debt as paid. The debtor taps "Pay via MercadoPago" (generating a Payment Deep Link) and then manually confirms; the creditor acknowledges. Does not represent a verified money transfer — it is a shared acknowledgement only.
 _Avoid_: Paid flag, balance status, settlement state
 
 ## Example Dialogue

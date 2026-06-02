@@ -13,6 +13,7 @@ Features that must ship for the app to be functional. Each has a full PRD as a G
 | **Group Rework** | [#18](https://github.com/hllous/Proyecto-Plan-Travel/issues/18) | ✅ Done | Drop free-text admin name from create-group (derive from User Profile). Real Leave Group action for USER-role members with confirmation dialog. Multi-group list UX with group switching and member count. ADMIN kick with confirmation dialog. RLS policy for user self-delete. |
 | **UI Redesign** | [#19](https://github.com/hllous/Proyecto-Plan-Travel/issues/19) | ✅ Done | Layout overhaul following MD3 principles. Atlas palette + Fraunces/Plus Jakarta Sans typography. Bottom nav as sole primary navigation (Inicio/Dashboard, Grupos, Destinos, Gastos). Drawer repurposed for Profile, theme toggle, logout only. Dashboard home screen with contextual greeting, group card, quick actions, and suggestion tiles. New ProfileScreen. QR Scanner as contextual icon in Grupos. BallroomScreen renamed to ExpenseScreen. Auth screens redesigned with brand panel. |
 | **Expense Enhancements** | [#11](https://github.com/hllous/Proyecto-Plan-Travel/issues/11) | ⬜ Not started | Edit Expense Items (name, price, quantity) with domain guard rejecting quantity below total Assigned Quantity. Payment Status flag: member marks settlement as paid, ADMIN confirms. |
+| **Expense Groups + P2P Payments** | TBD | ⬜ Not started | Expense Groups as named containers of Expense Items with independent per-group settlement. Open/Finalized states; ADMIN finalizes. Debt simplification to produce Peer-to-Peer Debts. Payment Deep Links via `mercadopago://` using MP Alias stored on User Profile. Push notifications (FCM) for new item, fully assigned item, and missing assignments on finalize. |
 | **Trip Planning Module** | [#12](https://github.com/hllous/Proyecto-Plan-Travel/issues/12) | ⬜ Not started | Trip Destination on TravelGroup. Google Places API for Place Recommendations. Open-Meteo for weather (free, no key). Shared Group Itinerary with Itinerary Events editable by all members in real time. |
 | **Trip Contacts** | [#13](https://github.com/hllous/Proyecto-Plan-Travel/issues/13) | ⬜ Not started | Group-level reference list for emergency numbers, accommodation, transport, and medical contacts. Name, phone, category, optional notes. Editable by any Group Member. |
 
@@ -55,8 +56,7 @@ Features that must ship for the app to be functional. Each has a full PRD as a G
 | Feature | Rationale |
 |---|---|
 | **Offline-first (Room as local cache)** | Room removed in MVP for simplicity (ADR-0002). Re-introduce as a sync layer over Supabase once the network model is stable. |
-| **Mercado Pago payment integration** | MVP uses mark-as-paid (Payment Status flag). Mercado Pago is the preferred next step: generate a payment link per Member Settlement, record confirmation automatically on payment. |
-| **Push notifications** | Notify members when a new Expense Item is added, an assignment changes, or a payment is confirmed. Requires Firebase Cloud Messaging + Supabase webhook trigger. |
+| **MercadoPago OAuth / Checkout Pro** | Deep-link P2P payments ship in MVP (ADR-0007). Full OAuth flow — Checkout Pro links generated server-side, webhook auto-confirms Payment Status — deferred here as it requires MP MCP setup and per-user OAuth. |
 | **OpenTripMap / Foursquare fallback for Place Recommendations** | Activated if Google Places API free credits are exhausted (ADR-0003). OpenTripMap is free with no key; Foursquare free tier allows 1,000 calls/day. |
 | **Travel Documents** | Personal credentials (DNI, passport, insurance, etc.) with structured fields, expiry date, optional notes, and optional photo attachment via Supabase Storage. Private by default; owner can share with a specific Travel Group. |
 
@@ -65,6 +65,7 @@ Features that must ship for the app to be functional. Each has a full PRD as a G
 | Feature | Rationale |
 |---|---|
 | **Device calendar sync for Itinerary Events** | Export Group Itinerary events to the user's Android calendar via `CalendarContract`. Requires calendar read/write permissions. Deferred because the Group Itinerary must be stable first. |
+| **MercadoPago OAuth / Checkout Pro (full P2P)** | Each user connects their MP account via OAuth. App generates Checkout Pro payment preferences server-side via an Edge Function using the MP MCP. Webhook auto-confirms Payment Status. Supersedes the deep-link approach from MVP (ADR-0007). |
 | **Guest (name-only) members** | Allow an ADMIN to add a member by name without requiring a Plan Travel account. Useful for participants without a smartphone. Adds complexity to RLS and settlement attribution. |
 | **Collaborative voting on Place Recommendations** | Thumbs up/down on Place Recommendations so the group can surface the most popular activities. Requires a new Supabase table and Realtime subscription. |
 | **Expense Item history / audit log** | Track who added or edited each Expense Item and when. Useful for dispute resolution within a group. |
