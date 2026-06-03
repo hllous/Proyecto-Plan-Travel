@@ -75,8 +75,8 @@ class ConsumeInviteUseCase @Inject constructor(
 class AddExpenseItemUseCase @Inject constructor(
     private val repository: TravelRepository
 ) {
-    suspend operator fun invoke(groupId: String, itemName: String, totalPriceCents: Long, quantity: Int): String {
-        return repository.addExpenseItem(groupId, itemName.trim(), totalPriceCents, quantity)
+    suspend operator fun invoke(expenseGroupId: String, name: String, totalPriceCents: Long, quantity: Int): String {
+        return repository.addExpenseItem(expenseGroupId, name.trim(), totalPriceCents, quantity)
     }
 }
 
@@ -99,5 +99,40 @@ class DeleteExpenseItemUseCase @Inject constructor(
 class CalculateSettlementUseCase @Inject constructor(
     private val repository: TravelRepository
 ) {
-    suspend operator fun invoke(groupId: String) = repository.calculateSettlement(groupId)
+    suspend operator fun invoke(expenseGroupId: String) = repository.calculateSettlement(expenseGroupId)
+}
+
+class CreateExpenseGroupUseCase @Inject constructor(
+    private val repository: TravelRepository
+) {
+    suspend operator fun invoke(groupId: String, name: String): String =
+        repository.createExpenseGroup(groupId, name.trim())
+}
+
+class DeleteExpenseGroupUseCase @Inject constructor(
+    private val repository: TravelRepository
+) {
+    suspend operator fun invoke(expenseGroupId: String) {
+        repository.deleteExpenseGroup(expenseGroupId)
+    }
+}
+
+class FinalizeExpenseGroupUseCase @Inject constructor(
+    private val repository: TravelRepository
+) {
+    suspend operator fun invoke(expenseGroupId: String) {
+        repository.finalizeExpenseGroup(expenseGroupId)
+    }
+}
+
+class GetMpAliasUseCase @Inject constructor(
+    private val repository: TravelRepository
+) {
+    suspend operator fun invoke(userId: String): String? = repository.getMpAlias(userId)
+}
+
+class UpdateMpAliasUseCase @Inject constructor(
+    private val repository: TravelRepository
+) {
+    suspend operator fun invoke(alias: String) = repository.updateMpAlias(alias)
 }

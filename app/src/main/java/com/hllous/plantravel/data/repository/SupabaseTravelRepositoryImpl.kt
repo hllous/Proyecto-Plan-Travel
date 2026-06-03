@@ -2,11 +2,14 @@ package com.hllous.plantravel.data.repository
 
 import com.hllous.plantravel.domain.model.ConsumeInviteFailure
 import com.hllous.plantravel.domain.model.DestinationRecommendation
+import com.hllous.plantravel.domain.model.ExpenseGroup
+import com.hllous.plantravel.domain.model.ExpenseGroupState
 import com.hllous.plantravel.domain.model.ExpenseItem
 import com.hllous.plantravel.domain.model.GroupMember
 import com.hllous.plantravel.domain.model.InviteToken
 import com.hllous.plantravel.domain.model.ItemAssignment
 import com.hllous.plantravel.domain.model.MemberRole
+import com.hllous.plantravel.domain.model.PaymentStatus
 import com.hllous.plantravel.domain.model.SettlementResult
 import com.hllous.plantravel.domain.model.TravelGroup
 import com.hllous.plantravel.domain.repository.TravelRepository
@@ -119,19 +122,53 @@ class SupabaseTravelRepositoryImpl @Inject constructor(
     private data class MembershipCheckDto(@SerialName("group_id") val groupId: String)
 
     @Serializable
+    private data class ExpenseGroupRefDto(@SerialName("group_id") val groupId: String)
+
+    @Serializable
+    private data class ExpenseItemSumDto(
+        @SerialName("total_price_cents") val totalPriceCents: Long
+    )
+
+    @Serializable
+    private data class ExpenseGroupDto(
+        val id: String,
+        @SerialName("group_id") val groupId: String,
+        val name: String,
+        val state: String,
+        @SerialName("expense_items") val expenseItems: List<ExpenseItemSumDto> = emptyList()
+    ) {
+        fun toDomain() = ExpenseGroup(
+            id = id,
+            groupId = groupId,
+            name = name,
+            state = if (state == "finalized") ExpenseGroupState.Finalized else ExpenseGroupState.Open,
+            totalPriceCents = expenseItems.sumOf { it.totalPriceCents }
+        )
+    }
+
+    @Serializable
+    private data class InsertExpenseGroupDto(
+        val id: String,
+        @SerialName("group_id") val groupId: String,
+        val name: String
+    )
+
+    @Serializable
     private data class ExpenseItemDto(
         val id: String,
         @SerialName("group_id") val groupId: String,
+        @SerialName("expense_group_id") val expenseGroupId: String? = null,
         val name: String,
         @SerialName("total_price_cents") val totalPriceCents: Long,
         val quantity: Int
     ) {
-        fun toDomain() = ExpenseItem(id = id, groupId = groupId, name = name, totalPriceCents = totalPriceCents, quantity = quantity)
+        fun toDomain() = ExpenseItem(id = id, groupId = groupId, expenseGroupId = expenseGroupId.orEmpty(), name = name, totalPriceCents = totalPriceCents, quantity = quantity)
     }
 
     @Serializable
     private data class InsertExpenseItemDto(
         @SerialName("group_id") val groupId: String,
+        @SerialName("expense_group_id") val expenseGroupId: String,
         val name: String,
         @SerialName("total_price_cents") val totalPriceCents: Long,
         val quantity: Int
@@ -158,11 +195,17 @@ class SupabaseTravelRepositoryImpl @Inject constructor(
     private val settlementCalculator = ExpenseSettlementCalculator()
     private val assignmentPolicy = ExpenseAssignmentPolicy()
 
-    private suspend fun fetchExpenseItems(groupId: String): List<ExpenseItem> =
+    private suspend fun fetchExpenseItems(expenseGroupId: String): List<ExpenseItem> =
         supabase.from("expense_items")
-            .select { filter { eq("group_id", groupId) } }
+            .select { filter { eq("expense_group_id", expenseGroupId) } }
             .decodeList<ExpenseItemDto>()
             .map { it.toDomain() }
+
+    private suspend fun fetchExpenseGroupTravelGroupId(expenseGroupId: String): String =
+        supabase.from("expense_groups")
+            .select(Columns.list("group_id")) { filter { eq("id", expenseGroupId) } }
+            .decodeSingle<ExpenseGroupRefDto>()
+            .groupId
 
     private suspend fun fetchAssignmentsByItemIds(itemIds: List<String>): List<ItemAssignment> {
         if (itemIds.isEmpty()) return emptyList()
@@ -172,8 +215,8 @@ class SupabaseTravelRepositoryImpl @Inject constructor(
             .map { it.toDomain() }
     }
 
-    private suspend fun fetchAssignments(groupId: String): List<ItemAssignment> {
-        val items = fetchExpenseItems(groupId)
+    private suspend fun fetchAssignments(expenseGroupId: String): List<ItemAssignment> {
+        val items = fetchExpenseItems(expenseGroupId)
         return fetchAssignmentsByItemIds(items.map { it.id })
     }
 
@@ -378,49 +421,89 @@ class SupabaseTravelRepositoryImpl @Inject constructor(
     override suspend fun getRecommendationsByRegion(region: String): List<DestinationRecommendation> =
         throw NotImplementedError("getRecommendationsByRegion not yet implemented — see #12")
 
-    override fun observeExpenseItems(groupId: String): Flow<List<ExpenseItem>> = channelFlow {
-        send(fetchExpenseItems(groupId))
+    private suspend fun fetchExpenseGroups(groupId: String): List<ExpenseGroup> =
+        supabase.from("expense_groups")
+            .select(Columns.raw("id, group_id, name, state, expense_items(total_price_cents)")) {
+                filter { eq("group_id", groupId) }
+            }
+            .decodeList<ExpenseGroupDto>()
+            .map { it.toDomain() }
 
-        val channel = supabase.channel("expense-items-$groupId-${UUID.randomUUID()}")
-        // Filter server-side so RLS only needs to evaluate rows for this group.
-        // Without a filter, auth.uid() must be available in the Realtime context for
-        // is_group_member() to return true; a timing gap can cause all events to be
-        // silently dropped. The explicit filter bypasses that risk.
+    override fun observeExpenseGroups(groupId: String): Flow<List<ExpenseGroup>> = channelFlow {
+        send(fetchExpenseGroups(groupId))
+
+        val channel = supabase.channel("expense-groups-$groupId-${UUID.randomUUID()}")
         val changes = channel.postgresChangeFlow<PostgresAction>(schema = "public") {
-            table = "expense_items"
+            table = "expense_groups"
             filter("group_id", FilterOperator.EQ, groupId)
         }
         channel.subscribe(blockUntilSubscribed = true)
 
         try {
-            changes.collect { send(fetchExpenseItems(groupId)) }
+            changes.collect { send(fetchExpenseGroups(groupId)) }
         } finally {
             supabase.realtime.removeChannel(channel)
         }
     }
 
-    override fun observeAssignments(groupId: String): Flow<List<ItemAssignment>> = channelFlow {
-        send(fetchAssignments(groupId))
+    override suspend fun createExpenseGroup(groupId: String, name: String): String {
+        val id = UUID.randomUUID().toString()
+        supabase.from("expense_groups")
+            .insert(InsertExpenseGroupDto(id = id, groupId = groupId, name = name))
+        return id
+    }
 
-        // item_assignments has no group_id column so we cannot filter by group here.
-        // The ViewModel calls reloadAssignments() after every local write as a fallback;
-        // this channel handles cross-device push updates.
-        val channel = supabase.channel("assignments-$groupId-${UUID.randomUUID()}")
+    override suspend fun deleteExpenseGroup(expenseGroupId: String) {
+        supabase.from("expense_groups").delete {
+            filter { eq("id", expenseGroupId) }
+        }
+    }
+
+    override suspend fun finalizeExpenseGroup(expenseGroupId: String) {
+        supabase.from("expense_groups").update({ set("state", "finalized") }) {
+            filter { eq("id", expenseGroupId) }
+        }
+    }
+
+    override fun observeExpenseItems(expenseGroupId: String): Flow<List<ExpenseItem>> = channelFlow {
+        send(fetchExpenseItems(expenseGroupId))
+
+        val channel = supabase.channel("expense-items-$expenseGroupId-${UUID.randomUUID()}")
+        // Filter server-side so RLS only needs to evaluate rows for this expense group.
+        val changes = channel.postgresChangeFlow<PostgresAction>(schema = "public") {
+            table = "expense_items"
+            filter("expense_group_id", FilterOperator.EQ, expenseGroupId)
+        }
+        channel.subscribe(blockUntilSubscribed = true)
+
+        try {
+            changes.collect { send(fetchExpenseItems(expenseGroupId)) }
+        } finally {
+            supabase.realtime.removeChannel(channel)
+        }
+    }
+
+    override fun observeAssignments(expenseGroupId: String): Flow<List<ItemAssignment>> = channelFlow {
+        send(fetchAssignments(expenseGroupId))
+
+        // item_assignments has no expense_group_id column; re-fetch via expense items on every change.
+        val channel = supabase.channel("assignments-$expenseGroupId-${UUID.randomUUID()}")
         val changes = channel.postgresChangeFlow<PostgresAction>(schema = "public") {
             table = "item_assignments"
         }
         channel.subscribe(blockUntilSubscribed = true)
 
         try {
-            changes.collect { send(fetchAssignments(groupId)) }
+            changes.collect { send(fetchAssignments(expenseGroupId)) }
         } finally {
             supabase.realtime.removeChannel(channel)
         }
     }
 
-    override suspend fun addExpenseItem(groupId: String, itemName: String, totalPriceCents: Long, quantity: Int): String {
+    override suspend fun addExpenseItem(expenseGroupId: String, name: String, totalPriceCents: Long, quantity: Int): String {
+        val travelGroupId = fetchExpenseGroupTravelGroupId(expenseGroupId)
         val dto = supabase.from("expense_items")
-            .insert(InsertExpenseItemDto(groupId = groupId, name = itemName, totalPriceCents = totalPriceCents, quantity = quantity)) {
+            .insert(InsertExpenseItemDto(groupId = travelGroupId, expenseGroupId = expenseGroupId, name = name, totalPriceCents = totalPriceCents, quantity = quantity)) {
                 select()
             }
             .decodeSingle<ExpenseItemDto>()
@@ -460,10 +543,97 @@ class SupabaseTravelRepositoryImpl @Inject constructor(
         }
     }
 
-    override suspend fun calculateSettlement(groupId: String): SettlementResult {
-        val members = fetchMembers(groupId)
-        val items = fetchExpenseItems(groupId)
+    override suspend fun calculateSettlement(expenseGroupId: String): SettlementResult {
+        val travelGroupId = fetchExpenseGroupTravelGroupId(expenseGroupId)
+        val members = fetchMembers(travelGroupId)
+        val items = fetchExpenseItems(expenseGroupId)
         val assignments = fetchAssignmentsByItemIds(items.map { it.id })
         return settlementCalculator.calculate(members = members, items = items, assignments = assignments)
+    }
+
+    // ─── Profile ─────────────────────────────────────────────────────────────
+
+    @Serializable
+    private data class MpAliasDto(@SerialName("mp_alias") val mpAlias: String? = null)
+
+    override suspend fun getMpAlias(userId: String): String? =
+        supabase.from("profiles")
+            .select(Columns.list("mp_alias")) { filter { eq("id", userId) } }
+            .decodeSingleOrNull<MpAliasDto>()
+            ?.mpAlias
+
+    override suspend fun updateMpAlias(alias: String) {
+        val userId = supabase.auth.currentUserOrNull()?.id ?: return
+        supabase.from("profiles").update({ set("mp_alias", alias.ifEmpty { null }) }) {
+            filter { eq("id", userId) }
+        }
+    }
+
+    // ─── Payment status ───────────────────────────────────────────────────────
+
+    @Serializable
+    private data class PaymentStatusDto(
+        @SerialName("from_member_id") val fromMemberId: String,
+        @SerialName("to_member_id") val toMemberId: String,
+        @SerialName("expense_group_id") val expenseGroupId: String,
+        @SerialName("debtor_confirmed") val debtorConfirmed: Boolean,
+        @SerialName("creditor_confirmed") val creditorConfirmed: Boolean,
+    ) {
+        fun toDomain() = PaymentStatus(
+            fromMemberId = fromMemberId,
+            toMemberId = toMemberId,
+            expenseGroupId = expenseGroupId,
+            debtorConfirmed = debtorConfirmed,
+            creditorConfirmed = creditorConfirmed,
+        )
+    }
+
+    @Serializable
+    private data class InsertPaymentStatusDto(
+        @SerialName("from_member_id") val fromMemberId: String,
+        @SerialName("to_member_id") val toMemberId: String,
+        @SerialName("expense_group_id") val expenseGroupId: String,
+        @SerialName("debtor_confirmed") val debtorConfirmed: Boolean = false,
+        @SerialName("creditor_confirmed") val creditorConfirmed: Boolean = false,
+    )
+
+    override suspend fun getPaymentStatus(fromMemberId: String, toMemberId: String, expenseGroupId: String): PaymentStatus? =
+        supabase.from("peer_to_peer_payment_status")
+            .select {
+                filter {
+                    eq("from_member_id", fromMemberId)
+                    eq("to_member_id", toMemberId)
+                    eq("expense_group_id", expenseGroupId)
+                }
+            }
+            .decodeSingleOrNull<PaymentStatusDto>()
+            ?.toDomain()
+
+    override suspend fun markDebtorConfirmed(fromMemberId: String, toMemberId: String, expenseGroupId: String) {
+        supabase.from("peer_to_peer_payment_status")
+            .upsert(InsertPaymentStatusDto(fromMemberId, toMemberId, expenseGroupId)) {
+                ignoreDuplicates = true
+            }
+        supabase.from("peer_to_peer_payment_status").update({ set("debtor_confirmed", true) }) {
+            filter {
+                eq("from_member_id", fromMemberId)
+                eq("to_member_id", toMemberId)
+                eq("expense_group_id", expenseGroupId)
+            }
+        }
+    }
+
+    override suspend fun markCreditorConfirmed(fromMemberId: String, toMemberId: String, expenseGroupId: String) {
+        supabase.from("peer_to_peer_payment_status")
+            .upsert(InsertPaymentStatusDto(fromMemberId, toMemberId, expenseGroupId)) {
+                ignoreDuplicates = true
+            }
+        supabase.from("peer_to_peer_payment_status").update({ set("creditor_confirmed", true) }) {
+            filter {
+                eq("from_member_id", fromMemberId)
+                eq("to_member_id", toMemberId)
+                eq("expense_group_id", expenseGroupId)
+            }
+        }
     }
 }

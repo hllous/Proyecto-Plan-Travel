@@ -1,10 +1,12 @@
 package com.hllous.plantravel.domain.repository
 
 import com.hllous.plantravel.domain.model.DestinationRecommendation
+import com.hllous.plantravel.domain.model.ExpenseGroup
 import com.hllous.plantravel.domain.model.ExpenseItem
 import com.hllous.plantravel.domain.model.GroupMember
 import com.hllous.plantravel.domain.model.InviteToken
 import com.hllous.plantravel.domain.model.ItemAssignment
+import com.hllous.plantravel.domain.model.PaymentStatus
 import com.hllous.plantravel.domain.model.SettlementResult
 import com.hllous.plantravel.domain.model.TravelGroup
 import com.hllous.plantravel.domain.settlement.AssignmentOutcome
@@ -24,13 +26,25 @@ interface TravelRepository {
     suspend fun deleteInvite(code: String)
     suspend fun consumeInvite(code: String, userId: String, displayName: String): Result<String>
 
+    suspend fun getMpAlias(userId: String): String?
+    suspend fun updateMpAlias(alias: String)
+
+    suspend fun getPaymentStatus(fromMemberId: String, toMemberId: String, expenseGroupId: String): PaymentStatus?
+    suspend fun markDebtorConfirmed(fromMemberId: String, toMemberId: String, expenseGroupId: String)
+    suspend fun markCreditorConfirmed(fromMemberId: String, toMemberId: String, expenseGroupId: String)
+
     suspend fun getRegions(): List<String>
     suspend fun getRecommendationsByRegion(region: String): List<DestinationRecommendation>
 
-    fun observeExpenseItems(groupId: String): Flow<List<ExpenseItem>>
-    fun observeAssignments(groupId: String): Flow<List<ItemAssignment>>
-    suspend fun addExpenseItem(groupId: String, itemName: String, totalPriceCents: Long, quantity: Int): String
+    fun observeExpenseGroups(groupId: String): Flow<List<ExpenseGroup>>
+    suspend fun createExpenseGroup(groupId: String, name: String): String
+    suspend fun deleteExpenseGroup(expenseGroupId: String)
+    suspend fun finalizeExpenseGroup(expenseGroupId: String)
+
+    fun observeExpenseItems(expenseGroupId: String): Flow<List<ExpenseItem>>
+    fun observeAssignments(expenseGroupId: String): Flow<List<ItemAssignment>>
+    suspend fun addExpenseItem(expenseGroupId: String, name: String, totalPriceCents: Long, quantity: Int): String
     suspend fun assignItemToMember(itemId: String, memberId: String, quantity: Int): AssignmentOutcome
     suspend fun deleteExpenseItem(itemId: String)
-    suspend fun calculateSettlement(groupId: String): SettlementResult
+    suspend fun calculateSettlement(expenseGroupId: String): SettlementResult
 }

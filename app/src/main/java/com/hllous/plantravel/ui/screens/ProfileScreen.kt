@@ -26,25 +26,37 @@ import androidx.compose.material.icons.filled.Email
 import androidx.compose.material.icons.filled.People
 import androidx.compose.material.icons.filled.Person
 import androidx.compose.material.icons.filled.Phone
+import androidx.compose.material3.Button
 import androidx.compose.material3.ButtonDefaults
 import androidx.compose.material3.ElevatedCard
 import androidx.compose.material3.Icon
 import androidx.compose.material3.IconButton
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.OutlinedButton
+import androidx.compose.material3.OutlinedTextField
+import androidx.compose.material3.SnackbarHost
+import androidx.compose.material3.SnackbarHostState
 import androidx.compose.material3.Surface
 import androidx.compose.material3.Text
 import androidx.compose.runtime.Composable
+import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.collectAsState
 import androidx.compose.runtime.getValue
+import androidx.compose.runtime.mutableStateOf
+import androidx.compose.runtime.remember
+import androidx.compose.runtime.saveable.rememberSaveable
+import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.unit.dp
+import androidx.hilt.navigation.compose.hiltViewModel
 import com.hllous.plantravel.presentation.auth.AuthState
 import com.hllous.plantravel.presentation.auth.AuthViewModel
 import com.hllous.plantravel.presentation.group.GroupViewModel
+import com.hllous.plantravel.presentation.profile.ProfileViewModel
+import com.hllous.plantravel.ui.components.travelTextFieldColors
 import com.hllous.plantravel.ui.theme.FrauncesFamily
 import com.hllous.plantravel.ui.utils.displayInitials
 
@@ -54,14 +66,25 @@ fun ProfileScreen(
     onLogout: () -> Unit,
     onBack: () -> Unit = {},
     groupViewModel: GroupViewModel? = null,
+    profileViewModel: ProfileViewModel = hiltViewModel(),
 ) {
     val state by authViewModel.state.collectAsState()
     val userEmail by authViewModel.userEmail.collectAsState()
     val displayName = (state as? AuthState.Authenticated)?.displayName ?: ""
     val initials = displayInitials(displayName)
-    val currentGroup by groupViewModel?.currentGroup?.collectAsState() ?: androidx.compose.runtime.remember { androidx.compose.runtime.mutableStateOf(null) }
-    val members by groupViewModel?.members?.collectAsState() ?: androidx.compose.runtime.remember { androidx.compose.runtime.mutableStateOf(emptyList()) }
+    val currentGroup by groupViewModel?.currentGroup?.collectAsState() ?: remember { mutableStateOf(null) }
+    val members by groupViewModel?.members?.collectAsState() ?: remember { mutableStateOf(emptyList()) }
+    val savedAlias by profileViewModel.mpAlias.collectAsState()
+    val profileMessage by profileViewModel.message.collectAsState()
+    val snackbarHostState = remember { SnackbarHostState() }
 
+    LaunchedEffect(profileMessage) {
+        val msg = profileMessage ?: return@LaunchedEffect
+        snackbarHostState.showSnackbar(msg)
+        profileViewModel.clearMessage()
+    }
+
+    Box(Modifier.fillMaxSize()) {
     Column(Modifier.fillMaxSize()) {
         // Blue brand panel
         Box(
@@ -215,6 +238,37 @@ fun ProfileScreen(
                     }
                 }
 
+                Spacer(Modifier.height(16.dp))
+
+                // MercadoPago alias card
+                var aliasInput by rememberSaveable(savedAlias) { mutableStateOf(savedAlias) }
+                ElevatedCard(modifier = Modifier.fillMaxWidth()) {
+                    Column(modifier = Modifier.padding(16.dp)) {
+                        Text(
+                            text = "MercadoPago",
+                            style = MaterialTheme.typography.titleSmall,
+                            fontWeight = FontWeight.SemiBold,
+                        )
+                        Spacer(Modifier.height(10.dp))
+                        OutlinedTextField(
+                            value = aliasInput,
+                            onValueChange = { aliasInput = it },
+                            label = { Text("Alias de MercadoPago") },
+                            placeholder = { Text("Ej: nico.llousas") },
+                            singleLine = true,
+                            modifier = Modifier.fillMaxWidth(),
+                            colors = travelTextFieldColors(),
+                        )
+                        Spacer(Modifier.height(10.dp))
+                        Button(
+                            onClick = { profileViewModel.updateMpAlias(aliasInput) },
+                            modifier = Modifier.fillMaxWidth(),
+                        ) {
+                            Text("Guardar alias")
+                        }
+                    }
+                }
+
                 Spacer(Modifier.height(32.dp))
 
                 OutlinedButton(
@@ -230,6 +284,11 @@ fun ProfileScreen(
             }
         }
     }
+    SnackbarHost(
+        hostState = snackbarHostState,
+        modifier = Modifier.align(Alignment.BottomCenter),
+    )
+    } // end Box
 }
 
 @Composable

@@ -43,6 +43,7 @@ data class DestinationRecommendation(
 data class ExpenseItem(
     val id: String,
     val groupId: String,
+    val expenseGroupId: String,
     val name: String,
     val totalPriceCents: Long,
     val quantity: Int
@@ -70,4 +71,40 @@ data class SettlementWarning(
 data class SettlementResult(
     val memberSettlements: List<MemberSettlement>,
     val warnings: List<SettlementWarning>
+)
+
+sealed class ExpenseGroupState {
+    object Open : ExpenseGroupState()
+    object Finalized : ExpenseGroupState()
+}
+
+data class PeerToPerDebt(
+    val fromMemberId: String,
+    val fromMemberName: String,
+    val toMemberId: String,
+    val toMemberName: String,
+    val amountCents: Long
+)
+
+data class PaymentStatus(
+    val fromMemberId: String,
+    val toMemberId: String,
+    val expenseGroupId: String,
+    val debtorConfirmed: Boolean,
+    val creditorConfirmed: Boolean,
+)
+
+data class PeerToPerDebtUiModel(
+    val debt: PeerToPerDebt,
+    val deepLink: String?,
+    val debtorConfirmed: Boolean,
+    val creditorConfirmed: Boolean,
+)
+
+data class ExpenseGroup(
+    val id: String,
+    val groupId: String,
+    val name: String,
+    val state: ExpenseGroupState,
+    val totalPriceCents: Long
 )
