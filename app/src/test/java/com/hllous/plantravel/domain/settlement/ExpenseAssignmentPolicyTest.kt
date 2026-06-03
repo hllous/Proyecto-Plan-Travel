@@ -67,5 +67,5 @@ class ExpenseAssignmentPolicyTest {
     }
 
     private fun item(quantity: Int) =
-        ExpenseItem(id = "item-10", groupId = "group-1", name = "Tickets", totalPriceCents = 3000, quantity = quantity)
+        ExpenseItem(id = "item-10", groupId = "group-1", expenseGroupId = "eg-1", name = "Tickets", totalPriceCents = 3000, quantity = quantity)
 }
