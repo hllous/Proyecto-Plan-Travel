@@ -335,6 +335,7 @@ private fun ExpenseGroupListScreen(
 ) {
     var createPanelExpanded by rememberSaveable { mutableStateOf(false) }
     var groupName by rememberSaveable { mutableStateOf("") }
+    var groupToDelete by remember { mutableStateOf<ExpenseGroup?>(null) }
 
     Box(modifier = Modifier.fillMaxSize()) {
         Scaffold(
@@ -351,6 +352,10 @@ private fun ExpenseGroupListScreen(
                         )
                     },
                     scrollBehavior = scrollBehavior,
+                    colors = TopAppBarDefaults.largeTopAppBarColors(
+                        containerColor = MaterialTheme.colorScheme.background,
+                        scrolledContainerColor = MaterialTheme.colorScheme.background,
+                    ),
                 )
             },
         ) { innerPadding ->
@@ -399,7 +404,7 @@ private fun ExpenseGroupListScreen(
                         ExpenseGroupCard(
                             group = group,
                             onClick = { onSelectGroup(group.id) },
-                            onDelete = { onDeleteGroup(group.id) },
+                            onDelete = { groupToDelete = group },
                         )
                     }
                 }
@@ -413,6 +418,28 @@ private fun ExpenseGroupListScreen(
             modifier = Modifier
                 .align(Alignment.BottomEnd)
                 .padding(bottom = 16.dp, end = 16.dp),
+        )
+    }
+
+    groupToDelete?.let { group ->
+        AlertDialog(
+            onDismissRequest = { groupToDelete = null },
+            title = { Text("Eliminar grupo") },
+            text = { Text("¿Eliminar \"${group.name}\"? Esta acción no se puede deshacer.") },
+            confirmButton = {
+                Button(
+                    onClick = {
+                        onDeleteGroup(group.id)
+                        groupToDelete = null
+                    },
+                    colors = androidx.compose.material3.ButtonDefaults.buttonColors(
+                        containerColor = MaterialTheme.colorScheme.error,
+                    ),
+                ) { Text("Eliminar") }
+            },
+            dismissButton = {
+                TextButton(onClick = { groupToDelete = null }) { Text("Cancelar") }
+            },
         )
     }
 }
