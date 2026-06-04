@@ -176,11 +176,18 @@ fun ExpenseScreen(viewModel: ExpenseViewModel, navController: NavHostController)
                         actions = {
                             if (!isFinalized && currentMember?.role == MemberRole.ADMIN) {
                                 TextButton(onClick = { showFinalizeDialog = true }) {
-                                    Text("Finalizar")
+                                    Text("Finalizar", color = MaterialTheme.colorScheme.onPrimary)
                                 }
                             }
                         },
                         scrollBehavior = scrollBehavior,
+                        colors = TopAppBarDefaults.largeTopAppBarColors(
+                            containerColor = MaterialTheme.colorScheme.primary,
+                            scrolledContainerColor = MaterialTheme.colorScheme.primaryContainer,
+                            titleContentColor = MaterialTheme.colorScheme.onPrimary,
+                            navigationIconContentColor = MaterialTheme.colorScheme.onPrimary,
+                            actionIconContentColor = MaterialTheme.colorScheme.onPrimary,
+                        ),
                     )
                 },
             ) { innerPadding ->
@@ -353,8 +360,9 @@ private fun ExpenseGroupListScreen(
                     },
                     scrollBehavior = scrollBehavior,
                     colors = TopAppBarDefaults.largeTopAppBarColors(
-                        containerColor = MaterialTheme.colorScheme.background,
-                        scrolledContainerColor = MaterialTheme.colorScheme.background,
+                        containerColor = MaterialTheme.colorScheme.primary,
+                        scrolledContainerColor = MaterialTheme.colorScheme.primaryContainer,
+                        titleContentColor = MaterialTheme.colorScheme.onPrimary,
                     ),
                 )
             },

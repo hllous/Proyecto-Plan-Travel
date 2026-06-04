@@ -41,6 +41,7 @@ import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.ModalNavigationDrawer
 import androidx.compose.material3.NavigationBar
 import androidx.compose.material3.NavigationBarItem
+import androidx.compose.material3.NavigationBarItemDefaults
 import androidx.compose.material3.NavigationDrawerItem
 import androidx.compose.material3.Scaffold
 import androidx.compose.material3.SnackbarHost
@@ -557,7 +558,7 @@ fun DrawerContent(
 
 @Composable
 fun BottomNavBar(currentRoute: String, navController: NavHostController) {
-    NavigationBar {
+    NavigationBar(containerColor = MaterialTheme.colorScheme.surface) {
         listOf(
             Triple("home", Icons.Default.Home, "Inicio"),
             Triple("groups", Icons.Default.People, "Grupos"),
@@ -568,6 +569,13 @@ fun BottomNavBar(currentRoute: String, navController: NavHostController) {
                 icon = { Icon(icon, contentDescription = label) },
                 label = { Text(label) },
                 selected = currentRoute == route,
+                colors = NavigationBarItemDefaults.colors(
+                    selectedIconColor = MaterialTheme.colorScheme.onPrimaryContainer,
+                    selectedTextColor = MaterialTheme.colorScheme.primary,
+                    indicatorColor = MaterialTheme.colorScheme.primaryContainer,
+                    unselectedIconColor = MaterialTheme.colorScheme.onSurfaceVariant,
+                    unselectedTextColor = MaterialTheme.colorScheme.onSurfaceVariant,
+                ),
                 onClick = {
                     navController.navigate(route) {
                         popUpTo(navController.graph.findStartDestination().id) {

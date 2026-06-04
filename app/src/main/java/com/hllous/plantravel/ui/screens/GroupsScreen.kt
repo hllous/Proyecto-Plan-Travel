@@ -537,6 +537,7 @@ private fun GroupDetailContent(
                 InviteSection(
                     invites = invites,
                     onGenerate = { mainViewModel.generateInvite() },
+                    onDelete = { code -> mainViewModel.deleteInvite(code) },
                     context = context,
                     showQr = showQr,
                     onQrToggle = { showQr = !showQr }
@@ -740,6 +741,7 @@ private fun MemberDetailRow(
 private fun InviteSection(
     invites: List<InviteToken>,
     onGenerate: () -> Unit,
+    onDelete: (String) -> Unit,
     context: Context,
     showQr: Boolean,
     onQrToggle: () -> Unit
@@ -755,10 +757,15 @@ private fun InviteSection(
                     Text("Generar código")
                 }
             } else {
+                val isExpired = latestInvite.expiresAtMillis <= System.currentTimeMillis()
+
                 // Code pill
                 Surface(
                     shape = RoundedCornerShape(12.dp),
-                    color = MaterialTheme.colorScheme.primaryContainer
+                    color = if (isExpired)
+                        MaterialTheme.colorScheme.errorContainer
+                    else
+                        MaterialTheme.colorScheme.primaryContainer
                 ) {
                     Text(
                         text = latestInvite.code,
@@ -768,85 +775,117 @@ private fun InviteSection(
                         style = MaterialTheme.typography.titleLarge,
                         fontFamily = FrauncesFamily,
                         fontWeight = FontWeight.Bold,
-                        color = MaterialTheme.colorScheme.onPrimaryContainer,
+                        color = if (isExpired)
+                            MaterialTheme.colorScheme.onErrorContainer
+                        else
+                            MaterialTheme.colorScheme.onPrimaryContainer,
                         textAlign = TextAlign.Center,
                         letterSpacing = 3.sp
                     )
                 }
 
-                // Copy + Share chips
-                Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
-                    Surface(
-                        onClick = {
-                            val cb = context.getSystemService(ClipboardManager::class.java)
-                            cb?.setPrimaryClip(ClipData.newPlainText("invite_link", latestInvite.link))
-                        },
-                        shape = RoundedCornerShape(50),
-                        color = MaterialTheme.colorScheme.secondaryContainer
-                    ) {
-                        Row(
-                            Modifier.padding(horizontal = 12.dp, vertical = 6.dp),
-                            verticalAlignment = Alignment.CenterVertically,
-                            horizontalArrangement = Arrangement.spacedBy(4.dp)
+                // Copy + Share chips (hidden when expired)
+                if (!isExpired) {
+                    Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
+                        Surface(
+                            onClick = {
+                                val cb = context.getSystemService(ClipboardManager::class.java)
+                                cb?.setPrimaryClip(ClipData.newPlainText("invite_code", latestInvite.code))
+                            },
+                            shape = RoundedCornerShape(50),
+                            color = MaterialTheme.colorScheme.secondaryContainer
                         ) {
-                            Icon(Icons.Default.ContentCopy, null, Modifier.size(14.dp), tint = MaterialTheme.colorScheme.onSecondaryContainer)
-                            Text("Copiar", style = MaterialTheme.typography.labelSmall, fontWeight = FontWeight.Bold, color = MaterialTheme.colorScheme.onSecondaryContainer)
-                        }
-                    }
-                    Surface(
-                        onClick = {
-                            val intent = Intent(Intent.ACTION_SEND).apply {
-                                putExtra(Intent.EXTRA_TEXT, latestInvite.link)
-                                type = "text/plain"
+                            Row(
+                                Modifier.padding(horizontal = 12.dp, vertical = 6.dp),
+                                verticalAlignment = Alignment.CenterVertically,
+                                horizontalArrangement = Arrangement.spacedBy(4.dp)
+                            ) {
+                                Icon(Icons.Default.ContentCopy, null, Modifier.size(14.dp), tint = MaterialTheme.colorScheme.onSecondaryContainer)
+                                Text("Copiar código", style = MaterialTheme.typography.labelSmall, fontWeight = FontWeight.Bold, color = MaterialTheme.colorScheme.onSecondaryContainer)
                             }
-                            context.startActivity(Intent.createChooser(intent, "Compartir invitación"))
-                        },
-                        shape = RoundedCornerShape(50),
-                        color = MaterialTheme.colorScheme.surfaceVariant
-                    ) {
-                        Row(
-                            Modifier.padding(horizontal = 12.dp, vertical = 6.dp),
-                            verticalAlignment = Alignment.CenterVertically,
-                            horizontalArrangement = Arrangement.spacedBy(4.dp)
+                        }
+                        Surface(
+                            onClick = {
+                                val shareText = "¡Unite a mi grupo en Plan Travel!\nCódigo de invitación: ${latestInvite.code}"
+                                val intent = Intent(Intent.ACTION_SEND).apply {
+                                    putExtra(Intent.EXTRA_TEXT, shareText)
+                                    type = "text/plain"
+                                }
+                                context.startActivity(Intent.createChooser(intent, "Compartir invitación"))
+                            },
+                            shape = RoundedCornerShape(50),
+                            color = MaterialTheme.colorScheme.surfaceVariant
                         ) {
-                            Icon(Icons.Default.Share, null, Modifier.size(14.dp), tint = MaterialTheme.colorScheme.onSurfaceVariant)
-                            Text("Compartir", style = MaterialTheme.typography.labelSmall, fontWeight = FontWeight.Bold, color = MaterialTheme.colorScheme.onSurfaceVariant)
+                            Row(
+                                Modifier.padding(horizontal = 12.dp, vertical = 6.dp),
+                                verticalAlignment = Alignment.CenterVertically,
+                                horizontalArrangement = Arrangement.spacedBy(4.dp)
+                            ) {
+                                Icon(Icons.Default.Share, null, Modifier.size(14.dp), tint = MaterialTheme.colorScheme.onSurfaceVariant)
+                                Text("Compartir", style = MaterialTheme.typography.labelSmall, fontWeight = FontWeight.Bold, color = MaterialTheme.colorScheme.onSurfaceVariant)
+                            }
                         }
                     }
                 }
 
-                // Expiry
+                // Expiry row
                 Row(
+                    modifier = Modifier.fillMaxWidth(),
                     verticalAlignment = Alignment.CenterVertically,
-                    horizontalArrangement = Arrangement.spacedBy(4.dp)
+                    horizontalArrangement = Arrangement.SpaceBetween
                 ) {
-                    Icon(Icons.Default.AccessTime, null, Modifier.size(14.dp), tint = MaterialTheme.colorScheme.tertiary)
-                    Text(
-                        formatExpiry(latestInvite.expiresAtMillis),
-                        style = MaterialTheme.typography.labelMedium,
-                        fontWeight = FontWeight.SemiBold,
-                        color = MaterialTheme.colorScheme.tertiary
-                    )
+                    Row(
+                        verticalAlignment = Alignment.CenterVertically,
+                        horizontalArrangement = Arrangement.spacedBy(4.dp)
+                    ) {
+                        Icon(
+                            Icons.Default.AccessTime, null, Modifier.size(14.dp),
+                            tint = if (isExpired) MaterialTheme.colorScheme.error else MaterialTheme.colorScheme.tertiary
+                        )
+                        Text(
+                            formatExpiry(latestInvite.expiresAtMillis),
+                            style = MaterialTheme.typography.labelMedium,
+                            fontWeight = FontWeight.SemiBold,
+                            color = if (isExpired) MaterialTheme.colorScheme.error else MaterialTheme.colorScheme.tertiary
+                        )
+                    }
+                    TextButton(
+                        onClick = { onDelete(latestInvite.code) },
+                        colors = ButtonDefaults.textButtonColors(contentColor = MaterialTheme.colorScheme.error)
+                    ) {
+                        Icon(Icons.Default.Delete, null, Modifier.size(14.dp))
+                        Spacer(Modifier.width(4.dp))
+                        Text("Eliminar", style = MaterialTheme.typography.labelSmall)
+                    }
                 }
 
-                // QR toggle
-                OutlinedButton(onClick = onQrToggle, modifier = Modifier.fillMaxWidth()) {
-                    Icon(Icons.Default.QrCode, null, Modifier.size(16.dp))
-                    Spacer(Modifier.width(8.dp))
-                    Text(if (showQr) "Ocultar QR" else "Ver QR")
-                }
+                // When expired: show prominent regenerate button
+                if (isExpired) {
+                    Button(onClick = onGenerate, modifier = Modifier.fillMaxWidth()) {
+                        Icon(Icons.Default.Add, null, Modifier.size(16.dp))
+                        Spacer(Modifier.width(8.dp))
+                        Text("Generar nuevo código")
+                    }
+                } else {
+                    // QR toggle
+                    OutlinedButton(onClick = onQrToggle, modifier = Modifier.fillMaxWidth()) {
+                        Icon(Icons.Default.QrCode, null, Modifier.size(16.dp))
+                        Spacer(Modifier.width(8.dp))
+                        Text(if (showQr) "Ocultar QR" else "Ver QR")
+                    }
 
-                AnimatedVisibility(visible = showQr) {
-                    val qrBitmap = rememberQrBitmap(latestInvite.link)
-                    if (qrBitmap != null) {
-                        Box(Modifier.fillMaxWidth(), contentAlignment = Alignment.Center) {
-                            Image(
-                                bitmap = qrBitmap.asImageBitmap(),
-                                contentDescription = "QR de invitación",
-                                modifier = Modifier
-                                    .size(160.dp)
-                                    .clip(RoundedCornerShape(8.dp))
-                            )
+                    AnimatedVisibility(visible = showQr) {
+                        val qrBitmap = rememberQrBitmap(latestInvite.code)
+                        if (qrBitmap != null) {
+                            Box(Modifier.fillMaxWidth(), contentAlignment = Alignment.Center) {
+                                Image(
+                                    bitmap = qrBitmap.asImageBitmap(),
+                                    contentDescription = "QR de invitación",
+                                    modifier = Modifier
+                                        .size(160.dp)
+                                        .clip(RoundedCornerShape(8.dp))
+                                )
+                            }
                         }
                     }
                 }
