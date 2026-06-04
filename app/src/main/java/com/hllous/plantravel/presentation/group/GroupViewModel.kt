@@ -68,7 +68,7 @@ class GroupViewModel @Inject constructor(
     ) { id, _ -> id }
         .flatMapLatest { groupId ->
             if (groupId == null) flowOf(emptyList())
-            else repository.observeMembers(groupId)
+            else repository.observeMembers(groupId).catch { emit(emptyList()) }
         }
         .stateIn(viewModelScope, SharingStarted.WhileSubscribed(5000), emptyList())
 

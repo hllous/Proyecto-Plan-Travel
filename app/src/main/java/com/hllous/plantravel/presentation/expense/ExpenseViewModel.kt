@@ -39,6 +39,7 @@ import kotlinx.coroutines.flow.catch
 import kotlinx.coroutines.flow.flatMapLatest
 import kotlinx.coroutines.flow.flowOf
 import kotlinx.coroutines.flow.map
+import kotlinx.coroutines.flow.retryWhen
 import kotlinx.coroutines.flow.stateIn
 import kotlinx.coroutines.launch
 
@@ -60,6 +61,7 @@ class ExpenseViewModel @Inject constructor(
     val selectedGroupId: StateFlow<String?> = selectedGroupHolder.selectedGroupId.asStateFlow()
 
     val groups: StateFlow<List<TravelGroup>> = repository.observeGroups()
+        .catch { emit(emptyList()) }
         .stateIn(viewModelScope, SharingStarted.WhileSubscribed(5000), emptyList())
 
     init {
@@ -74,7 +76,8 @@ class ExpenseViewModel @Inject constructor(
 
     val members: StateFlow<List<GroupMember>> = selectedGroupHolder.selectedGroupId
         .flatMapLatest { groupId ->
-            if (groupId == null) flowOf(emptyList()) else repository.observeMembers(groupId)
+            if (groupId == null) flowOf(emptyList())
+            else repository.observeMembers(groupId).catch { emit(emptyList()) }
         }
         .stateIn(viewModelScope, SharingStarted.WhileSubscribed(5000), emptyList())
 
@@ -87,7 +90,9 @@ class ExpenseViewModel @Inject constructor(
     val expenseGroups: StateFlow<List<ExpenseGroup>> = selectedGroupHolder.selectedGroupId
         .flatMapLatest { groupId ->
             if (groupId == null) flowOf(emptyList())
-            else repository.observeExpenseGroups(groupId).catch { emit(emptyList()) }
+            else repository.observeExpenseGroups(groupId)
+                .retryWhen { _, attempt -> attempt < 5 }
+                .catch { emit(emptyList()) }
         }
         .stateIn(viewModelScope, SharingStarted.WhileSubscribed(5000), emptyList())
 
@@ -152,7 +157,7 @@ class ExpenseViewModel @Inject constructor(
         .flatMapLatest {
             _selectedExpenseGroupId.flatMapLatest { expenseGroupId ->
                 if (expenseGroupId == null) flowOf(emptyList())
-                else repository.observeAssignments(expenseGroupId)
+                else repository.observeAssignments(expenseGroupId).catch { emit(emptyList()) }
             }
         }
         .stateIn(viewModelScope, SharingStarted.WhileSubscribed(5000), emptyList())

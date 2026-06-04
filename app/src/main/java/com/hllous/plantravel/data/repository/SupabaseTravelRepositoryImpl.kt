@@ -18,7 +18,6 @@ import io.github.jan.supabase.SupabaseClient
 import io.github.jan.supabase.auth.auth
 import io.github.jan.supabase.postgrest.from
 import io.github.jan.supabase.postgrest.query.Columns
-import io.github.jan.supabase.postgrest.query.filter.FilterOperator
 import io.github.jan.supabase.realtime.PostgresAction
 import io.github.jan.supabase.realtime.channel
 import io.github.jan.supabase.realtime.postgresChangeFlow
@@ -435,7 +434,6 @@ class SupabaseTravelRepositoryImpl @Inject constructor(
         val channel = supabase.channel("expense-groups-$groupId-${UUID.randomUUID()}")
         val changes = channel.postgresChangeFlow<PostgresAction>(schema = "public") {
             table = "expense_groups"
-            filter("group_id", FilterOperator.EQ, groupId)
         }
         channel.subscribe(blockUntilSubscribed = true)
 
@@ -469,10 +467,8 @@ class SupabaseTravelRepositoryImpl @Inject constructor(
         send(fetchExpenseItems(expenseGroupId))
 
         val channel = supabase.channel("expense-items-$expenseGroupId-${UUID.randomUUID()}")
-        // Filter server-side so RLS only needs to evaluate rows for this expense group.
         val changes = channel.postgresChangeFlow<PostgresAction>(schema = "public") {
             table = "expense_items"
-            filter("expense_group_id", FilterOperator.EQ, expenseGroupId)
         }
         channel.subscribe(blockUntilSubscribed = true)
 

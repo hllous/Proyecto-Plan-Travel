@@ -48,6 +48,7 @@ class FakeTravelRepository(
     private val _membersByGroup = MutableStateFlow(initialMembers)
     private val _itemsByGroup = MutableStateFlow(initialExpenseItems)
     private val _expenseGroupsByGroup = MutableStateFlow(initialExpenseGroups)
+    private val _assignmentsByGroup = MutableStateFlow<Map<String, List<ItemAssignment>>>(emptyMap())
 
     var lastConsumeUserId: String? = null
     var calculateSettlementCallCount = 0
@@ -63,7 +64,8 @@ class FakeTravelRepository(
         customObserveInvites?.invoke(groupId) ?: flowOf(emptyList())
     override fun observeExpenseItems(expenseGroupId: String): Flow<List<ExpenseItem>> =
         _itemsByGroup.map { it[expenseGroupId] ?: emptyList() }
-    override fun observeAssignments(expenseGroupId: String): Flow<List<ItemAssignment>> = flowOf(emptyList())
+    override fun observeAssignments(expenseGroupId: String): Flow<List<ItemAssignment>> =
+        _assignmentsByGroup.map { it[expenseGroupId] ?: emptyList() }
 
     override suspend fun createGroup(groupName: String): String {
         if (createGroupThrows) throw RuntimeException("network error")
@@ -139,6 +141,14 @@ class FakeTravelRepository(
 
     override suspend fun getRegions(): List<String> = emptyList()
     override suspend fun getRecommendationsByRegion(region: String): List<DestinationRecommendation> = emptyList()
+
+    fun simulateRemoteExpenseItemPush(expenseGroupId: String, items: List<ExpenseItem>) {
+        _itemsByGroup.value = _itemsByGroup.value.toMutableMap().also { it[expenseGroupId] = items }
+    }
+
+    fun simulateRemoteAssignmentPush(expenseGroupId: String, assignments: List<ItemAssignment>) {
+        _assignmentsByGroup.value = _assignmentsByGroup.value.toMutableMap().also { it[expenseGroupId] = assignments }
+    }
 
     override suspend fun addExpenseItem(expenseGroupId: String, name: String, totalPriceCents: Long, quantity: Int): String {
         if (addExpenseItemThrows) throw RuntimeException("network error")

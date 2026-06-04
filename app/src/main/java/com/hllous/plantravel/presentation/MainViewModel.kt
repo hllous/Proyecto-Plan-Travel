@@ -16,6 +16,7 @@ import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.SharingStarted
 import kotlinx.coroutines.flow.StateFlow
 import kotlinx.coroutines.flow.asStateFlow
+import kotlinx.coroutines.flow.catch
 import kotlinx.coroutines.flow.combine
 import kotlinx.coroutines.flow.flatMapLatest
 import kotlinx.coroutines.flow.flowOf
@@ -53,7 +54,8 @@ class MainViewModel @Inject constructor(
         _invitesRetryTrigger
     ) { id, _ -> id }
         .flatMapLatest { groupId ->
-            if (groupId == null) flowOf(emptyList()) else repository.observeInvites(groupId)
+            if (groupId == null) flowOf(emptyList())
+            else repository.observeInvites(groupId).catch { emit(emptyList()) }
         }
         .stateIn(viewModelScope, SharingStarted.WhileSubscribed(5000), emptyList())
 
