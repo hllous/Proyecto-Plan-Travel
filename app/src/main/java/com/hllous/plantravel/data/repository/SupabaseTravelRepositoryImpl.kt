@@ -186,6 +186,7 @@ class SupabaseTravelRepositoryImpl @Inject constructor(
     private data class UpsertAssignmentDto(
         @SerialName("item_id") val itemId: String,
         @SerialName("member_id") val memberId: String,
+        @SerialName("group_id") val groupId: String,
         val quantity: Int
     )
 
@@ -526,7 +527,7 @@ class SupabaseTravelRepositoryImpl @Inject constructor(
             }
         } else {
             supabase.from("item_assignments")
-                .upsert(UpsertAssignmentDto(itemId = itemId, memberId = memberId, quantity = quantity)) {
+                .upsert(UpsertAssignmentDto(itemId = itemId, memberId = memberId, groupId = item.groupId, quantity = quantity)) {
                     onConflict = "item_id,member_id"
                 }
         }

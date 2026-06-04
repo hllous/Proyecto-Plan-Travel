@@ -36,6 +36,7 @@ import kotlinx.coroutines.flow.SharingStarted
 import kotlinx.coroutines.flow.StateFlow
 import kotlinx.coroutines.flow.asStateFlow
 import kotlinx.coroutines.flow.catch
+import kotlinx.coroutines.flow.combine
 import kotlinx.coroutines.flow.flatMapLatest
 import kotlinx.coroutines.flow.flowOf
 import kotlinx.coroutines.flow.map
@@ -87,7 +88,12 @@ class ExpenseViewModel @Inject constructor(
 
     // ── Expense Groups ────────────────────────────────────────────────────────
 
-    val expenseGroups: StateFlow<List<ExpenseGroup>> = selectedGroupHolder.selectedGroupId
+    private val _expenseGroupsRetryTrigger = MutableStateFlow(0)
+
+    val expenseGroups: StateFlow<List<ExpenseGroup>> = combine(
+        selectedGroupHolder.selectedGroupId,
+        _expenseGroupsRetryTrigger,
+    ) { groupId, _ -> groupId }
         .flatMapLatest { groupId ->
             if (groupId == null) flowOf(emptyList())
             else repository.observeExpenseGroups(groupId)
@@ -95,6 +101,8 @@ class ExpenseViewModel @Inject constructor(
                 .catch { emit(emptyList()) }
         }
         .stateIn(viewModelScope, SharingStarted.WhileSubscribed(5000), emptyList())
+
+    fun reloadExpenseGroups() { _expenseGroupsRetryTrigger.value++ }
 
     private val _selectedExpenseGroupId = MutableStateFlow<String?>(null)
     val selectedExpenseGroupId: StateFlow<String?> = _selectedExpenseGroupId.asStateFlow()
@@ -109,6 +117,8 @@ class ExpenseViewModel @Inject constructor(
             val result = runCatching { createExpenseGroupUseCase(travelGroupId, name) }
             if (result.isFailure) {
                 _message.value = "Error al crear grupo de gastos"
+            } else {
+                reloadExpenseGroups()
             }
         }
     }
@@ -118,6 +128,8 @@ class ExpenseViewModel @Inject constructor(
             val result = runCatching { deleteExpenseGroupUseCase(id) }
             if (result.isFailure) {
                 _message.value = "Error al eliminar grupo de gastos"
+            } else {
+                reloadExpenseGroups()
             }
         }
     }
