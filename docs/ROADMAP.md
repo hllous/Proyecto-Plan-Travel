@@ -17,6 +17,8 @@ Features that must ship for the app to be functional. Each has a full PRD as a G
 | **Trip Planning Module** | [#12](https://github.com/hllous/Proyecto-Plan-Travel/issues/12) | ⬜ Not started | Trip Destination on TravelGroup. Google Places API for Place Recommendations. Open-Meteo for weather (free, no key). Shared Group Itinerary with Itinerary Events editable by all members in real time. |
 | **Trip Contacts** | [#13](https://github.com/hllous/Proyecto-Plan-Travel/issues/13) | ⬜ Not started | Group-level reference list for emergency numbers, accommodation, transport, and medical contacts. Name, phone, category, optional notes. Editable by any Group Member. |
 | **FCM Push Notifications** | [#44](https://github.com/hllous/Proyecto-Plan-Travel/issues/44) | ⬜ Not started | Push alerts for new item added, item fully assigned, and missing assignments on finalize. |
+| **Optimistic updates** | [#45](https://github.com/hllous/Proyecto-Plan-Travel/issues/45) | ⬜ Not started | Replace retry-trigger channel teardown on local mutations with immediate local StateFlow update + rollback on failure. Eliminates 200–500ms lag after every write and brief Realtime coverage gap during channel rebuild. |
+| **Realtime channel pooling** | [#46](https://github.com/hllous/Proyecto-Plan-Travel/issues/46) | ⬜ Not started | Merge 6 per-table Realtime channels into 1 per travel group. Increases concurrent user capacity 6× on the same Supabase plan (free tier: ~33 → ~200 concurrent users). |
 
 ### #10 Backend Migration — implementation detail
 
@@ -66,12 +68,8 @@ Features that must ship for the app to be functional. Each has a full PRD as a G
 
 ## v2
 
-Performance and reliability improvements that make the app production-ready at scale.
-
 | Feature | GitHub Issue | Rationale |
 |---|---|---|
-| **Optimistic updates** | [#45](https://github.com/hllous/Proyecto-Plan-Travel/issues/45) | Currently every local mutation (create/delete/update) tears down and rebuilds the Realtime channelFlow, causing 200–500ms lag and a brief gap in event coverage. Replace with immediate local StateFlow update + rollback on failure, keeping Realtime channels alive. |
-| **Realtime channel pooling** | [#46](https://github.com/hllous/Proyecto-Plan-Travel/issues/46) | Currently 6 separate Realtime channels per active user (one per table). This limits the free Supabase tier to ~33 concurrent users. Merge into 1 channel per travel group with multiple table subscriptions — 6× improvement in concurrent user capacity. |
 | **Offline-first (Room as local cache)** | — | Room removed in MVP for simplicity (ADR-0002). Re-introduce as a sync layer over Supabase once the network model is stable. |
 | **MercadoPago OAuth / Checkout Pro** | — | Deep-link P2P payments ship in MVP (ADR-0007). Full OAuth flow — Checkout Pro links generated server-side, webhook auto-confirms Payment Status — deferred as it requires MP MCP setup and per-user OAuth. |
 | **OpenTripMap / Foursquare fallback for Place Recommendations** | — | Activated if Google Places API free credits are exhausted (ADR-0003). OpenTripMap is free with no key; Foursquare free tier allows 1,000 calls/day. |
