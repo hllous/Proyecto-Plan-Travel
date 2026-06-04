@@ -9,13 +9,14 @@ Features that must ship for the app to be functional. Each has a full PRD as a G
 | Feature | GitHub Issue | Status | Summary |
 |---|---|---|---|
 | **Auth & Identity** | [#9](https://github.com/hllous/Proyecto-Plan-Travel/issues/9) | ✅ Done | Email+password and Google OAuth login via Supabase Auth. Every GroupMember is a registered User linked by userId. Invite flow updated to link to real accounts. User Profile (display name, phone number, profile photo) set at registration and visible to all shared group members. |
-| **Backend Migration (Room → Supabase)** | [#10](https://github.com/hllous/Proyecto-Plan-Travel/issues/10) | ✅ Done | Removed Room entirely. Rewrote repository layer against Supabase Kotlin client. Supabase Realtime channels for groups, members, invites, expenses, and assignments. Split MainViewModel into GroupViewModel, ExpenseViewModel, DestinationViewModel, ItineraryViewModel. Fixed invite/QR cross-device flow. UiState error handling with retry in all screens. |
+| **Backend Migration (Room → Supabase)** | [#10](https://github.com/hllous/Proyecto-Plan-Travel/issues/10) | ✅ Done | Removed Room entirely. Rewrote repository layer against Supabase Kotlin client. Supabase Realtime channels for groups, members, invites, expenses, and assignments. Split MainViewModel into GroupViewModel, ExpenseViewModel. Fixed invite/QR cross-device flow. UiState error handling with retry in all screens. Realtime filter bug fixed (wildcard + server-side filter silently breaks subscriptions). |
 | **Group Rework** | [#18](https://github.com/hllous/Proyecto-Plan-Travel/issues/18) | ✅ Done | Drop free-text admin name from create-group (derive from User Profile). Real Leave Group action for USER-role members with confirmation dialog. Multi-group list UX with group switching and member count. ADMIN kick with confirmation dialog. RLS policy for user self-delete. |
-| **UI Redesign** | [#19](https://github.com/hllous/Proyecto-Plan-Travel/issues/19) | ✅ Done | Layout overhaul following MD3 principles. Atlas palette + Fraunces/Plus Jakarta Sans typography. Bottom nav as sole primary navigation (Inicio/Dashboard, Grupos, Destinos, Gastos). Drawer repurposed for Profile, theme toggle, logout only. Dashboard home screen with contextual greeting, group card, quick actions, and suggestion tiles. New ProfileScreen. QR Scanner as contextual icon in Grupos. BallroomScreen renamed to ExpenseScreen. Auth screens redesigned with brand panel. |
+| **UI Redesign** | [#19](https://github.com/hllous/Proyecto-Plan-Travel/issues/19) | ✅ Done | Layout overhaul following MD3 principles. Atlas palette + Fraunces/Plus Jakarta Sans typography. Bottom nav as sole primary navigation (Inicio/Dashboard, Grupos, Destinos, Gastos). Drawer repurposed for Profile, theme toggle, logout only. Dashboard home screen with contextual greeting, group card, quick actions, and suggestion tiles. New ProfileScreen. QR Scanner as contextual icon in Grupos. Auth screens redesigned with brand panel. |
+| **Expense Groups + P2P Payments** | [#36](https://github.com/hllous/Proyecto-Plan-Travel/issues/36) | ✅ Done | Expense Groups as named containers of Expense Items with independent per-group settlement. Open/Finalized states; ADMIN finalizes. Debt simplification to produce Peer-to-Peer Debts. Payment Deep Links via `mercadopago://` using MP Alias stored on User Profile. |
 | **Expense Enhancements** | [#11](https://github.com/hllous/Proyecto-Plan-Travel/issues/11) | ⬜ Not started | Edit Expense Items (name, price, quantity) with domain guard rejecting quantity below total Assigned Quantity. Payment Status flag: member marks settlement as paid, ADMIN confirms. |
-| **Expense Groups + P2P Payments** | TBD | ⬜ Not started | Expense Groups as named containers of Expense Items with independent per-group settlement. Open/Finalized states; ADMIN finalizes. Debt simplification to produce Peer-to-Peer Debts. Payment Deep Links via `mercadopago://` using MP Alias stored on User Profile. Push notifications (FCM) for new item, fully assigned item, and missing assignments on finalize. |
 | **Trip Planning Module** | [#12](https://github.com/hllous/Proyecto-Plan-Travel/issues/12) | ⬜ Not started | Trip Destination on TravelGroup. Google Places API for Place Recommendations. Open-Meteo for weather (free, no key). Shared Group Itinerary with Itinerary Events editable by all members in real time. |
 | **Trip Contacts** | [#13](https://github.com/hllous/Proyecto-Plan-Travel/issues/13) | ⬜ Not started | Group-level reference list for emergency numbers, accommodation, transport, and medical contacts. Name, phone, category, optional notes. Editable by any Group Member. |
+| **FCM Push Notifications** | [#44](https://github.com/hllous/Proyecto-Plan-Travel/issues/44) | ⬜ Not started | Push alerts for new item added, item fully assigned, and missing assignments on finalize. |
 
 ### #10 Backend Migration — implementation detail
 
@@ -28,6 +29,18 @@ Features that must ship for the app to be functional. Each has a full PRD as a G
 | [#24](https://github.com/hllous/Proyecto-Plan-Travel/issues/24) UiState, error handling, ViewModel stubs | ✅ Done | `UiState` sealed class (`Loading`/`Success`/`Error`). `ErrorCard` component with retry. `groupsUiState`/`expenseItemsUiState` flows with `_retryTrigger`. `DestinationViewModel` and `ItineraryViewModel` stubs. Fixed missing `runCatching` on `GroupViewModel.createGroup`. |
 | [#25](https://github.com/hllous/Proyecto-Plan-Travel/issues/25) FakeTravelRepository update + ViewModel unit tests | ✅ Done | `FakeTravelRepository` extended with reactive `MutableStateFlow` state, `calculateSettlementCallCount`, and throw flags. `GroupViewModelTest` and `ExpenseViewModelTest` coverage for member list reactivity, settlement recalculation, and error paths. |
 
+### #36 Expense Groups + P2P Payments — implementation detail
+
+| Sub-issue | Status | Notes |
+|---|---|---|
+| [#37](https://github.com/hllous/Proyecto-Plan-Travel/issues/37) Schema: expense_groups table, RLS, Realtime | ✅ Done | `expense_groups` table with `id`, `group_id`, `name`, `state`, `created_at`. RLS policies for member read/insert/delete and admin update. REPLICA IDENTITY FULL + realtime publication. |
+| [#38](https://github.com/hllous/Proyecto-Plan-Travel/issues/38) Scope expense_items to Expense Groups | ✅ Done | Added `expense_group_id uuid REFERENCES expense_groups ON DELETE CASCADE` to `expense_items`. Migration, RLS update, and repository interface updated. |
+| [#39](https://github.com/hllous/Proyecto-Plan-Travel/issues/39) Expense Group list — create, browse, delete, real-time | ✅ Done | `ExpenseGroupListScreen` with create panel, card list, delete confirmation dialog. Realtime via `observeExpenseGroups`. Reload trigger pattern on create/delete. |
+| [#40](https://github.com/hllous/Proyecto-Plan-Travel/issues/40) Expense Group drill-in — items, assignments, settlement | ✅ Done | Drill-in screen with item list, per-member quantity stepper, assignment progress bar, bottom panel with settlement summary. |
+| [#41](https://github.com/hllous/Proyecto-Plan-Travel/issues/41) ADMIN finalize Expense Group | ✅ Done | Finalize confirmation dialog, `state = 'finalized'` update, read-only enforcement on all UI controls. |
+| [#42](https://github.com/hllous/Proyecto-Plan-Travel/issues/42) DebtSimplifier + Peer-to-Peer Debt view | ✅ Done | `DebtSimplifier` domain module with net-balance simplification. `PeerToPerDebt` and `PeerToPerDebtUiModel` shown in bottom panel. |
+| [#43](https://github.com/hllous/Proyecto-Plan-Travel/issues/43) MP Alias on Profile + Payment Deep Links + Payment Status | ✅ Done | `mp_alias` on `profiles`. `mercadopago://send` deep link in P2P debt rows. Debtor/creditor confirmation flags in `payment_status` table. |
+
 ### #19 UI Redesign — implementation detail
 
 | Sub-issue | Status | Notes |
@@ -37,10 +50,10 @@ Features that must ship for the app to be functional. Each has a full PRD as a G
 | [#29](https://github.com/hllous/Proyecto-Plan-Travel/issues/29) Shared components: ErrorCard, LoadingIndicator, Snackbar | ✅ Done | `ErrorCard` with icon + title. `LoadingIndicator`. `travelTextFieldColors`. Snackbar wired into root scaffold. |
 | [#28](https://github.com/hllous/Proyecto-Plan-Travel/issues/28) Auth screens redesign | ✅ Done | Login, Register, ProfileSetup use brand panel (primary blue top, form slides up). `AuthBrandPanel` shared component extracted. |
 | [#31](https://github.com/hllous/Proyecto-Plan-Travel/issues/31) ProfileScreen | ✅ Done | Brand panel header with initials avatar, Fraunces name, active-member badge. Info rows (name, email, phone). Group card. Logout button. |
-| [#32](https://github.com/hllous/Proyecto-Plan-Travel/issues/32) GroupsScreen + GroupDetailScreen | ✅ Done | GroupsScreen: LargeTopAppBar, ElevatedCard list with 4dp accent border, role chips, FAB. GroupDetailScreen: pushed route with members, invite, danger zone sections. |
+| [#32](https://github.com/hllous/Proyecto-Plan-Travel/issues/32) GroupsScreen + GroupDetailScreen | ✅ Done | GroupsScreen: immersive primary-color header, member avatar stack, invite section with code pill, copy/share, QR, expiry. GroupDetail: ADMIN settings sheet, leave/delete confirmation dialogs. |
 | [#30](https://github.com/hllous/Proyecto-Plan-Travel/issues/30) Dashboard (HomeScreen) | ✅ Done | Contextual greeting (Buenos días/tardes/noches) from `greetingForHour()`. Empty state CTA. Group status card, quick-action FilledTonalButtons, contextual tile LazyRow. |
 | [#34](https://github.com/hllous/Proyecto-Plan-Travel/issues/34) DestinationScreen | ✅ Done | LargeTopAppBar with collapse on scroll. Horizontal FilterChip LazyRow. ElevatedCard destination items with LocationOn icon + Fraunces title. Two distinct empty states. |
-| [#33](https://github.com/hllous/Proyecto-Plan-Travel/issues/33) ExpenseScreen polish | ✅ Done | LargeTopAppBar. Group/member chip selectors removed; first group auto-selected in ViewModel. ElevatedCard items with 4dp primaryContainer/errorContainer left border. Simplified bottom panel (plain Surface, TextButton toggle). SettlementCard uses surfaceVariant. SettlementWarningCard adds Warning icon. |
+| [#33](https://github.com/hllous/Proyecto-Plan-Travel/issues/33) ExpenseScreen polish | ✅ Done | LargeTopAppBar with primary-color header. Group/member chip selectors removed; first group auto-selected. ElevatedCard items with assignment progress bar. Bottom panel with settlement summary and P2P debt rows. |
 
 ### #9 Auth & Identity — implementation detail
 
@@ -53,12 +66,16 @@ Features that must ship for the app to be functional. Each has a full PRD as a G
 
 ## v2
 
-| Feature | Rationale |
-|---|---|
-| **Offline-first (Room as local cache)** | Room removed in MVP for simplicity (ADR-0002). Re-introduce as a sync layer over Supabase once the network model is stable. |
-| **MercadoPago OAuth / Checkout Pro** | Deep-link P2P payments ship in MVP (ADR-0007). Full OAuth flow — Checkout Pro links generated server-side, webhook auto-confirms Payment Status — deferred here as it requires MP MCP setup and per-user OAuth. |
-| **OpenTripMap / Foursquare fallback for Place Recommendations** | Activated if Google Places API free credits are exhausted (ADR-0003). OpenTripMap is free with no key; Foursquare free tier allows 1,000 calls/day. |
-| **Travel Documents** | Personal credentials (DNI, passport, insurance, etc.) with structured fields, expiry date, optional notes, and optional photo attachment via Supabase Storage. Private by default; owner can share with a specific Travel Group. |
+Performance and reliability improvements that make the app production-ready at scale.
+
+| Feature | GitHub Issue | Rationale |
+|---|---|---|
+| **Optimistic updates** | [#45](https://github.com/hllous/Proyecto-Plan-Travel/issues/45) | Currently every local mutation (create/delete/update) tears down and rebuilds the Realtime channelFlow, causing 200–500ms lag and a brief gap in event coverage. Replace with immediate local StateFlow update + rollback on failure, keeping Realtime channels alive. |
+| **Realtime channel pooling** | [#46](https://github.com/hllous/Proyecto-Plan-Travel/issues/46) | Currently 6 separate Realtime channels per active user (one per table). This limits the free Supabase tier to ~33 concurrent users. Merge into 1 channel per travel group with multiple table subscriptions — 6× improvement in concurrent user capacity. |
+| **Offline-first (Room as local cache)** | — | Room removed in MVP for simplicity (ADR-0002). Re-introduce as a sync layer over Supabase once the network model is stable. |
+| **MercadoPago OAuth / Checkout Pro** | — | Deep-link P2P payments ship in MVP (ADR-0007). Full OAuth flow — Checkout Pro links generated server-side, webhook auto-confirms Payment Status — deferred as it requires MP MCP setup and per-user OAuth. |
+| **OpenTripMap / Foursquare fallback for Place Recommendations** | — | Activated if Google Places API free credits are exhausted (ADR-0003). OpenTripMap is free with no key; Foursquare free tier allows 1,000 calls/day. |
+| **Travel Documents** | — | Personal credentials (DNI, passport, insurance, etc.) with structured fields, expiry date, optional notes, and optional photo attachment via Supabase Storage. Private by default; owner can share with a specific Travel Group. |
 
 ## v3
 
