@@ -124,6 +124,9 @@ class SupabaseTravelRepositoryImpl @Inject constructor(
     private data class ExpenseGroupRefDto(@SerialName("group_id") val groupId: String)
 
     @Serializable
+    private data class DeletedIdDto(val id: String)
+
+    @Serializable
     private data class ExpenseItemSumDto(
         @SerialName("total_price_cents") val totalPriceCents: Long
     )
@@ -453,9 +456,11 @@ class SupabaseTravelRepositoryImpl @Inject constructor(
     }
 
     override suspend fun deleteExpenseGroup(expenseGroupId: String) {
-        supabase.from("expense_groups").delete {
+        val deleted = supabase.from("expense_groups").delete {
             filter { eq("id", expenseGroupId) }
-        }
+            select(Columns.list("id"))
+        }.decodeList<DeletedIdDto>()
+        if (deleted.isEmpty()) throw Exception("No se pudo eliminar el grupo de gastos")
     }
 
     override suspend fun finalizeExpenseGroup(expenseGroupId: String) {
