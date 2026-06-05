@@ -13,6 +13,7 @@ import com.hllous.plantravel.domain.model.SettlementResult
 import com.hllous.plantravel.domain.model.ItineraryEvent
 import com.hllous.plantravel.domain.model.Poll
 import com.hllous.plantravel.domain.model.PollCandidate
+import com.hllous.plantravel.domain.model.PollState
 import com.hllous.plantravel.domain.model.PollType
 import com.hllous.plantravel.domain.model.TravelGroup
 import com.hllous.plantravel.domain.repository.TravelRepository
@@ -273,6 +274,60 @@ class SupabaseTravelRepositoryImpl @Inject constructor(
         @SerialName("created_by_member_id") val createdByMemberId: String,
     )
 
+    @Serializable
+    private data class PollDto(
+        val id: String,
+        @SerialName("group_id") val groupId: String,
+        val type: String,
+        val state: String,
+        @SerialName("expires_at") val expiresAt: String? = null,
+        @SerialName("winner_place_id") val winnerPlaceId: String? = null,
+    ) {
+        fun toDomain() = Poll(
+            id = id, groupId = groupId,
+            type = if (type == "DESTINATION") PollType.DESTINATION else PollType.ACTIVITY,
+            state = if (state == "CLOSED") PollState.CLOSED else PollState.OPEN,
+            expiresAt = expiresAt, winnerPlaceId = winnerPlaceId,
+        )
+    }
+
+    @Serializable
+    private data class InsertPollDto(
+        val id: String,
+        @SerialName("group_id") val groupId: String,
+        val type: String,
+        @SerialName("expires_at") val expiresAt: String? = null,
+    )
+
+    @Serializable
+    private data class PollCandidateDto(
+        val id: String,
+        @SerialName("poll_id") val pollId: String,
+        @SerialName("place_id") val placeId: String,
+        val name: String,
+        @SerialName("photo_url") val photoUrl: String,
+        @SerialName("added_by_member_id") val addedByMemberId: String,
+    ) {
+        fun toDomain() = PollCandidate(id = id, pollId = pollId, placeId = placeId,
+            name = name, photoUrl = photoUrl, addedByMemberId = addedByMemberId)
+    }
+
+    @Serializable
+    private data class InsertPollCandidateDto(
+        val id: String,
+        @SerialName("poll_id") val pollId: String,
+        @SerialName("place_id") val placeId: String,
+        val name: String,
+        @SerialName("photo_url") val photoUrl: String,
+        @SerialName("added_by_member_id") val addedByMemberId: String,
+    )
+
+    @Serializable
+    private data class PollVoteDto(
+        @SerialName("candidate_id") val candidateId: String,
+        @SerialName("member_id") val memberId: String,
+    )
+
     // ─── Fetch helpers ───────────────────────────────────────────────────────
 
     private val settlementCalculator = ExpenseSettlementCalculator()
@@ -283,6 +338,30 @@ class SupabaseTravelRepositoryImpl @Inject constructor(
             .select { filter { eq("group_id", groupId) } }
             .decodeList<ItineraryEventDto>()
             .map { it.toDomain() }
+
+    private suspend fun fetchActivePoll(groupId: String): Poll? =
+        supabase.from("group_polls")
+            .select { filter { eq("group_id", groupId); eq("state", "OPEN") } }
+            .decodeList<PollDto>()
+            .firstOrNull()?.toDomain()
+
+    private suspend fun fetchPollCandidatesWithVotes(pollId: String, currentMemberId: String?): List<PollCandidate> {
+        val candidates = supabase.from("poll_candidates")
+            .select { filter { eq("poll_id", pollId) } }
+            .decodeList<PollCandidateDto>()
+            .map { it.toDomain() }
+        if (candidates.isEmpty()) return emptyList()
+        val votes = supabase.from("poll_votes")
+            .select { filter { isIn("candidate_id", candidates.map { it.id }) } }
+            .decodeList<PollVoteDto>()
+        return candidates.map { c ->
+            val votesForCandidate = votes.filter { it.candidateId == c.id }
+            c.copy(
+                voteCount = votesForCandidate.size,
+                votedByCurrentMember = votesForCandidate.any { it.memberId == currentMemberId },
+            )
+        }
+    }
 
     private suspend fun fetchExpenseItems(expenseGroupId: String): List<ExpenseItem> =
         supabase.from("expense_items")
@@ -596,26 +675,92 @@ class SupabaseTravelRepositoryImpl @Inject constructor(
         }
     }
 
-    override fun observeActivePoll(groupId: String): Flow<Poll?> =
-        TODO("observeActivePoll — implemented in #54")
+    override fun observeActivePoll(groupId: String): Flow<Poll?> = channelFlow {
+        send(fetchActivePoll(groupId))
 
-    override suspend fun createPoll(groupId: String, type: PollType, expiresAt: String?): String =
-        TODO("createPoll — implemented in #54")
+        val pgChannel = supabase.channel("group-polls-$groupId-${UUID.randomUUID()}")
+        val pgChanges = pgChannel.postgresChangeFlow<PostgresAction>(schema = "public") {
+            table = "group_polls"
+        }
+        val bcChannel = supabase.channel("group-polls-broadcast-$groupId")
+        val broadcasts = bcChannel.broadcastFlow<JsonObject>(event = "poll_changed")
 
-    override suspend fun addPollCandidate(pollId: String, placeId: String, name: String, photoUrl: String): String =
-        TODO("addPollCandidate — implemented in #54")
+        coroutineScope {
+            launch { pgChannel.subscribe(blockUntilSubscribed = true) }
+            launch { bcChannel.subscribe(blockUntilSubscribed = false) }
+        }
 
-    override suspend fun toggleVote(candidateId: String, memberId: String): Unit =
-        TODO("toggleVote — implemented in #54")
+        try {
+            merge(pgChanges.map { Unit }, broadcasts.map { Unit })
+                .collect { send(fetchActivePoll(groupId)) }
+        } finally {
+            supabase.realtime.removeChannel(pgChannel)
+            supabase.realtime.removeChannel(bcChannel)
+        }
+    }
 
-    override suspend fun closePoll(pollId: String): Unit =
-        TODO("closePoll — implemented in #54")
+    override suspend fun createPoll(groupId: String, type: PollType, expiresAt: String?): String {
+        val id = UUID.randomUUID().toString()
+        supabase.from("group_polls")
+            .insert(InsertPollDto(id = id, groupId = groupId, type = type.name, expiresAt = expiresAt))
+        return id
+    }
 
-    override suspend fun setPollWinner(pollId: String, placeId: String): Unit =
-        TODO("setPollWinner — implemented in #54")
+    override suspend fun addPollCandidate(pollId: String, placeId: String, name: String, photoUrl: String): String {
+        val memberId = supabase.auth.currentUserOrNull()?.id ?: error("Not authenticated")
+        val id = UUID.randomUUID().toString()
+        supabase.from("poll_candidates")
+            .insert(InsertPollCandidateDto(id = id, pollId = pollId, placeId = placeId,
+                name = name, photoUrl = photoUrl, addedByMemberId = memberId))
+        return id
+    }
 
-    override fun observePollCandidates(pollId: String): Flow<List<PollCandidate>> =
-        TODO("observePollCandidates — implemented in #54")
+    override suspend fun toggleVote(candidateId: String, memberId: String) {
+        val existing = supabase.from("poll_votes")
+            .select { filter { eq("candidate_id", candidateId); eq("member_id", memberId) } }
+            .decodeList<PollVoteDto>()
+        if (existing.isNotEmpty()) {
+            supabase.from("poll_votes").delete {
+                filter { eq("candidate_id", candidateId); eq("member_id", memberId) }
+            }
+        } else {
+            supabase.from("poll_votes")
+                .insert(PollVoteDto(candidateId = candidateId, memberId = memberId))
+        }
+    }
+
+    override suspend fun closePoll(pollId: String) {
+        supabase.from("group_polls").update({ set("state", "CLOSED") }) {
+            filter { eq("id", pollId) }
+        }
+    }
+
+    override suspend fun setPollWinner(pollId: String, placeId: String) {
+        supabase.from("group_polls").update({ set("winner_place_id", placeId) }) {
+            filter { eq("id", pollId) }
+        }
+    }
+
+    override fun observePollCandidates(pollId: String): Flow<List<PollCandidate>> = channelFlow {
+        val memberId = supabase.auth.currentUserOrNull()?.id
+        send(fetchPollCandidatesWithVotes(pollId, memberId))
+
+        val channel = supabase.channel("poll-candidates-$pollId-${UUID.randomUUID()}")
+        val candidateChanges = channel.postgresChangeFlow<PostgresAction>(schema = "public") {
+            table = "poll_candidates"
+        }
+        val voteChanges = channel.postgresChangeFlow<PostgresAction>(schema = "public") {
+            table = "poll_votes"
+        }
+        channel.subscribe(blockUntilSubscribed = true)
+
+        try {
+            merge(candidateChanges, voteChanges)
+                .collect { send(fetchPollCandidatesWithVotes(pollId, memberId)) }
+        } finally {
+            supabase.realtime.removeChannel(channel)
+        }
+    }
 
     private suspend fun fetchExpenseGroups(groupId: String): List<ExpenseGroup> {
         val withPayer = runCatching {
@@ -686,16 +831,26 @@ class SupabaseTravelRepositoryImpl @Inject constructor(
     override fun observeExpenseGroups(groupId: String): Flow<List<ExpenseGroup>> = channelFlow {
         send(fetchExpenseGroups(groupId))
 
-        val channel = supabase.channel("expense-groups-$groupId-${UUID.randomUUID()}")
-        val changes = channel.postgresChangeFlow<PostgresAction>(schema = "public") {
+        val pgChannel = supabase.channel("expense-groups-$groupId-${UUID.randomUUID()}")
+        val pgChanges = pgChannel.postgresChangeFlow<PostgresAction>(schema = "public") {
             table = "expense_groups"
         }
-        channel.subscribe(blockUntilSubscribed = true)
+
+        // Broadcast fallback: RLS blocks Postgres Changes for cross-user INSERTs
+        val bcChannel = supabase.channel("expense-groups-broadcast-$groupId")
+        val broadcasts = bcChannel.broadcastFlow<JsonObject>(event = "expense_group_changed")
+
+        coroutineScope {
+            launch { pgChannel.subscribe(blockUntilSubscribed = true) }
+            launch { bcChannel.subscribe(blockUntilSubscribed = false) }
+        }
 
         try {
-            changes.collect { send(fetchExpenseGroups(groupId)) }
+            merge(pgChanges.map { Unit }, broadcasts.map { Unit })
+                .collect { send(fetchExpenseGroups(groupId)) }
         } finally {
-            supabase.realtime.removeChannel(channel)
+            supabase.realtime.removeChannel(pgChannel)
+            supabase.realtime.removeChannel(bcChannel)
         }
     }
 
@@ -709,6 +864,12 @@ class SupabaseTravelRepositoryImpl @Inject constructor(
             supabase.from("expense_groups")
                 .insert(InsertExpenseGroupDto(id = id, groupId = groupId, name = name))
         }
+        val bcChannel = supabase.channel("expense-groups-broadcast-$groupId")
+        runCatching {
+            bcChannel.subscribe(blockUntilSubscribed = true)
+            bcChannel.broadcast(event = "expense_group_changed", message = buildJsonObject {})
+        }
+        runCatching { supabase.realtime.removeChannel(bcChannel) }
         return id
     }
 
@@ -753,16 +914,26 @@ class SupabaseTravelRepositoryImpl @Inject constructor(
     override fun observeExpenseItems(expenseGroupId: String): Flow<List<ExpenseItem>> = channelFlow {
         send(fetchExpenseItems(expenseGroupId))
 
-        val channel = supabase.channel("expense-items-$expenseGroupId-${UUID.randomUUID()}")
-        val changes = channel.postgresChangeFlow<PostgresAction>(schema = "public") {
+        val pgChannel = supabase.channel("expense-items-$expenseGroupId-${UUID.randomUUID()}")
+        val pgChanges = pgChannel.postgresChangeFlow<PostgresAction>(schema = "public") {
             table = "expense_items"
         }
-        channel.subscribe(blockUntilSubscribed = true)
+
+        // Broadcast fallback: RLS blocks Postgres Changes for cross-user INSERTs
+        val bcChannel = supabase.channel("expense-items-broadcast-$expenseGroupId")
+        val broadcasts = bcChannel.broadcastFlow<JsonObject>(event = "expense_item_changed")
+
+        coroutineScope {
+            launch { pgChannel.subscribe(blockUntilSubscribed = true) }
+            launch { bcChannel.subscribe(blockUntilSubscribed = false) }
+        }
 
         try {
-            changes.collect { send(fetchExpenseItems(expenseGroupId)) }
+            merge(pgChanges.map { Unit }, broadcasts.map { Unit })
+                .collect { send(fetchExpenseItems(expenseGroupId)) }
         } finally {
-            supabase.realtime.removeChannel(channel)
+            supabase.realtime.removeChannel(pgChannel)
+            supabase.realtime.removeChannel(bcChannel)
         }
     }
 
@@ -770,16 +941,26 @@ class SupabaseTravelRepositoryImpl @Inject constructor(
         send(fetchAssignments(expenseGroupId))
 
         // item_assignments has no expense_group_id column; re-fetch via expense items on every change.
-        val channel = supabase.channel("assignments-$expenseGroupId-${UUID.randomUUID()}")
-        val changes = channel.postgresChangeFlow<PostgresAction>(schema = "public") {
+        val pgChannel = supabase.channel("assignments-$expenseGroupId-${UUID.randomUUID()}")
+        val pgChanges = pgChannel.postgresChangeFlow<PostgresAction>(schema = "public") {
             table = "item_assignments"
         }
-        channel.subscribe(blockUntilSubscribed = true)
+
+        // Broadcast fallback: RLS blocks Postgres Changes for cross-user INSERTs
+        val bcChannel = supabase.channel("assignments-broadcast-$expenseGroupId")
+        val broadcasts = bcChannel.broadcastFlow<JsonObject>(event = "assignment_changed")
+
+        coroutineScope {
+            launch { pgChannel.subscribe(blockUntilSubscribed = true) }
+            launch { bcChannel.subscribe(blockUntilSubscribed = false) }
+        }
 
         try {
-            changes.collect { send(fetchAssignments(expenseGroupId)) }
+            merge(pgChanges.map { Unit }, broadcasts.map { Unit })
+                .collect { send(fetchAssignments(expenseGroupId)) }
         } finally {
-            supabase.realtime.removeChannel(channel)
+            supabase.realtime.removeChannel(pgChannel)
+            supabase.realtime.removeChannel(bcChannel)
         }
     }
 
@@ -790,6 +971,12 @@ class SupabaseTravelRepositoryImpl @Inject constructor(
                 select()
             }
             .decodeSingle<ExpenseItemDto>()
+        val bcChannel = supabase.channel("expense-items-broadcast-$expenseGroupId")
+        runCatching {
+            bcChannel.subscribe(blockUntilSubscribed = true)
+            bcChannel.broadcast(event = "expense_item_changed", message = buildJsonObject {})
+        }
+        runCatching { supabase.realtime.removeChannel(bcChannel) }
         return dto.id
     }
 
@@ -816,6 +1003,15 @@ class SupabaseTravelRepositoryImpl @Inject constructor(
                 .upsert(UpsertAssignmentDto(itemId = itemId, memberId = memberId, groupId = item.groupId, quantity = quantity)) {
                     onConflict = "item_id,member_id"
                 }
+        }
+        val expenseGroupId = item.expenseGroupId
+        if (expenseGroupId.isNotEmpty()) {
+            val bcChannel = supabase.channel("assignments-broadcast-$expenseGroupId")
+            runCatching {
+                bcChannel.subscribe(blockUntilSubscribed = true)
+                bcChannel.broadcast(event = "assignment_changed", message = buildJsonObject {})
+            }
+            runCatching { supabase.realtime.removeChannel(bcChannel) }
         }
         return AssignmentOutcome.Accepted
     }

@@ -320,6 +320,10 @@ class FakeTravelRepository(
         _candidatesByPoll.value = _candidatesByPoll.value.toMutableMap().also { it[pollId] = candidates }
     }
 
+    fun simulateRemoteExpenseGroupPush(groupId: String, groups: List<ExpenseGroup>) {
+        _expenseGroupsByGroup.value = _expenseGroupsByGroup.value.toMutableMap().also { it[groupId] = groups }
+    }
+
     fun simulateRemoteExpenseItemPush(expenseGroupId: String, items: List<ExpenseItem>) {
         _itemsByGroup.value = _itemsByGroup.value.toMutableMap().also { it[expenseGroupId] = items }
     }

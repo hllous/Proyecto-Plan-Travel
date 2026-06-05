@@ -3,6 +3,8 @@ package com.hllous.plantravel.presentation
 import com.hllous.plantravel.FakeSessionProvider
 import com.hllous.plantravel.FakeTravelRepository
 import com.hllous.plantravel.MainDispatcherRule
+import com.hllous.plantravel.domain.model.ExpenseGroup
+import com.hllous.plantravel.domain.model.ExpenseGroupState
 import com.hllous.plantravel.domain.model.ExpenseItem
 import com.hllous.plantravel.domain.model.ItemAssignment
 import com.hllous.plantravel.domain.usecase.AddExpenseItemUseCase
@@ -138,6 +140,42 @@ class ExpenseViewModelRealtimeTest {
         repo.simulateRemoteAssignmentPush("eg-1", listOf(remoteAssignment))
 
         assertEquals(listOf(remoteAssignment), vm.assignments.value)
+        scope.cancel()
+    }
+
+    // ── Slice 5: remote expense group push propagates ─────────────────────────
+
+    @Test
+    fun expenseGroupsReflectsRemoteRealtimePush() {
+        val repo = FakeTravelRepository()
+        val holder = SelectedGroupHolder().also { it.selectedGroupId.value = "tg-1" }
+        val vm = viewModel(repo = repo, holder = holder)
+        val scope = warmUp { vm.expenseGroups.collect { } }
+
+        val remoteGroup = ExpenseGroup("remote-eg-1", "tg-1", "Cena", ExpenseGroupState.Open, 5000L)
+        repo.simulateRemoteExpenseGroupPush("tg-1", listOf(remoteGroup))
+
+        assertEquals(listOf(remoteGroup), vm.expenseGroups.value)
+        scope.cancel()
+    }
+
+    // ── Slice 6: push still received after local createExpenseGroup + churn ───
+
+    @Test
+    fun expenseGroupsStillUpdatedFromRemotePushAfterLocalCreate() {
+        val repo = FakeTravelRepository()
+        val holder = SelectedGroupHolder().also { it.selectedGroupId.value = "tg-1" }
+        val vm = viewModel(repo = repo, holder = holder)
+        val scope = warmUp { vm.expenseGroups.collect { } }
+
+        // Local create triggers reloadExpenseGroups → flatMapLatest rebuilds subscription
+        vm.createExpenseGroup("Almuerzo")
+
+        // Simulate a Realtime event from another device arriving after the rebuild
+        val remoteGroup = ExpenseGroup("remote-eg-2", "tg-1", "Cena", ExpenseGroupState.Open, 10000L)
+        repo.simulateRemoteExpenseGroupPush("tg-1", listOf(remoteGroup))
+
+        assertEquals(listOf(remoteGroup), vm.expenseGroups.value)
         scope.cancel()
     }
 }
