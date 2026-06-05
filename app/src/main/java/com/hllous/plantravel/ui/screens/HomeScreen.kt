@@ -573,6 +573,9 @@ private fun HomeCTACard(
 
 private fun NavHostController.navigateSingleTopTo(route: String) {
     navigate(route) {
+        popUpTo("home") {
+            saveState = true
+        }
         launchSingleTop = true
         restoreState = true
     }

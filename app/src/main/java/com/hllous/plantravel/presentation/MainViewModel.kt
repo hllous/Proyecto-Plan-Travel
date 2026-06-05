@@ -84,7 +84,13 @@ class MainViewModel @Inject constructor(
                 return@launch
             }
             val result = consumeInviteUseCase(code)
-            result.onSuccess { groupId -> selectedGroupHolder.selectedGroupId.value = groupId }
+            result.onSuccess { groupId ->
+                selectedGroupHolder.selectedGroupId.value = groupId
+                // Notify other group members in real-time (fallback for Postgres Changes RLS gaps)
+                viewModelScope.launch {
+                    runCatching { repository.broadcastMemberJoined(groupId) }
+                }
+            }
             _message.value = result.fold(
                 onSuccess = { "Te uniste al grupo" },
                 onFailure = { it.message ?: "No se pudo usar el QR" }
