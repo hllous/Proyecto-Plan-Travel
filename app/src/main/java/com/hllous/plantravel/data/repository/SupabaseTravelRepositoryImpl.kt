@@ -1,7 +1,6 @@
 package com.hllous.plantravel.data.repository
 
 import com.hllous.plantravel.domain.model.ConsumeInviteFailure
-import com.hllous.plantravel.domain.model.DestinationRecommendation
 import com.hllous.plantravel.domain.model.ExpenseGroup
 import com.hllous.plantravel.domain.model.ExpenseGroupState
 import com.hllous.plantravel.domain.model.ExpenseItem
@@ -11,6 +10,10 @@ import com.hllous.plantravel.domain.model.ItemAssignment
 import com.hllous.plantravel.domain.model.MemberRole
 import com.hllous.plantravel.domain.model.PaymentStatus
 import com.hllous.plantravel.domain.model.SettlementResult
+import com.hllous.plantravel.domain.model.ItineraryEvent
+import com.hllous.plantravel.domain.model.Poll
+import com.hllous.plantravel.domain.model.PollCandidate
+import com.hllous.plantravel.domain.model.PollType
 import com.hllous.plantravel.domain.model.TravelGroup
 import com.hllous.plantravel.domain.repository.TravelRepository
 import com.hllous.plantravel.domain.settlement.AssignmentOutcome
@@ -478,11 +481,41 @@ class SupabaseTravelRepositoryImpl @Inject constructor(
         return Result.success(token.groupId)
     }
 
-    override suspend fun getRegions(): List<String> =
-        throw NotImplementedError("getRegions not yet implemented — see #12")
+    override suspend fun setTripDestination(groupId: String, placeId: String, name: String, lat: Double, lng: Double): Unit =
+        TODO("setTripDestination — implemented in #51")
 
-    override suspend fun getRecommendationsByRegion(region: String): List<DestinationRecommendation> =
-        throw NotImplementedError("getRecommendationsByRegion not yet implemented — see #12")
+    override fun observeItineraryEvents(groupId: String): Flow<List<ItineraryEvent>> =
+        TODO("observeItineraryEvents — implemented in #53")
+
+    override suspend fun createItineraryEvent(groupId: String, name: String, date: String, timeOfDay: String?, description: String?, placeId: String?): String =
+        TODO("createItineraryEvent — implemented in #53")
+
+    override suspend fun updateItineraryEvent(eventId: String, name: String, date: String, timeOfDay: String?, description: String?): Unit =
+        TODO("updateItineraryEvent — implemented in #53")
+
+    override suspend fun deleteItineraryEvent(eventId: String): Unit =
+        TODO("deleteItineraryEvent — implemented in #53")
+
+    override fun observeActivePoll(groupId: String): Flow<Poll?> =
+        TODO("observeActivePoll — implemented in #54")
+
+    override suspend fun createPoll(groupId: String, type: PollType, expiresAt: String?): String =
+        TODO("createPoll — implemented in #54")
+
+    override suspend fun addPollCandidate(pollId: String, placeId: String, name: String, photoUrl: String): String =
+        TODO("addPollCandidate — implemented in #54")
+
+    override suspend fun toggleVote(candidateId: String, memberId: String): Unit =
+        TODO("toggleVote — implemented in #54")
+
+    override suspend fun closePoll(pollId: String): Unit =
+        TODO("closePoll — implemented in #54")
+
+    override suspend fun setPollWinner(pollId: String, placeId: String): Unit =
+        TODO("setPollWinner — implemented in #54")
+
+    override fun observePollCandidates(pollId: String): Flow<List<PollCandidate>> =
+        TODO("observePollCandidates — implemented in #54")
 
     private suspend fun fetchExpenseGroups(groupId: String): List<ExpenseGroup> {
         val withPayer = runCatching {

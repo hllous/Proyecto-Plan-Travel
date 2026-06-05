@@ -60,6 +60,7 @@ import androidx.navigation.compose.rememberNavController
 import com.hllous.plantravel.presentation.MainViewModel
 import com.hllous.plantravel.presentation.auth.AuthState
 import com.hllous.plantravel.presentation.auth.AuthViewModel
+import com.hllous.plantravel.presentation.destination.DestinationViewModel
 import com.hllous.plantravel.presentation.expense.ExpenseViewModel
 import com.hllous.plantravel.presentation.group.GroupViewModel
 import com.hllous.plantravel.ui.screens.DestinationScreen
@@ -268,6 +269,7 @@ fun MainAppContent(
     val viewModel = hiltViewModel<MainViewModel>()
     val groupViewModel = hiltViewModel<GroupViewModel>()
     val expenseViewModel = hiltViewModel<ExpenseViewModel>()
+    val destinationViewModel = hiltViewModel<DestinationViewModel>()
     val navController = rememberNavController()
     val snackbarHostState = remember { SnackbarHostState() }
     val message by viewModel.message.collectAsState(initial = null)
@@ -343,7 +345,7 @@ fun MainAppContent(
                 )
             }
             composable("destinations") {
-                DestinationScreen(viewModel = viewModel, navController = navController)
+                DestinationScreen(viewModel = destinationViewModel, navController = navController)
             }
             composable("gastos") {
                 ExpenseScreen(viewModel = expenseViewModel, navController = navController)

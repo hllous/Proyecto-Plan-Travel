@@ -1,0 +1,131 @@
+package com.hllous.plantravel.data.places
+
+import com.hllous.plantravel.domain.model.PlaceResult
+import com.hllous.plantravel.domain.places.PlacesApiClient
+import io.ktor.client.HttpClient
+import io.ktor.client.call.body
+import io.ktor.client.request.header
+import io.ktor.client.request.post
+import io.ktor.client.request.setBody
+import io.ktor.http.ContentType
+import io.ktor.http.contentType
+import kotlinx.serialization.SerialName
+import kotlinx.serialization.Serializable
+import javax.inject.Inject
+import javax.inject.Named
+import javax.inject.Singleton
+
+private const val BASE_URL = "https://places.googleapis.com/v1/places"
+private const val FIELD_MASK = "places.id,places.displayName,places.rating,places.userRatingCount,places.photos,places.formattedAddress,places.location"
+private const val PHOTO_WIDTH = 800
+
+@Singleton
+class GooglePlacesApiClient @Inject constructor(
+    private val httpClient: HttpClient,
+    @Named("placesApiKey") private val apiKey: String,
+) : PlacesApiClient {
+
+    // ─── Response DTOs ────────────────────────────────────────────────────────
+
+    @Serializable
+    private data class TextSearchRequest(
+        val textQuery: String,
+        val languageCode: String = "es",
+        val regionCode: String = "AR",
+    )
+
+    @Serializable
+    private data class NearbySearchRequest(
+        val locationRestriction: LocationRestriction,
+        val includedTypes: List<String>,
+        val languageCode: String = "es",
+        val rankPreference: String = "POPULARITY",
+        val maxResultCount: Int = 20,
+    )
+
+    @Serializable
+    private data class LocationRestriction(val circle: Circle)
+
+    @Serializable
+    private data class Circle(val center: LatLng, val radius: Double)
+
+    @Serializable
+    private data class LatLng(val latitude: Double, val longitude: Double)
+
+    @Serializable
+    private data class PlacesResponse(val places: List<PlaceDto> = emptyList())
+
+    @Serializable
+    private data class PlaceDto(
+        val id: String = "",
+        @SerialName("displayName") val displayName: DisplayName = DisplayName(),
+        val rating: Double = 0.0,
+        @SerialName("userRatingCount") val userRatingCount: Int = 0,
+        val photos: List<PhotoDto> = emptyList(),
+        @SerialName("formattedAddress") val formattedAddress: String = "",
+        val location: LatLng = LatLng(0.0, 0.0),
+    ) {
+        fun toPlaceResult(photoUrl: String) = PlaceResult(
+            placeId = id,
+            name = displayName.text,
+            photoUrl = photoUrl,
+            rating = rating,
+            reviewCount = userRatingCount,
+            address = formattedAddress,
+            lat = location.latitude,
+            lng = location.longitude,
+        )
+    }
+
+    @Serializable
+    private data class DisplayName(val text: String = "")
+
+    @Serializable
+    private data class PhotoDto(val name: String = "")
+
+    // ─── Helpers ──────────────────────────────────────────────────────────────
+
+    private fun resolvePhotoUrl(photoName: String): String =
+        "https://places.googleapis.com/v1/$photoName/media?maxWidthPx=$PHOTO_WIDTH&skipHttpRedirect=true&key=$apiKey"
+
+    private fun PlaceDto.resolvedPhotoUrl(): String =
+        photos.firstOrNull()?.name?.let { resolvePhotoUrl(it) } ?: ""
+
+    // ─── PlacesApiClient ──────────────────────────────────────────────────────
+
+    override suspend fun searchDestinations(region: String): List<PlaceResult> {
+        val response: PlacesResponse = httpClient.post("$BASE_URL:searchText") {
+            header("X-Goog-Api-Key", apiKey)
+            header("X-Goog-FieldMask", FIELD_MASK)
+            contentType(ContentType.Application.Json)
+            setBody(TextSearchRequest(textQuery = region))
+        }.body()
+        return response.places.map { it.toPlaceResult(it.resolvedPhotoUrl()) }
+    }
+
+    override suspend fun searchPois(lat: Double, lng: Double, type: String): List<PlaceResult> {
+        val includedTypes = poiTypeToGoogleTypes(type)
+        val response: PlacesResponse = httpClient.post("$BASE_URL:searchNearby") {
+            header("X-Goog-Api-Key", apiKey)
+            header("X-Goog-FieldMask", FIELD_MASK)
+            contentType(ContentType.Application.Json)
+            setBody(
+                NearbySearchRequest(
+                    locationRestriction = LocationRestriction(
+                        circle = Circle(center = LatLng(lat, lng), radius = 5000.0)
+                    ),
+                    includedTypes = includedTypes,
+                )
+            )
+        }.body()
+        return response.places.map { it.toPlaceResult(it.resolvedPhotoUrl()) }
+    }
+
+    private fun poiTypeToGoogleTypes(type: String): List<String> = when (type) {
+        "Alojamiento" -> listOf("lodging")
+        "Gastronomía" -> listOf("restaurant", "bar", "cafe")
+        "Actividades" -> listOf("tourist_attraction", "amusement_park", "museum")
+        "Naturaleza" -> listOf("park", "natural_feature")
+        else -> listOf("tourist_attraction")
+    }
+}

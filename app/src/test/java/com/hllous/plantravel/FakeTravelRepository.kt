@@ -1,6 +1,5 @@
 package com.hllous.plantravel
 
-import com.hllous.plantravel.domain.model.DestinationRecommendation
 import com.hllous.plantravel.domain.model.ExpenseGroup
 import com.hllous.plantravel.domain.model.ExpenseGroupState
 import com.hllous.plantravel.domain.model.ExpenseItem
@@ -10,6 +9,10 @@ import com.hllous.plantravel.domain.model.ItemAssignment
 import com.hllous.plantravel.domain.model.MemberRole
 import com.hllous.plantravel.domain.model.PaymentStatus
 import com.hllous.plantravel.domain.model.SettlementResult
+import com.hllous.plantravel.domain.model.ItineraryEvent
+import com.hllous.plantravel.domain.model.Poll
+import com.hllous.plantravel.domain.model.PollCandidate
+import com.hllous.plantravel.domain.model.PollType
 import com.hllous.plantravel.domain.model.TravelGroup
 import com.hllous.plantravel.domain.repository.TravelRepository
 import com.hllous.plantravel.domain.settlement.AssignmentOutcome
@@ -190,8 +193,132 @@ class FakeTravelRepository(
 
     override suspend fun markCreditorConfirmed(fromMemberId: String, toMemberId: String, expenseGroupId: String) = Unit
 
-    override suspend fun getRegions(): List<String> = emptyList()
-    override suspend fun getRecommendationsByRegion(region: String): List<DestinationRecommendation> = emptyList()
+    // ─── Trip planning stubs ──────────────────────────────────────────────────
+
+    private val _itineraryEvents = MutableStateFlow<Map<String, List<ItineraryEvent>>>(emptyMap())
+    private val _activePollByGroup = MutableStateFlow<Map<String, Poll?>>(emptyMap())
+    private val _candidatesByPoll = MutableStateFlow<Map<String, List<PollCandidate>>>(emptyMap())
+
+    var setTripDestinationCallCount = 0
+    var lastTripDestinationPlaceId: String? = null
+    var setTripDestinationThrows: Boolean = false
+    var createPollThrows: Boolean = false
+    var addPollCandidateThrows: Boolean = false
+
+    override suspend fun setTripDestination(groupId: String, placeId: String, name: String, lat: Double, lng: Double) {
+        if (setTripDestinationThrows) throw RuntimeException("network error")
+        setTripDestinationCallCount++
+        lastTripDestinationPlaceId = placeId
+        val current = _groups.value.map {
+            if (it.id == groupId) it.copy(
+                tripDestinationPlaceId = placeId,
+                tripDestinationName = name,
+                tripDestinationLat = lat,
+                tripDestinationLng = lng,
+            ) else it
+        }
+        _groups.value = current
+    }
+
+    override fun observeItineraryEvents(groupId: String): Flow<List<ItineraryEvent>> =
+        _itineraryEvents.map { it[groupId] ?: emptyList() }
+
+    override suspend fun createItineraryEvent(groupId: String, name: String, date: String, timeOfDay: String?, description: String?, placeId: String?): String {
+        val event = ItineraryEvent(
+            id = "fake-event-${System.currentTimeMillis()}",
+            groupId = groupId,
+            name = name,
+            date = date,
+            timeOfDay = timeOfDay,
+            description = description,
+            placeId = placeId,
+            createdByMemberId = "fake-member-id",
+        )
+        val current = _itineraryEvents.value.toMutableMap()
+        current[groupId] = (current[groupId] ?: emptyList()) + event
+        _itineraryEvents.value = current
+        return event.id
+    }
+
+    override suspend fun updateItineraryEvent(eventId: String, name: String, date: String, timeOfDay: String?, description: String?) {
+        _itineraryEvents.value = _itineraryEvents.value.mapValues { (_, events) ->
+            events.map {
+                if (it.id == eventId) it.copy(name = name, date = date, timeOfDay = timeOfDay, description = description)
+                else it
+            }
+        }
+    }
+
+    override suspend fun deleteItineraryEvent(eventId: String) {
+        _itineraryEvents.value = _itineraryEvents.value.mapValues { (_, events) ->
+            events.filter { it.id != eventId }
+        }
+    }
+
+    override fun observeActivePoll(groupId: String): Flow<Poll?> =
+        _activePollByGroup.map { it[groupId] }
+
+    override suspend fun createPoll(groupId: String, type: PollType, expiresAt: String?): String {
+        if (createPollThrows) throw RuntimeException("network error")
+        val poll = Poll(id = "fake-poll-id", groupId = groupId, type = type, state = com.hllous.plantravel.domain.model.PollState.OPEN, expiresAt = expiresAt)
+        val current = _activePollByGroup.value.toMutableMap()
+        current[groupId] = poll
+        _activePollByGroup.value = current
+        return poll.id
+    }
+
+    override suspend fun addPollCandidate(pollId: String, placeId: String, name: String, photoUrl: String): String {
+        if (addPollCandidateThrows) throw RuntimeException("network error")
+        val candidate = PollCandidate(
+            id = "fake-candidate-${System.currentTimeMillis()}",
+            pollId = pollId,
+            placeId = placeId,
+            name = name,
+            photoUrl = photoUrl,
+            addedByMemberId = "fake-member-id",
+        )
+        val current = _candidatesByPoll.value.toMutableMap()
+        current[pollId] = (current[pollId] ?: emptyList()) + candidate
+        _candidatesByPoll.value = current
+        return candidate.id
+    }
+
+    override suspend fun toggleVote(candidateId: String, memberId: String) {
+        _candidatesByPoll.value = _candidatesByPoll.value.mapValues { (_, candidates) ->
+            candidates.map { c ->
+                if (c.id != candidateId) c
+                else if (c.votedByCurrentMember) c.copy(voteCount = c.voteCount - 1, votedByCurrentMember = false)
+                else c.copy(voteCount = c.voteCount + 1, votedByCurrentMember = true)
+            }
+        }
+    }
+
+    override suspend fun closePoll(pollId: String) {
+        _activePollByGroup.value = _activePollByGroup.value.mapValues { (_, poll) ->
+            if (poll?.id == pollId) poll.copy(state = com.hllous.plantravel.domain.model.PollState.CLOSED) else poll
+        }
+    }
+
+    override suspend fun setPollWinner(pollId: String, placeId: String) {
+        _activePollByGroup.value = _activePollByGroup.value.mapValues { (_, poll) ->
+            if (poll?.id == pollId) poll.copy(winnerPlaceId = placeId) else poll
+        }
+    }
+
+    override fun observePollCandidates(pollId: String): Flow<List<PollCandidate>> =
+        _candidatesByPoll.map { it[pollId] ?: emptyList() }
+
+    fun simulateItineraryEventPush(groupId: String, events: List<ItineraryEvent>) {
+        _itineraryEvents.value = _itineraryEvents.value.toMutableMap().also { it[groupId] = events }
+    }
+
+    fun simulatePollUpdate(groupId: String, poll: Poll?) {
+        _activePollByGroup.value = _activePollByGroup.value.toMutableMap().also { it[groupId] = poll }
+    }
+
+    fun simulateCandidatesUpdate(pollId: String, candidates: List<PollCandidate>) {
+        _candidatesByPoll.value = _candidatesByPoll.value.toMutableMap().also { it[pollId] = candidates }
+    }
 
     fun simulateRemoteExpenseItemPush(expenseGroupId: String, items: List<ExpenseItem>) {
         _itemsByGroup.value = _itemsByGroup.value.toMutableMap().also { it[expenseGroupId] = items }

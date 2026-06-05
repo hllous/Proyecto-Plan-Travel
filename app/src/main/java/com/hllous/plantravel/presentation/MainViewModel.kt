@@ -2,7 +2,6 @@ package com.hllous.plantravel.presentation
 
 import androidx.lifecycle.ViewModel
 import androidx.lifecycle.viewModelScope
-import com.hllous.plantravel.domain.model.DestinationRecommendation
 import com.hllous.plantravel.domain.model.InviteToken
 import com.hllous.plantravel.domain.repository.TravelRepository
 import com.hllous.plantravel.domain.usecase.ConsumeInviteUseCase
@@ -40,15 +39,6 @@ class MainViewModel @Inject constructor(
     private val _message = MutableStateFlow<String?>(null)
     val message: StateFlow<String?> = _message
 
-    private val _regions = MutableStateFlow<List<String>>(emptyList())
-    val regions: StateFlow<List<String>> = _regions
-
-    private val _selectedRegion = MutableStateFlow<String?>(null)
-    val selectedRegion: StateFlow<String?> = _selectedRegion
-
-    private val _recommendations = MutableStateFlow<List<DestinationRecommendation>>(emptyList())
-    val recommendations: StateFlow<List<DestinationRecommendation>> = _recommendations
-
     val invites: StateFlow<List<InviteToken>> = combine(
         selectedGroupHolder.selectedGroupId,
         _invitesRetryTrigger
@@ -58,12 +48,6 @@ class MainViewModel @Inject constructor(
             else repository.observeInvites(groupId).catch { emit(emptyList()) }
         }
         .stateIn(viewModelScope, SharingStarted.WhileSubscribed(5000), emptyList())
-
-    init {
-        viewModelScope.launch {
-            runCatching { _regions.value = repository.getRegions() }
-        }
-    }
 
     fun reloadInvites() {
         _invitesRetryTrigger.value++
@@ -124,10 +108,4 @@ class MainViewModel @Inject constructor(
         }
     }
 
-    fun selectRegion(region: String) {
-        _selectedRegion.value = region
-        viewModelScope.launch {
-            runCatching { _recommendations.value = repository.getRecommendationsByRegion(region) }
-        }
-    }
 }

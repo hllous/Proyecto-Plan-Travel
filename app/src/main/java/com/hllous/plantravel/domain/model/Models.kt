@@ -9,7 +9,61 @@ data class TravelGroup(
     val id: String,
     val name: String,
     val adminUserId: String? = null,
-    val memberCount: Int = 0
+    val memberCount: Int = 0,
+    val tripDestinationPlaceId: String? = null,
+    val tripDestinationName: String? = null,
+    val tripDestinationLat: Double? = null,
+    val tripDestinationLng: Double? = null,
+)
+
+data class PlaceResult(
+    val placeId: String,
+    val name: String,
+    val photoUrl: String,
+    val rating: Double,
+    val reviewCount: Int,
+    val address: String,
+    val lat: Double,
+    val lng: Double,
+)
+
+data class RankedRecommendations(
+    val top: List<PlaceResult>,
+    val others: List<PlaceResult>,
+)
+
+data class ItineraryEvent(
+    val id: String,
+    val groupId: String,
+    val name: String,
+    val date: String,
+    val timeOfDay: String? = null,
+    val description: String? = null,
+    val placeId: String? = null,
+    val createdByMemberId: String,
+)
+
+enum class PollType { DESTINATION, ACTIVITY }
+enum class PollState { OPEN, CLOSED }
+
+data class Poll(
+    val id: String,
+    val groupId: String,
+    val type: PollType,
+    val state: PollState,
+    val expiresAt: String? = null,
+    val winnerPlaceId: String? = null,
+)
+
+data class PollCandidate(
+    val id: String,
+    val pollId: String,
+    val placeId: String,
+    val name: String,
+    val photoUrl: String,
+    val addedByMemberId: String,
+    val voteCount: Int = 0,
+    val votedByCurrentMember: Boolean = false,
 )
 
 data class GroupMember(
@@ -34,11 +88,6 @@ data class InviteToken(
     val expiresAtMillis: Long
 )
 
-data class DestinationRecommendation(
-    val region: String,
-    val destination: String,
-    val recommendation: String
-)
 
 data class ExpenseItem(
     val id: String,
