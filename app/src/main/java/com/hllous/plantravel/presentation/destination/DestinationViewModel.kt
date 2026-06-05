@@ -6,6 +6,8 @@ import com.hllous.plantravel.domain.auth.SessionProvider
 import com.hllous.plantravel.domain.model.GroupMember
 import com.hllous.plantravel.domain.model.PlaceResult
 import com.hllous.plantravel.domain.model.Poll
+import com.hllous.plantravel.domain.model.RankedRecommendations
+import com.hllous.plantravel.domain.places.PlaceRecommendationRanker
 import com.hllous.plantravel.domain.places.PlacesApiClient
 import com.hllous.plantravel.domain.repository.TravelRepository
 import com.hllous.plantravel.presentation.UiState
@@ -41,6 +43,7 @@ class DestinationViewModel @Inject constructor(
     private val placesApiClient: PlacesApiClient,
     private val sessionProvider: SessionProvider,
     private val selectedGroupHolder: SelectedGroupHolder,
+    private val ranker: PlaceRecommendationRanker,
 ) : ViewModel() {
 
     companion object {
@@ -59,6 +62,9 @@ class DestinationViewModel @Inject constructor(
 
     private val _searchResults = MutableStateFlow<UiState<List<PlaceResult>>>(UiState.Loading)
     val searchResults: StateFlow<UiState<List<PlaceResult>>> = _searchResults.asStateFlow()
+
+    private val _poisByCategory = MutableStateFlow<UiState<RankedRecommendations>>(UiState.Loading)
+    val poisByCategory: StateFlow<UiState<RankedRecommendations>> = _poisByCategory.asStateFlow()
 
     private val _reloadTrigger = MutableStateFlow(0)
 
@@ -133,6 +139,18 @@ class DestinationViewModel @Inject constructor(
                 )
             }
             reloadGroups()
+        }
+    }
+
+    fun selectPoiCategory(category: String) {
+        val dest = tripDestination.value as? TripDestinationState.Set ?: return
+        _poisByCategory.value = UiState.Loading
+        viewModelScope.launch {
+            val result = runCatching { placesApiClient.searchPois(dest.lat, dest.lng, category) }
+            _poisByCategory.value = result.fold(
+                onSuccess = { UiState.Success(ranker.rank(it)) },
+                onFailure = { UiState.Error(it.message ?: "Error al cargar recomendaciones") },
+            )
         }
     }
 

@@ -7,7 +7,7 @@ import kotlin.math.ln
 private const val RATING_THRESHOLD = 4.2
 private const val REVIEW_COUNT_THRESHOLD = 50
 
-class PlaceRecommendationRanker {
+class PlaceRecommendationRanker @javax.inject.Inject constructor() {
 
     fun rank(places: List<PlaceResult>): RankedRecommendations {
         val (top, others) = places.partition { it.meetsThresholds() }

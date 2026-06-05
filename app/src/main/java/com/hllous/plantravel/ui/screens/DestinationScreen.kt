@@ -1,10 +1,10 @@
 package com.hllous.plantravel.ui.screens
 
+import android.content.Intent
+import android.net.Uri
 import androidx.compose.animation.AnimatedVisibility
 import androidx.compose.animation.expandVertically
 import androidx.compose.animation.shrinkVertically
-import androidx.compose.foundation.background
-import androidx.compose.foundation.clickable
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
@@ -18,6 +18,7 @@ import androidx.compose.foundation.layout.height
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.layout.width
+import androidx.compose.foundation.lazy.LazyColumn
 import androidx.compose.foundation.lazy.LazyRow
 import androidx.compose.foundation.lazy.grid.GridCells
 import androidx.compose.foundation.lazy.grid.LazyVerticalGrid
@@ -26,8 +27,13 @@ import androidx.compose.foundation.lazy.items
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.filled.Close
+import androidx.compose.material.icons.filled.Hotel
 import androidx.compose.material.icons.filled.HowToVote
+import androidx.compose.material.icons.filled.LocalActivity
 import androidx.compose.material.icons.filled.LocationOn
+import androidx.compose.material.icons.filled.Map
+import androidx.compose.material.icons.filled.Park
+import androidx.compose.material.icons.filled.Restaurant
 import androidx.compose.material.icons.filled.Search
 import androidx.compose.material.icons.filled.Star
 import androidx.compose.material3.AlertDialog
@@ -47,24 +53,30 @@ import androidx.compose.material3.ModalBottomSheet
 import androidx.compose.material3.OutlinedButton
 import androidx.compose.material3.OutlinedTextField
 import androidx.compose.material3.Scaffold
+import androidx.compose.material3.SnackbarHost
+import androidx.compose.material3.SnackbarHostState
 import androidx.compose.material3.Surface
 import androidx.compose.material3.Text
 import androidx.compose.material3.TextButton
+import androidx.compose.material3.TopAppBar
 import androidx.compose.material3.TopAppBarDefaults
 import androidx.compose.material3.rememberModalBottomSheetState
 import androidx.compose.runtime.Composable
+import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.collectAsState
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
+import androidx.compose.runtime.rememberCoroutineScope
 import androidx.compose.runtime.saveable.rememberSaveable
 import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
-import androidx.compose.ui.graphics.Color
+import androidx.compose.ui.graphics.vector.ImageVector
 import androidx.compose.ui.input.nestedscroll.nestedScroll
 import androidx.compose.ui.layout.ContentScale
+import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.dp
@@ -72,12 +84,22 @@ import androidx.navigation.NavHostController
 import coil3.compose.AsyncImage
 import com.hllous.plantravel.domain.model.MemberRole
 import com.hllous.plantravel.domain.model.PlaceResult
+import com.hllous.plantravel.domain.model.RankedRecommendations
 import com.hllous.plantravel.presentation.UiState
 import com.hllous.plantravel.presentation.destination.DestinationViewModel
 import com.hllous.plantravel.presentation.destination.TripDestinationState
 import com.hllous.plantravel.ui.theme.FrauncesFamily
+import kotlinx.coroutines.launch
 
 private val REGIONS = listOf("Patagonia", "Cuyo", "Noroeste", "Litoral", "Buenos Aires", "Córdoba")
+
+private data class PoiCategory(val label: String, val icon: ImageVector)
+private val POI_CATEGORIES = listOf(
+    PoiCategory("Alojamiento", Icons.Default.Hotel),
+    PoiCategory("Gastronomía", Icons.Default.Restaurant),
+    PoiCategory("Actividades", Icons.Default.LocalActivity),
+    PoiCategory("Naturaleza", Icons.Default.Park),
+)
 
 @OptIn(ExperimentalMaterial3Api::class)
 @Composable
@@ -86,28 +108,401 @@ fun DestinationScreen(
     navController: NavHostController,
 ) {
     val tripDestination by viewModel.tripDestination.collectAsState()
+    var overrideToLevel1 by rememberSaveable { mutableStateOf(false) }
 
-    if (tripDestination is TripDestinationState.Set) {
-        Level2Placeholder()
-        return
+    val destination = tripDestination as? TripDestinationState.Set
+    if (destination != null && !overrideToLevel1) {
+        Level2Content(
+            viewModel = viewModel,
+            destination = destination,
+            onChangeDestination = { overrideToLevel1 = true },
+        )
+    } else {
+        Level1BrowseContent(viewModel = viewModel)
     }
-
-    Level1BrowseContent(viewModel = viewModel)
 }
 
+// ─── Level 2 ─────────────────────────────────────────────────────────────────
+
+@OptIn(ExperimentalMaterial3Api::class)
 @Composable
-private fun Level2Placeholder() {
-    Box(
-        modifier = Modifier.fillMaxSize(),
-        contentAlignment = Alignment.Center,
-    ) {
-        Text(
-            text = "Level 2 — próximamente en #52",
-            style = MaterialTheme.typography.bodyMedium,
-            color = MaterialTheme.colorScheme.onSurfaceVariant,
+private fun Level2Content(
+    viewModel: DestinationViewModel,
+    destination: TripDestinationState.Set,
+    onChangeDestination: () -> Unit,
+) {
+    val poisByCategory by viewModel.poisByCategory.collectAsState()
+    val activePoll by viewModel.activePoll.collectAsState()
+
+    var selectedCategory by rememberSaveable { mutableStateOf(POI_CATEGORIES.first().label) }
+    var selectedPoi by remember { mutableStateOf<PlaceResult?>(null) }
+    val snackbarHostState = remember { SnackbarHostState() }
+    val scope = rememberCoroutineScope()
+
+    LaunchedEffect(Unit) {
+        viewModel.selectPoiCategory(selectedCategory)
+    }
+
+    Scaffold(
+        contentWindowInsets = WindowInsets(0),
+        topBar = {
+            TopAppBar(
+                title = {
+                    Text(
+                        text = destination.name,
+                        fontFamily = FrauncesFamily,
+                        fontWeight = FontWeight.Medium,
+                        maxLines = 1,
+                        overflow = TextOverflow.Ellipsis,
+                    )
+                },
+                actions = {
+                    TextButton(onClick = onChangeDestination) {
+                        Text("Cambiar destino")
+                    }
+                },
+            )
+        },
+        snackbarHost = { SnackbarHost(snackbarHostState) },
+    ) { innerPadding ->
+        Column(
+            modifier = Modifier
+                .fillMaxSize()
+                .padding(innerPadding),
+        ) {
+            // ── Category chip row ─────────────────────────────────────────────
+            LazyRow(
+                contentPadding = PaddingValues(horizontal = 16.dp, vertical = 8.dp),
+                horizontalArrangement = Arrangement.spacedBy(8.dp),
+            ) {
+                items(POI_CATEGORIES) { cat ->
+                    FilterChip(
+                        selected = selectedCategory == cat.label,
+                        onClick = {
+                            selectedCategory = cat.label
+                            viewModel.selectPoiCategory(cat.label)
+                        },
+                        label = { Text(cat.label) },
+                        leadingIcon = {
+                            Icon(
+                                cat.icon,
+                                contentDescription = null,
+                                modifier = Modifier.size(16.dp),
+                            )
+                        },
+                    )
+                }
+            }
+
+            HorizontalDivider()
+
+            // ── Results ───────────────────────────────────────────────────────
+            when (val state = poisByCategory) {
+                is UiState.Loading -> {
+                    Box(
+                        modifier = Modifier.fillMaxSize(),
+                        contentAlignment = Alignment.Center,
+                    ) {
+                        CircularProgressIndicator()
+                    }
+                }
+
+                is UiState.Error -> {
+                    Box(
+                        modifier = Modifier
+                            .fillMaxSize()
+                            .padding(24.dp),
+                        contentAlignment = Alignment.Center,
+                    ) {
+                        Text(
+                            text = state.message,
+                            style = MaterialTheme.typography.bodyMedium,
+                            color = MaterialTheme.colorScheme.error,
+                        )
+                    }
+                }
+
+                is UiState.Success -> {
+                    PoiResultsList(
+                        ranked = state.data,
+                        onPoiClick = { selectedPoi = it },
+                    )
+                }
+            }
+        }
+    }
+
+    // ── POI bottom sheet ──────────────────────────────────────────────────────
+    selectedPoi?.let { poi ->
+        PoiBottomSheet(
+            place = poi,
+            hasActivePoll = activePoll != null,
+            onDismiss = { selectedPoi = null },
+            onAddToItinerary = {
+                // TODO(#53): navigate to itinerary creation
+                scope.launch { snackbarHostState.showSnackbar("Próximamente en #53") }
+            },
+            onAddToPoll = {
+                // TODO(#54): add candidate to active poll
+                scope.launch { snackbarHostState.showSnackbar("Próximamente en #54") }
+            },
         )
     }
 }
+
+@Composable
+private fun PoiResultsList(
+    ranked: RankedRecommendations,
+    onPoiClick: (PlaceResult) -> Unit,
+) {
+    if (ranked.top.isEmpty() && ranked.others.isEmpty()) {
+        Box(
+            modifier = Modifier.fillMaxSize(),
+            contentAlignment = Alignment.Center,
+        ) {
+            Text(
+                text = "Sin resultados para esta categoría",
+                style = MaterialTheme.typography.bodyMedium,
+                color = MaterialTheme.colorScheme.onSurfaceVariant,
+            )
+        }
+        return
+    }
+
+    LazyColumn(
+        contentPadding = PaddingValues(vertical = 8.dp),
+        verticalArrangement = Arrangement.spacedBy(4.dp),
+        modifier = Modifier.fillMaxSize(),
+    ) {
+        if (ranked.top.isNotEmpty()) {
+            item {
+                Text(
+                    text = "Destacados",
+                    style = MaterialTheme.typography.labelLarge,
+                    color = MaterialTheme.colorScheme.secondary,
+                    modifier = Modifier.padding(horizontal = 16.dp, vertical = 8.dp),
+                )
+            }
+            items(ranked.top) { place ->
+                PoiCard(place = place, onClick = { onPoiClick(place) })
+            }
+        }
+
+        if (ranked.others.isNotEmpty()) {
+            item {
+                Text(
+                    text = "Otros",
+                    style = MaterialTheme.typography.labelLarge,
+                    color = MaterialTheme.colorScheme.onSurfaceVariant,
+                    modifier = Modifier.padding(horizontal = 16.dp, vertical = 8.dp),
+                )
+            }
+            items(ranked.others) { place ->
+                PoiCard(place = place, onClick = { onPoiClick(place) })
+            }
+        }
+    }
+}
+
+@Composable
+private fun PoiCard(
+    place: PlaceResult,
+    onClick: () -> Unit,
+) {
+    Card(
+        onClick = onClick,
+        modifier = Modifier
+            .fillMaxWidth()
+            .padding(horizontal = 16.dp, vertical = 4.dp),
+        shape = RoundedCornerShape(12.dp),
+        elevation = CardDefaults.cardElevation(defaultElevation = 1.dp),
+    ) {
+        Row(
+            modifier = Modifier
+                .fillMaxWidth()
+                .padding(12.dp),
+            verticalAlignment = Alignment.CenterVertically,
+        ) {
+            AsyncImage(
+                model = place.photoUrl,
+                contentDescription = place.name,
+                contentScale = ContentScale.Crop,
+                modifier = Modifier
+                    .size(80.dp)
+                    .clip(RoundedCornerShape(10.dp)),
+            )
+            Spacer(modifier = Modifier.width(12.dp))
+            Column(modifier = Modifier.weight(1f)) {
+                Text(
+                    text = place.name,
+                    style = MaterialTheme.typography.titleSmall,
+                    fontWeight = FontWeight.SemiBold,
+                    maxLines = 1,
+                    overflow = TextOverflow.Ellipsis,
+                )
+                if (place.address.isNotBlank()) {
+                    Spacer(modifier = Modifier.height(2.dp))
+                    Text(
+                        text = place.address,
+                        style = MaterialTheme.typography.bodySmall,
+                        color = MaterialTheme.colorScheme.onSurfaceVariant,
+                        maxLines = 1,
+                        overflow = TextOverflow.Ellipsis,
+                    )
+                }
+                Spacer(modifier = Modifier.height(4.dp))
+                Row(verticalAlignment = Alignment.CenterVertically) {
+                    Icon(
+                        Icons.Default.Star,
+                        contentDescription = null,
+                        tint = MaterialTheme.colorScheme.primary,
+                        modifier = Modifier.size(13.dp),
+                    )
+                    Spacer(modifier = Modifier.width(3.dp))
+                    Text(
+                        text = "%.1f".format(place.rating),
+                        style = MaterialTheme.typography.bodySmall,
+                        fontWeight = FontWeight.Medium,
+                    )
+                    Spacer(modifier = Modifier.width(4.dp))
+                    Text(
+                        text = "(${place.reviewCount})",
+                        style = MaterialTheme.typography.bodySmall,
+                        color = MaterialTheme.colorScheme.onSurfaceVariant,
+                    )
+                }
+            }
+        }
+    }
+}
+
+@OptIn(ExperimentalMaterial3Api::class)
+@Composable
+private fun PoiBottomSheet(
+    place: PlaceResult,
+    hasActivePoll: Boolean,
+    onDismiss: () -> Unit,
+    onAddToItinerary: () -> Unit,
+    onAddToPoll: () -> Unit,
+) {
+    val context = LocalContext.current
+    val sheetState = rememberModalBottomSheetState()
+
+    ModalBottomSheet(
+        onDismissRequest = onDismiss,
+        sheetState = sheetState,
+    ) {
+        Column(
+            modifier = Modifier
+                .fillMaxWidth()
+                .padding(bottom = 32.dp),
+        ) {
+            AsyncImage(
+                model = place.photoUrl,
+                contentDescription = place.name,
+                contentScale = ContentScale.Crop,
+                modifier = Modifier
+                    .fillMaxWidth()
+                    .height(220.dp)
+                    .padding(horizontal = 16.dp)
+                    .clip(RoundedCornerShape(16.dp)),
+            )
+
+            Spacer(modifier = Modifier.height(16.dp))
+
+            Column(modifier = Modifier.padding(horizontal = 24.dp)) {
+                Text(
+                    text = place.name,
+                    style = MaterialTheme.typography.headlineSmall,
+                    fontFamily = FrauncesFamily,
+                    fontWeight = FontWeight.SemiBold,
+                )
+
+                Spacer(modifier = Modifier.height(8.dp))
+
+                Row(verticalAlignment = Alignment.CenterVertically) {
+                    Icon(
+                        Icons.Default.Star,
+                        contentDescription = null,
+                        tint = MaterialTheme.colorScheme.primary,
+                        modifier = Modifier.size(16.dp),
+                    )
+                    Spacer(modifier = Modifier.width(4.dp))
+                    Text(
+                        text = "%.1f".format(place.rating),
+                        style = MaterialTheme.typography.bodyLarge,
+                        fontWeight = FontWeight.Medium,
+                    )
+                    Spacer(modifier = Modifier.width(8.dp))
+                    Text(
+                        text = "(${place.reviewCount} reseñas)",
+                        style = MaterialTheme.typography.bodyMedium,
+                        color = MaterialTheme.colorScheme.onSurfaceVariant,
+                    )
+                }
+
+                if (place.address.isNotBlank()) {
+                    Spacer(modifier = Modifier.height(6.dp))
+                    Row(verticalAlignment = Alignment.CenterVertically) {
+                        Icon(
+                            Icons.Default.LocationOn,
+                            contentDescription = null,
+                            tint = MaterialTheme.colorScheme.onSurfaceVariant,
+                            modifier = Modifier.size(14.dp),
+                        )
+                        Spacer(modifier = Modifier.width(4.dp))
+                        Text(
+                            text = place.address,
+                            style = MaterialTheme.typography.bodySmall,
+                            color = MaterialTheme.colorScheme.onSurfaceVariant,
+                            maxLines = 2,
+                            overflow = TextOverflow.Ellipsis,
+                        )
+                    }
+                }
+
+                Spacer(modifier = Modifier.height(24.dp))
+
+                Button(
+                    onClick = onAddToItinerary,
+                    modifier = Modifier.fillMaxWidth(),
+                ) {
+                    Text("Añadir al itinerario")
+                }
+
+                Spacer(modifier = Modifier.height(8.dp))
+
+                OutlinedButton(
+                    onClick = onAddToPoll,
+                    modifier = Modifier.fillMaxWidth(),
+                    enabled = hasActivePoll,
+                ) {
+                    Text(if (hasActivePoll) "Añadir a encuesta" else "Sin encuesta activa")
+                }
+
+                Spacer(modifier = Modifier.height(8.dp))
+
+                TextButton(
+                    onClick = {
+                        val uri = Uri.parse("geo:${place.lat},${place.lng}?q=${Uri.encode(place.name)}")
+                        context.startActivity(Intent(Intent.ACTION_VIEW, uri))
+                    },
+                    modifier = Modifier.fillMaxWidth(),
+                ) {
+                    Icon(
+                        Icons.Default.Map,
+                        contentDescription = null,
+                        modifier = Modifier.size(16.dp),
+                    )
+                    Spacer(modifier = Modifier.width(8.dp))
+                    Text("Ver en Maps")
+                }
+            }
+        }
+    }
+}
+
+// ─── Level 1 ─────────────────────────────────────────────────────────────────
 
 @OptIn(ExperimentalMaterial3Api::class)
 @Composable
@@ -200,7 +595,6 @@ private fun Level1BrowseContent(viewModel: DestinationViewModel) {
                 contentPadding = PaddingValues(horizontal = 16.dp, vertical = 4.dp),
                 horizontalArrangement = Arrangement.spacedBy(8.dp),
             ) {
-                // Recovery chip when banner is dismissed
                 if (activePoll != null && pollBannerDismissed) {
                     item {
                         FilterChip(
@@ -515,7 +909,6 @@ private fun DestinationBottomSheet(
         }
     }
 
-    // ── "Create poll first?" dialog ───────────────────────────────────────────
     if (showPollPromptDialog) {
         AlertDialog(
             onDismissRequest = { showPollPromptDialog = false },
@@ -545,7 +938,6 @@ private fun DestinationBottomSheet(
         )
     }
 
-    // ── "Replace existing destination?" dialog ────────────────────────────────
     if (showReplaceDialog) {
         val currentName = (tripDestination as? TripDestinationState.Set)?.name.orEmpty()
         AlertDialog(
