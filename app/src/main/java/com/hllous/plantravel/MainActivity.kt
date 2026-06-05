@@ -63,16 +63,22 @@ import com.hllous.plantravel.presentation.auth.AuthViewModel
 import com.hllous.plantravel.presentation.destination.DestinationViewModel
 import com.hllous.plantravel.presentation.expense.ExpenseViewModel
 import com.hllous.plantravel.presentation.group.GroupViewModel
+import com.hllous.plantravel.presentation.itinerary.ItineraryEventDraft
+import com.hllous.plantravel.presentation.itinerary.ItineraryViewModel
 import com.hllous.plantravel.ui.screens.DestinationScreen
 import com.hllous.plantravel.ui.screens.ExpenseScreen
 import com.hllous.plantravel.ui.screens.GroupsScreen
 import com.hllous.plantravel.ui.screens.HomeScreen
+import com.hllous.plantravel.ui.screens.ItineraryScreen
 import com.hllous.plantravel.ui.screens.LoginScreen
 import com.hllous.plantravel.ui.screens.ProfileScreen
 import com.hllous.plantravel.ui.screens.ProfileSetupScreen
 import com.hllous.plantravel.ui.screens.QrScannerScreen
 import com.hllous.plantravel.ui.screens.RegisterScreen
 import com.hllous.plantravel.ui.theme.ProyectoPlanTravelTheme
+import androidx.navigation.NavType
+import androidx.navigation.navArgument
+import kotlinx.serialization.json.Json
 import dagger.hilt.android.AndroidEntryPoint
 import io.github.jan.supabase.SupabaseClient
 import io.github.jan.supabase.auth.handleDeeplinks
@@ -314,7 +320,7 @@ fun MainAppContent(
         containerColor = MaterialTheme.colorScheme.background,
         contentWindowInsets = WindowInsets(0, 0, 0, 0),
         bottomBar = {
-            if (currentRoute != "qr_scanner" && currentRoute != "profile") {
+            if (currentRoute != "qr_scanner" && currentRoute != "profile" && !currentRoute.startsWith("itinerary")) {
                 BottomNavBar(currentRoute = currentRoute, navController = navController)
             }
         },
@@ -371,6 +377,28 @@ fun MainAppContent(
                     onLogout = onLogout,
                     onBack = { navController.navigateUp() },
                     groupViewModel = groupViewModel,
+                )
+            }
+            composable(
+                route = "itinerary?draft={draft}",
+                arguments = listOf(
+                    navArgument("draft") {
+                        type = NavType.StringType
+                        nullable = true
+                        defaultValue = null
+                    }
+                ),
+            ) { backStackEntry ->
+                val draftJson = backStackEntry.arguments?.getString("draft")
+                val initialDraft = remember(draftJson) {
+                    draftJson?.let {
+                        runCatching { Json.decodeFromString<ItineraryEventDraft>(it) }.getOrNull()
+                    }
+                }
+                ItineraryScreen(
+                    viewModel = hiltViewModel<ItineraryViewModel>(),
+                    navController = navController,
+                    initialDraft = initialDraft,
                 )
             }
         }

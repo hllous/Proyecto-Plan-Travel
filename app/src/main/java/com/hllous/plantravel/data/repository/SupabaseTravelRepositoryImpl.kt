@@ -247,10 +247,42 @@ class SupabaseTravelRepositoryImpl @Inject constructor(
         val quantity: Int
     )
 
+    @Serializable
+    private data class ItineraryEventDto(
+        val id: String,
+        @SerialName("group_id") val groupId: String,
+        val name: String,
+        val date: String,
+        @SerialName("time_of_day") val timeOfDay: String? = null,
+        val description: String? = null,
+        @SerialName("place_id") val placeId: String? = null,
+        @SerialName("created_by_member_id") val createdByMemberId: String,
+    ) {
+        fun toDomain() = ItineraryEvent(id, groupId, name, date, timeOfDay, description, placeId, createdByMemberId)
+    }
+
+    @Serializable
+    private data class InsertItineraryEventDto(
+        val id: String,
+        @SerialName("group_id") val groupId: String,
+        val name: String,
+        val date: String,
+        @SerialName("time_of_day") val timeOfDay: String? = null,
+        val description: String? = null,
+        @SerialName("place_id") val placeId: String? = null,
+        @SerialName("created_by_member_id") val createdByMemberId: String,
+    )
+
     // ─── Fetch helpers ───────────────────────────────────────────────────────
 
     private val settlementCalculator = ExpenseSettlementCalculator()
     private val assignmentPolicy = ExpenseAssignmentPolicy()
+
+    private suspend fun fetchItineraryEvents(groupId: String): List<ItineraryEvent> =
+        supabase.from("itinerary_events")
+            .select { filter { eq("group_id", groupId) } }
+            .decodeList<ItineraryEventDto>()
+            .map { it.toDomain() }
 
     private suspend fun fetchExpenseItems(expenseGroupId: String): List<ExpenseItem> =
         supabase.from("expense_items")
@@ -502,17 +534,67 @@ class SupabaseTravelRepositoryImpl @Inject constructor(
         }) { filter { eq("id", groupId) } }
     }
 
-    override fun observeItineraryEvents(groupId: String): Flow<List<ItineraryEvent>> =
-        TODO("observeItineraryEvents — implemented in #53")
+    override fun observeItineraryEvents(groupId: String): Flow<List<ItineraryEvent>> = channelFlow {
+        send(fetchItineraryEvents(groupId))
 
-    override suspend fun createItineraryEvent(groupId: String, name: String, date: String, timeOfDay: String?, description: String?, placeId: String?): String =
-        TODO("createItineraryEvent — implemented in #53")
+        val pgChannel = supabase.channel("itinerary-events-$groupId-${UUID.randomUUID()}")
+        val pgChanges = pgChannel.postgresChangeFlow<PostgresAction>(schema = "public") {
+            table = "itinerary_events"
+        }
 
-    override suspend fun updateItineraryEvent(eventId: String, name: String, date: String, timeOfDay: String?, description: String?): Unit =
-        TODO("updateItineraryEvent — implemented in #53")
+        val bcChannel = supabase.channel("itinerary-events-broadcast-$groupId")
+        val broadcasts = bcChannel.broadcastFlow<JsonObject>(event = "itinerary_event_changed")
 
-    override suspend fun deleteItineraryEvent(eventId: String): Unit =
-        TODO("deleteItineraryEvent — implemented in #53")
+        coroutineScope {
+            launch { pgChannel.subscribe(blockUntilSubscribed = true) }
+            launch { bcChannel.subscribe(blockUntilSubscribed = false) }
+        }
+
+        try {
+            merge(pgChanges.map { Unit }, broadcasts.map { Unit })
+                .collect { send(fetchItineraryEvents(groupId)) }
+        } finally {
+            supabase.realtime.removeChannel(pgChannel)
+            supabase.realtime.removeChannel(bcChannel)
+        }
+    }
+
+    override suspend fun createItineraryEvent(
+        groupId: String, name: String, date: String, timeOfDay: String?, description: String?, placeId: String?
+    ): String {
+        val memberId = supabase.auth.currentUserOrNull()?.id ?: error("Not authenticated")
+        val id = UUID.randomUUID().toString()
+        supabase.from("itinerary_events")
+            .insert(InsertItineraryEventDto(
+                id = id, groupId = groupId, name = name, date = date,
+                timeOfDay = timeOfDay, description = description, placeId = placeId,
+                createdByMemberId = memberId,
+            ))
+        val bcChannel = supabase.channel("itinerary-events-broadcast-$groupId")
+        runCatching {
+            bcChannel.subscribe(blockUntilSubscribed = true)
+            bcChannel.broadcast(event = "itinerary_event_changed", message = buildJsonObject {})
+        }
+        runCatching { supabase.realtime.removeChannel(bcChannel) }
+        return id
+    }
+
+    override suspend fun updateItineraryEvent(
+        eventId: String, name: String, date: String, timeOfDay: String?, description: String?
+    ) {
+        supabase.from("itinerary_events").update({
+            set("name", name)
+            set("date", date)
+            set<String?>("time_of_day", timeOfDay)
+            set<String?>("description", description)
+        }) { filter { eq("id", eventId) } }
+    }
+
+    override suspend fun deleteItineraryEvent(eventId: String) {
+        supabase.from("itinerary_events").delete {
+            filter { eq("id", eventId) }
+        }
+    }
 
     override fun observeActivePoll(groupId: String): Flow<Poll?> =
         TODO("observeActivePoll — implemented in #54")

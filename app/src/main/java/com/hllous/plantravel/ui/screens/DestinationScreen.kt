@@ -2,6 +2,9 @@ package com.hllous.plantravel.ui.screens
 
 import android.content.Intent
 import android.net.Uri
+import com.hllous.plantravel.presentation.itinerary.ItineraryEventDraft
+import kotlinx.serialization.encodeToString
+import kotlinx.serialization.json.Json
 import androidx.compose.animation.AnimatedVisibility
 import androidx.compose.animation.expandVertically
 import androidx.compose.animation.shrinkVertically
@@ -115,6 +118,7 @@ fun DestinationScreen(
         Level2Content(
             viewModel = viewModel,
             destination = destination,
+            navController = navController,
             onChangeDestination = { overrideToLevel1 = true },
         )
     } else {
@@ -129,6 +133,7 @@ fun DestinationScreen(
 private fun Level2Content(
     viewModel: DestinationViewModel,
     destination: TripDestinationState.Set,
+    navController: NavHostController,
     onChangeDestination: () -> Unit,
 ) {
     val poisByCategory by viewModel.poisByCategory.collectAsState()
@@ -157,8 +162,11 @@ private fun Level2Content(
                     )
                 },
                 actions = {
+                    TextButton(onClick = { navController.navigate("itinerary") }) {
+                        Text("Ver itinerario")
+                    }
                     TextButton(onClick = onChangeDestination) {
-                        Text("Cambiar destino")
+                        Text("Cambiar")
                     }
                 },
             )
@@ -239,11 +247,17 @@ private fun Level2Content(
             hasActivePoll = activePoll != null,
             onDismiss = { selectedPoi = null },
             onAddToItinerary = {
-                // TODO(#53): navigate to itinerary creation
-                scope.launch { snackbarHostState.showSnackbar("Próximamente en #53") }
+                val draft = ItineraryEventDraft(
+                    name = poi.name,
+                    description = poi.address,
+                    placeId = poi.placeId,
+                )
+                val draftJson = Uri.encode(Json.encodeToString(draft))
+                navController.navigate("itinerary?draft=$draftJson")
+                selectedPoi = null
             },
             onAddToPoll = {
-                // TODO(#54): add candidate to active poll
+                // TODO(#54): navigate to poll_detail with candidate pre-add
                 scope.launch { snackbarHostState.showSnackbar("Próximamente en #54") }
             },
         )
