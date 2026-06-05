@@ -267,7 +267,7 @@ class FakeTravelRepository(
         return poll.id
     }
 
-    override suspend fun addPollCandidate(pollId: String, placeId: String, name: String, photoUrl: String): String {
+    override suspend fun addPollCandidate(pollId: String, placeId: String, name: String, photoUrl: String, lat: Double, lng: Double): String {
         if (addPollCandidateThrows) throw RuntimeException("network error")
         val candidate = PollCandidate(
             id = "fake-candidate-${System.currentTimeMillis()}",
@@ -276,6 +276,8 @@ class FakeTravelRepository(
             name = name,
             photoUrl = photoUrl,
             addedByMemberId = "fake-member-id",
+            lat = lat,
+            lng = lng,
         )
         val current = _candidatesByPoll.value.toMutableMap()
         current[pollId] = (current[pollId] ?: emptyList()) + candidate
@@ -283,7 +285,7 @@ class FakeTravelRepository(
         return candidate.id
     }
 
-    override suspend fun toggleVote(candidateId: String, memberId: String) {
+    override suspend fun toggleVote(candidateId: String, memberId: String, pollId: String) {
         _candidatesByPoll.value = _candidatesByPoll.value.mapValues { (_, candidates) ->
             candidates.map { c ->
                 if (c.id != candidateId) c

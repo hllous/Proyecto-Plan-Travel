@@ -62,6 +62,8 @@ data class PollCandidate(
     val name: String,
     val photoUrl: String,
     val addedByMemberId: String,
+    val lat: Double = 0.0,
+    val lng: Double = 0.0,
     val voteCount: Int = 0,
     val votedByCurrentMember: Boolean = false,
 )

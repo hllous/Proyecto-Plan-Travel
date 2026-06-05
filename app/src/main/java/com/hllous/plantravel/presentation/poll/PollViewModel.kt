@@ -90,15 +90,16 @@ class PollViewModel @Inject constructor(
         val pollId = poll.value?.id ?: return
         viewModelScope.launch {
             runCatching {
-                repository.addPollCandidate(pollId, place.placeId, place.name, place.photoUrl)
+                repository.addPollCandidate(pollId, place.placeId, place.name, place.photoUrl, place.lat, place.lng)
             }
         }
     }
 
     fun toggleVote(candidateId: String) {
         val memberId = currentMember.value?.id ?: return
+        val pollId = poll.value?.id ?: return
         viewModelScope.launch {
-            runCatching { repository.toggleVote(candidateId, memberId) }
+            runCatching { repository.toggleVote(candidateId, memberId, pollId) }
         }
     }
 
@@ -124,8 +125,8 @@ class PollViewModel @Inject constructor(
                         groupId = groupId,
                         placeId = winner.placeId,
                         name = winner.name,
-                        lat = 0.0,
-                        lng = 0.0,
+                        lat = winner.lat,
+                        lng = winner.lng,
                     )
                 }
             }
