@@ -341,7 +341,7 @@ class SupabaseTravelRepositoryImpl @Inject constructor(
 
     private suspend fun fetchActivePoll(groupId: String): Poll? =
         supabase.from("group_polls")
-            .select { filter { eq("group_id", groupId); eq("state", "OPEN") } }
+            .select { filter { eq("group_id", groupId) } }
             .decodeList<PollDto>()
             .firstOrNull()?.toDomain()
 
@@ -745,20 +745,28 @@ class SupabaseTravelRepositoryImpl @Inject constructor(
         val memberId = supabase.auth.currentUserOrNull()?.id
         send(fetchPollCandidatesWithVotes(pollId, memberId))
 
-        val channel = supabase.channel("poll-candidates-$pollId-${UUID.randomUUID()}")
-        val candidateChanges = channel.postgresChangeFlow<PostgresAction>(schema = "public") {
+        val pgChannel = supabase.channel("poll-candidates-$pollId-${UUID.randomUUID()}")
+        val candidateChanges = pgChannel.postgresChangeFlow<PostgresAction>(schema = "public") {
             table = "poll_candidates"
         }
-        val voteChanges = channel.postgresChangeFlow<PostgresAction>(schema = "public") {
+        val voteChanges = pgChannel.postgresChangeFlow<PostgresAction>(schema = "public") {
             table = "poll_votes"
         }
-        channel.subscribe(blockUntilSubscribed = true)
+
+        val bcChannel = supabase.channel("poll-candidates-broadcast-$pollId")
+        val broadcasts = bcChannel.broadcastFlow<JsonObject>(event = "poll_candidate_changed")
+
+        coroutineScope {
+            launch { pgChannel.subscribe(blockUntilSubscribed = true) }
+            launch { bcChannel.subscribe(blockUntilSubscribed = false) }
+        }
 
         try {
-            merge(candidateChanges, voteChanges)
+            merge(candidateChanges.map { Unit }, voteChanges.map { Unit }, broadcasts.map { Unit })
                 .collect { send(fetchPollCandidatesWithVotes(pollId, memberId)) }
         } finally {
-            supabase.realtime.removeChannel(channel)
+            supabase.realtime.removeChannel(pgChannel)
+            supabase.realtime.removeChannel(bcChannel)
         }
     }
 

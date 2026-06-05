@@ -122,7 +122,7 @@ fun DestinationScreen(
             onChangeDestination = { overrideToLevel1 = true },
         )
     } else {
-        Level1BrowseContent(viewModel = viewModel)
+        Level1BrowseContent(viewModel = viewModel, navController = navController)
     }
 }
 
@@ -257,8 +257,8 @@ private fun Level2Content(
                 selectedPoi = null
             },
             onAddToPoll = {
-                // TODO(#54): navigate to poll_detail with candidate pre-add
-                scope.launch { snackbarHostState.showSnackbar("Próximamente en #54") }
+                navController.navigate("poll_detail")
+                selectedPoi = null
             },
         )
     }
@@ -520,7 +520,7 @@ private fun PoiBottomSheet(
 
 @OptIn(ExperimentalMaterial3Api::class)
 @Composable
-private fun Level1BrowseContent(viewModel: DestinationViewModel) {
+private fun Level1BrowseContent(viewModel: DestinationViewModel, navController: NavHostController) {
     val regionResults by viewModel.regionResults.collectAsState()
     val searchResults by viewModel.searchResults.collectAsState()
     val activePoll by viewModel.activePoll.collectAsState()
@@ -569,7 +569,10 @@ private fun Level1BrowseContent(viewModel: DestinationViewModel) {
                 enter = expandVertically(),
                 exit = shrinkVertically(),
             ) {
-                PollBanner(onDismiss = { pollBannerDismissed = true })
+                PollBanner(
+                    onDismiss = { pollBannerDismissed = true },
+                    onTap = { navController.navigate("poll_detail") },
+                )
             }
 
             // ── Search bar ────────────────────────────────────────────────────
@@ -728,15 +731,17 @@ private fun Level1BrowseContent(viewModel: DestinationViewModel) {
             isAdmin = currentMember?.role == MemberRole.ADMIN,
             viewModel = viewModel,
             onDismiss = { selectedPlace = null },
+            onNavigateToPoll = { navController.navigate("poll_detail") },
         )
     }
 }
 
 @Composable
-private fun PollBanner(onDismiss: () -> Unit) {
+private fun PollBanner(onDismiss: () -> Unit, onTap: () -> Unit) {
     Surface(
         color = MaterialTheme.colorScheme.secondaryContainer,
         modifier = Modifier.fillMaxWidth(),
+        onClick = onTap,
     ) {
         Row(
             modifier = Modifier
@@ -825,6 +830,7 @@ private fun DestinationBottomSheet(
     isAdmin: Boolean,
     viewModel: DestinationViewModel,
     onDismiss: () -> Unit,
+    onNavigateToPoll: () -> Unit = {},
 ) {
     val tripDestination by viewModel.tripDestination.collectAsState()
     val sheetState = rememberModalBottomSheetState()
@@ -935,8 +941,10 @@ private fun DestinationBottomSheet(
                 )
             },
             confirmButton = {
-                // TODO(#54): navigate to poll creation screen
-                TextButton(onClick = { showPollPromptDialog = false }) {
+                TextButton(onClick = {
+                    showPollPromptDialog = false
+                    onNavigateToPoll()
+                }) {
                     Text("Crear encuesta")
                 }
             },

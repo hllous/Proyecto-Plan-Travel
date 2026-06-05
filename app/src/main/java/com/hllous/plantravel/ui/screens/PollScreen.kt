@@ -1,0 +1,624 @@
+package com.hllous.plantravel.ui.screens
+
+import androidx.compose.foundation.BorderStroke
+import androidx.compose.foundation.layout.Arrangement
+import androidx.compose.foundation.layout.Box
+import androidx.compose.foundation.layout.Column
+import androidx.compose.foundation.layout.PaddingValues
+import androidx.compose.foundation.layout.Row
+import androidx.compose.foundation.layout.Spacer
+import androidx.compose.foundation.layout.WindowInsets
+import androidx.compose.foundation.layout.fillMaxSize
+import androidx.compose.foundation.layout.fillMaxWidth
+import androidx.compose.foundation.layout.height
+import androidx.compose.foundation.layout.padding
+import androidx.compose.foundation.layout.size
+import androidx.compose.foundation.layout.width
+import androidx.compose.foundation.lazy.LazyColumn
+import androidx.compose.foundation.lazy.items
+import androidx.compose.foundation.selection.selectable
+import androidx.compose.foundation.selection.selectableGroup
+import androidx.compose.foundation.shape.RoundedCornerShape
+import androidx.compose.material.icons.Icons
+import androidx.compose.material.icons.automirrored.filled.ArrowBack
+import androidx.compose.material.icons.filled.HowToVote
+import androidx.compose.material.icons.filled.ThumbUp
+import androidx.compose.material3.AlertDialog
+import androidx.compose.material3.Button
+import androidx.compose.material3.Card
+import androidx.compose.material3.CardDefaults
+import androidx.compose.material3.CircularProgressIndicator
+import androidx.compose.material3.DatePicker
+import androidx.compose.material3.DatePickerDialog
+import androidx.compose.material3.ExperimentalMaterial3Api
+import androidx.compose.material3.FilledTonalButton
+import androidx.compose.material3.Icon
+import androidx.compose.material3.IconButton
+import androidx.compose.material3.MaterialTheme
+import androidx.compose.material3.ModalBottomSheet
+import androidx.compose.material3.OutlinedButton
+import androidx.compose.material3.OutlinedCard
+import androidx.compose.material3.RadioButton
+import androidx.compose.material3.Scaffold
+import androidx.compose.material3.SnackbarHost
+import androidx.compose.material3.SnackbarHostState
+import androidx.compose.material3.SuggestionChip
+import androidx.compose.material3.SuggestionChipDefaults
+import androidx.compose.material3.Text
+import androidx.compose.material3.TextButton
+import androidx.compose.material3.TopAppBar
+import androidx.compose.material3.rememberDatePickerState
+import androidx.compose.material3.rememberModalBottomSheetState
+import androidx.compose.runtime.Composable
+import androidx.compose.runtime.LaunchedEffect
+import androidx.compose.runtime.collectAsState
+import androidx.compose.runtime.getValue
+import androidx.compose.runtime.mutableStateOf
+import androidx.compose.runtime.remember
+import androidx.compose.runtime.saveable.rememberSaveable
+import androidx.compose.runtime.setValue
+import androidx.compose.ui.Alignment
+import androidx.compose.ui.Modifier
+import androidx.compose.ui.draw.clip
+import androidx.compose.ui.layout.ContentScale
+import androidx.compose.ui.semantics.Role
+import androidx.compose.ui.text.font.FontWeight
+import androidx.compose.ui.text.style.TextAlign
+import androidx.compose.ui.text.style.TextOverflow
+import androidx.compose.ui.unit.dp
+import androidx.navigation.NavHostController
+import coil3.compose.AsyncImage
+import com.hllous.plantravel.domain.model.MemberRole
+import com.hllous.plantravel.domain.model.Poll
+import com.hllous.plantravel.domain.model.PollState
+import com.hllous.plantravel.domain.model.PollType
+import com.hllous.plantravel.presentation.UiState
+import com.hllous.plantravel.presentation.poll.PollCandidateUiModel
+import com.hllous.plantravel.presentation.poll.PollViewModel
+import com.hllous.plantravel.ui.theme.FrauncesFamily
+import java.time.Instant
+import java.time.LocalDate
+import java.time.ZoneOffset
+
+@OptIn(ExperimentalMaterial3Api::class)
+@Composable
+fun PollScreen(
+    viewModel: PollViewModel,
+    navController: NavHostController,
+) {
+    val poll by viewModel.poll.collectAsState()
+    val candidatesState by viewModel.candidates.collectAsState()
+    val currentMember by viewModel.currentMember.collectAsState()
+    val errorMessage by viewModel.errorMessage.collectAsState()
+
+    val snackbarHostState = remember { SnackbarHostState() }
+    var showCreationSheet by rememberSaveable { mutableStateOf(false) }
+    var showWinnerDialog by rememberSaveable { mutableStateOf(false) }
+    var winnerSnackbarShown by rememberSaveable { mutableStateOf(false) }
+
+    LaunchedEffect(errorMessage) {
+        if (errorMessage != null) {
+            snackbarHostState.showSnackbar(errorMessage!!)
+            viewModel.clearErrorMessage()
+        }
+    }
+
+    val activePoll = poll
+    LaunchedEffect(activePoll?.winnerPlaceId) {
+        if (activePoll?.winnerPlaceId != null && !winnerSnackbarShown) {
+            winnerSnackbarShown = true
+            val msg = if (activePoll.type == PollType.DESTINATION) "¡Destino establecido!" else "¡Actividad seleccionada!"
+            snackbarHostState.showSnackbar(msg)
+        }
+    }
+
+    Scaffold(
+        contentWindowInsets = WindowInsets(0),
+        snackbarHost = { SnackbarHost(snackbarHostState) },
+        topBar = {
+            TopAppBar(
+                title = {
+                    Text(
+                        "Encuesta",
+                        fontFamily = FrauncesFamily,
+                        fontWeight = FontWeight.Medium,
+                    )
+                },
+                navigationIcon = {
+                    IconButton(onClick = { navController.popBackStack() }) {
+                        Icon(
+                            Icons.AutoMirrored.Filled.ArrowBack,
+                            contentDescription = "Volver",
+                        )
+                    }
+                },
+            )
+        },
+    ) { innerPadding ->
+        Box(
+            modifier = Modifier
+                .fillMaxSize()
+                .padding(innerPadding),
+        ) {
+            when {
+                poll == null && candidatesState is UiState.Loading -> {
+                    CircularProgressIndicator(modifier = Modifier.align(Alignment.Center))
+                }
+
+                poll == null -> {
+                    PollEmptyState(
+                        modifier = Modifier.align(Alignment.Center),
+                        onCreatePoll = { showCreationSheet = true },
+                    )
+                }
+
+                else -> {
+                    val currentPoll = poll!!
+                    PollContent(
+                        poll = currentPoll,
+                        candidatesState = candidatesState,
+                        isAdmin = currentMember?.role == MemberRole.ADMIN,
+                        onToggleVote = { candidateId -> viewModel.toggleVote(candidateId) },
+                        onClosePoll = { viewModel.closePoll() },
+                        onSelectWinner = { showWinnerDialog = true },
+                    )
+                }
+            }
+        }
+    }
+
+    if (showCreationSheet) {
+        PollCreationBottomSheet(
+            onDismiss = { showCreationSheet = false },
+            onCreate = { type, expiresAt ->
+                viewModel.createPoll(type, expiresAt)
+                showCreationSheet = false
+            },
+        )
+    }
+
+    if (showWinnerDialog) {
+        val candidates = (candidatesState as? UiState.Success)?.data ?: emptyList()
+        WinnerSelectionDialog(
+            candidates = candidates,
+            onDismiss = { showWinnerDialog = false },
+            onSelectWinner = { candidateId ->
+                viewModel.selectWinner(candidateId)
+                showWinnerDialog = false
+            },
+        )
+    }
+}
+
+@Composable
+private fun PollEmptyState(
+    modifier: Modifier = Modifier,
+    onCreatePoll: () -> Unit,
+) {
+    Column(
+        modifier = modifier.padding(32.dp),
+        horizontalAlignment = Alignment.CenterHorizontally,
+        verticalArrangement = Arrangement.Center,
+    ) {
+        Icon(
+            imageVector = Icons.Default.HowToVote,
+            contentDescription = null,
+            tint = MaterialTheme.colorScheme.onSurfaceVariant,
+            modifier = Modifier.size(64.dp),
+        )
+        Spacer(modifier = Modifier.height(16.dp))
+        Text(
+            text = "No hay ninguna encuesta activa. ¡Creá una para que el grupo vote!",
+            style = MaterialTheme.typography.bodyMedium,
+            color = MaterialTheme.colorScheme.onSurfaceVariant,
+            textAlign = TextAlign.Center,
+        )
+        Spacer(modifier = Modifier.height(24.dp))
+        Button(onClick = onCreatePoll) {
+            Text("Crear encuesta")
+        }
+    }
+}
+
+@Composable
+private fun PollContent(
+    poll: Poll,
+    candidatesState: UiState<List<PollCandidateUiModel>>,
+    isAdmin: Boolean,
+    onToggleVote: (String) -> Unit,
+    onClosePoll: () -> Unit,
+    onSelectWinner: () -> Unit,
+) {
+    val isClosed = poll.state == PollState.CLOSED
+
+    LazyColumn(
+        modifier = Modifier.fillMaxSize(),
+        contentPadding = PaddingValues(bottom = 24.dp),
+    ) {
+        item {
+            Row(
+                modifier = Modifier
+                    .fillMaxWidth()
+                    .padding(horizontal = 16.dp, vertical = 12.dp),
+                verticalAlignment = Alignment.CenterVertically,
+                horizontalArrangement = Arrangement.spacedBy(8.dp),
+            ) {
+                val chipLabel = when {
+                    isClosed -> if (poll.type == PollType.DESTINATION) "Destino · Cerrada" else "Actividad · Cerrada"
+                    else -> if (poll.type == PollType.DESTINATION) "Encuesta de Destino" else "Encuesta de Actividad"
+                }
+                SuggestionChip(
+                    onClick = {},
+                    label = { Text(chipLabel) },
+                    colors = if (isClosed)
+                        SuggestionChipDefaults.suggestionChipColors(
+                            containerColor = MaterialTheme.colorScheme.surfaceVariant,
+                        )
+                    else
+                        SuggestionChipDefaults.suggestionChipColors(
+                            containerColor = MaterialTheme.colorScheme.primaryContainer,
+                            labelColor = MaterialTheme.colorScheme.onPrimaryContainer,
+                        ),
+                )
+            }
+        }
+
+        when (candidatesState) {
+            is UiState.Loading -> {
+                item {
+                    Box(
+                        modifier = Modifier
+                            .fillMaxWidth()
+                            .padding(32.dp),
+                        contentAlignment = Alignment.Center,
+                    ) {
+                        CircularProgressIndicator()
+                    }
+                }
+            }
+
+            is UiState.Error -> {
+                item {
+                    Text(
+                        text = candidatesState.message,
+                        style = MaterialTheme.typography.bodyMedium,
+                        color = MaterialTheme.colorScheme.error,
+                        modifier = Modifier.padding(24.dp),
+                    )
+                }
+            }
+
+            is UiState.Success -> {
+                items(candidatesState.data, key = { it.candidate.id }) { uiModel ->
+                    PollCandidateCard(
+                        uiModel = uiModel,
+                        isWinner = uiModel.candidate.placeId == poll.winnerPlaceId,
+                        votingEnabled = !isClosed,
+                        onToggleVote = { onToggleVote(uiModel.candidate.id) },
+                    )
+                }
+
+                if (candidatesState.data.isEmpty()) {
+                    item {
+                        Text(
+                            text = "Todavía no hay candidatos.",
+                            style = MaterialTheme.typography.bodyMedium,
+                            color = MaterialTheme.colorScheme.onSurfaceVariant,
+                            modifier = Modifier.padding(horizontal = 16.dp, vertical = 8.dp),
+                        )
+                    }
+                }
+            }
+        }
+
+        if (!isClosed && isAdmin) {
+            item {
+                OutlinedButton(
+                    onClick = onClosePoll,
+                    modifier = Modifier
+                        .fillMaxWidth()
+                        .padding(horizontal = 16.dp, vertical = 8.dp),
+                ) {
+                    Text("Cerrar encuesta")
+                }
+            }
+        }
+
+        if (isClosed && isAdmin && poll.winnerPlaceId == null) {
+            item {
+                FilledTonalButton(
+                    onClick = onSelectWinner,
+                    modifier = Modifier
+                        .fillMaxWidth()
+                        .padding(horizontal = 16.dp, vertical = 8.dp),
+                ) {
+                    Text("Seleccionar ganador")
+                }
+            }
+        }
+    }
+}
+
+@Composable
+private fun PollCandidateCard(
+    uiModel: PollCandidateUiModel,
+    isWinner: Boolean,
+    votingEnabled: Boolean,
+    onToggleVote: () -> Unit,
+) {
+    val candidate = uiModel.candidate
+    val borderStroke = if (isWinner) {
+        BorderStroke(2.dp, MaterialTheme.colorScheme.primary)
+    } else null
+
+    OutlinedCard(
+        modifier = Modifier
+            .fillMaxWidth()
+            .padding(horizontal = 16.dp, vertical = 4.dp),
+        shape = RoundedCornerShape(12.dp),
+        border = borderStroke ?: BorderStroke(1.dp, MaterialTheme.colorScheme.outlineVariant),
+        colors = if (isWinner)
+            CardDefaults.outlinedCardColors(containerColor = MaterialTheme.colorScheme.primaryContainer.copy(alpha = 0.3f))
+        else
+            CardDefaults.outlinedCardColors(),
+    ) {
+        Row(
+            modifier = Modifier
+                .fillMaxWidth()
+                .padding(12.dp),
+            verticalAlignment = Alignment.CenterVertically,
+        ) {
+            AsyncImage(
+                model = candidate.photoUrl,
+                contentDescription = candidate.name,
+                contentScale = ContentScale.Crop,
+                modifier = Modifier
+                    .size(80.dp)
+                    .clip(RoundedCornerShape(8.dp)),
+            )
+
+            Spacer(modifier = Modifier.width(12.dp))
+
+            Column(modifier = Modifier.weight(1f)) {
+                Text(
+                    text = candidate.name,
+                    style = MaterialTheme.typography.titleSmall,
+                    fontWeight = FontWeight.SemiBold,
+                    maxLines = 2,
+                    overflow = TextOverflow.Ellipsis,
+                )
+                if (isWinner) {
+                    Spacer(modifier = Modifier.height(4.dp))
+                    Text(
+                        text = "Ganador",
+                        style = MaterialTheme.typography.labelSmall,
+                        color = MaterialTheme.colorScheme.primary,
+                        fontWeight = FontWeight.Bold,
+                    )
+                }
+                Spacer(modifier = Modifier.height(4.dp))
+                Row(verticalAlignment = Alignment.CenterVertically) {
+                    Icon(
+                        imageVector = Icons.Default.ThumbUp,
+                        contentDescription = null,
+                        tint = MaterialTheme.colorScheme.onSurfaceVariant,
+                        modifier = Modifier.size(14.dp),
+                    )
+                    Spacer(modifier = Modifier.width(4.dp))
+                    Text(
+                        text = "${uiModel.voteCount}",
+                        style = MaterialTheme.typography.bodySmall,
+                        color = MaterialTheme.colorScheme.onSurfaceVariant,
+                    )
+                }
+            }
+
+            Spacer(modifier = Modifier.width(8.dp))
+
+            if (votingEnabled) {
+                if (uiModel.votedByCurrentMember) {
+                    FilledTonalButton(
+                        onClick = onToggleVote,
+                        modifier = Modifier.size(width = 80.dp, height = 36.dp),
+                        contentPadding = PaddingValues(horizontal = 8.dp),
+                    ) {
+                        Text("Votado", style = MaterialTheme.typography.labelSmall)
+                    }
+                } else {
+                    OutlinedButton(
+                        onClick = onToggleVote,
+                        modifier = Modifier.size(width = 80.dp, height = 36.dp),
+                        contentPadding = PaddingValues(horizontal = 8.dp),
+                    ) {
+                        Text("Votar", style = MaterialTheme.typography.labelSmall)
+                    }
+                }
+            }
+        }
+    }
+}
+
+@OptIn(ExperimentalMaterial3Api::class)
+@Composable
+private fun PollCreationBottomSheet(
+    onDismiss: () -> Unit,
+    onCreate: (type: PollType, expiresAt: String?) -> Unit,
+) {
+    val sheetState = rememberModalBottomSheetState(skipPartiallyExpanded = true)
+    var selectedType by rememberSaveable { mutableStateOf(PollType.DESTINATION) }
+    var showDatePicker by rememberSaveable { mutableStateOf(false) }
+    var expiresAt by rememberSaveable { mutableStateOf<String?>(null) }
+    val datePickerState = rememberDatePickerState()
+
+    ModalBottomSheet(
+        onDismissRequest = onDismiss,
+        sheetState = sheetState,
+    ) {
+        Column(
+            modifier = Modifier
+                .fillMaxWidth()
+                .padding(horizontal = 24.dp)
+                .padding(bottom = 32.dp),
+            verticalArrangement = Arrangement.spacedBy(8.dp),
+        ) {
+            Text(
+                text = "Nueva encuesta",
+                style = MaterialTheme.typography.titleLarge,
+                fontFamily = FrauncesFamily,
+                fontWeight = FontWeight.Medium,
+            )
+
+            Spacer(modifier = Modifier.height(4.dp))
+
+            Text(
+                text = "Tipo de encuesta",
+                style = MaterialTheme.typography.labelLarge,
+                color = MaterialTheme.colorScheme.onSurfaceVariant,
+            )
+
+            Column(modifier = Modifier.selectableGroup()) {
+                listOf(PollType.DESTINATION to "Destino", PollType.ACTIVITY to "Actividad")
+                    .forEach { (type, label) ->
+                        Row(
+                            modifier = Modifier
+                                .fillMaxWidth()
+                                .selectable(
+                                    selected = selectedType == type,
+                                    onClick = { selectedType = type },
+                                    role = Role.RadioButton,
+                                )
+                                .padding(vertical = 4.dp),
+                            verticalAlignment = Alignment.CenterVertically,
+                        ) {
+                            RadioButton(
+                                selected = selectedType == type,
+                                onClick = null,
+                            )
+                            Spacer(modifier = Modifier.width(8.dp))
+                            Text(text = label, style = MaterialTheme.typography.bodyLarge)
+                        }
+                    }
+            }
+
+            Spacer(modifier = Modifier.height(4.dp))
+
+            Text(
+                text = "Vencimiento (opcional)",
+                style = MaterialTheme.typography.labelLarge,
+                color = MaterialTheme.colorScheme.onSurfaceVariant,
+            )
+
+            OutlinedButton(
+                onClick = { showDatePicker = true },
+                modifier = Modifier.fillMaxWidth(),
+            ) {
+                Text(expiresAt ?: "Seleccionar fecha de vencimiento")
+            }
+
+            Spacer(modifier = Modifier.height(8.dp))
+
+            Row(
+                modifier = Modifier.fillMaxWidth(),
+                horizontalArrangement = Arrangement.spacedBy(12.dp),
+            ) {
+                OutlinedButton(
+                    onClick = onDismiss,
+                    modifier = Modifier.weight(1f),
+                ) {
+                    Text("Cancelar")
+                }
+                FilledTonalButton(
+                    onClick = { onCreate(selectedType, expiresAt) },
+                    modifier = Modifier.weight(1f),
+                ) {
+                    Text("Crear")
+                }
+            }
+        }
+    }
+
+    if (showDatePicker) {
+        DatePickerDialog(
+            onDismissRequest = { showDatePicker = false },
+            confirmButton = {
+                TextButton(
+                    onClick = {
+                        datePickerState.selectedDateMillis?.let { millis ->
+                            val localDate = Instant.ofEpochMilli(millis)
+                                .atZone(ZoneOffset.UTC)
+                                .toLocalDate()
+                            expiresAt = localDate.atTime(23, 59, 59)
+                                .atOffset(ZoneOffset.UTC)
+                                .format(java.time.format.DateTimeFormatter.ISO_OFFSET_DATE_TIME)
+                        }
+                        showDatePicker = false
+                    },
+                ) { Text("Aceptar") }
+            },
+            dismissButton = {
+                TextButton(onClick = { showDatePicker = false }) { Text("Cancelar") }
+            },
+        ) {
+            DatePicker(state = datePickerState)
+        }
+    }
+}
+
+@Composable
+private fun WinnerSelectionDialog(
+    candidates: List<PollCandidateUiModel>,
+    onDismiss: () -> Unit,
+    onSelectWinner: (String) -> Unit,
+) {
+    AlertDialog(
+        onDismissRequest = onDismiss,
+        title = { Text("Seleccionar ganador") },
+        text = {
+            Column(verticalArrangement = Arrangement.spacedBy(8.dp)) {
+                candidates.forEach { uiModel ->
+                    Card(
+                        onClick = { onSelectWinner(uiModel.candidate.id) },
+                        modifier = Modifier.fillMaxWidth(),
+                        shape = RoundedCornerShape(8.dp),
+                    ) {
+                        Row(
+                            modifier = Modifier
+                                .fillMaxWidth()
+                                .padding(12.dp),
+                            verticalAlignment = Alignment.CenterVertically,
+                            horizontalArrangement = Arrangement.SpaceBetween,
+                        ) {
+                            Text(
+                                text = uiModel.candidate.name,
+                                style = MaterialTheme.typography.bodyMedium,
+                                fontWeight = FontWeight.Medium,
+                                modifier = Modifier.weight(1f),
+                                maxLines = 1,
+                                overflow = TextOverflow.Ellipsis,
+                            )
+                            Spacer(modifier = Modifier.width(8.dp))
+                            Row(verticalAlignment = Alignment.CenterVertically) {
+                                Icon(
+                                    Icons.Default.ThumbUp,
+                                    contentDescription = null,
+                                    modifier = Modifier.size(14.dp),
+                                    tint = MaterialTheme.colorScheme.onSurfaceVariant,
+                                )
+                                Spacer(modifier = Modifier.width(4.dp))
+                                Text(
+                                    text = "${uiModel.voteCount}",
+                                    style = MaterialTheme.typography.labelMedium,
+                                    color = MaterialTheme.colorScheme.onSurfaceVariant,
+                                )
+                            }
+                        }
+                    }
+                }
+            }
+        },
+        confirmButton = {},
+        dismissButton = {
+            TextButton(onClick = onDismiss) { Text("Cancelar") }
+        },
+    )
+}

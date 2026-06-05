@@ -71,6 +71,8 @@ import com.hllous.plantravel.ui.screens.GroupsScreen
 import com.hllous.plantravel.ui.screens.HomeScreen
 import com.hllous.plantravel.ui.screens.ItineraryScreen
 import com.hllous.plantravel.ui.screens.LoginScreen
+import com.hllous.plantravel.ui.screens.PollScreen
+import com.hllous.plantravel.presentation.poll.PollViewModel
 import com.hllous.plantravel.ui.screens.ProfileScreen
 import com.hllous.plantravel.ui.screens.ProfileSetupScreen
 import com.hllous.plantravel.ui.screens.QrScannerScreen
@@ -320,7 +322,7 @@ fun MainAppContent(
         containerColor = MaterialTheme.colorScheme.background,
         contentWindowInsets = WindowInsets(0, 0, 0, 0),
         bottomBar = {
-            if (currentRoute != "qr_scanner" && currentRoute != "profile" && !currentRoute.startsWith("itinerary")) {
+            if (currentRoute != "qr_scanner" && currentRoute != "profile" && !currentRoute.startsWith("itinerary") && currentRoute != "poll_detail") {
                 BottomNavBar(currentRoute = currentRoute, navController = navController)
             }
         },
@@ -399,6 +401,12 @@ fun MainAppContent(
                     viewModel = hiltViewModel<ItineraryViewModel>(),
                     navController = navController,
                     initialDraft = initialDraft,
+                )
+            }
+            composable("poll_detail") {
+                PollScreen(
+                    viewModel = hiltViewModel<PollViewModel>(),
+                    navController = navController,
                 )
             }
         }
