@@ -78,9 +78,21 @@ class SupabaseTravelRepositoryImpl @Inject constructor(
     private data class TravelGroupDto(
         val id: String,
         val name: String,
-        @SerialName("admin_user_id") val adminUserId: String? = null
+        @SerialName("admin_user_id") val adminUserId: String? = null,
+        @SerialName("trip_destination_place_id") val tripDestinationPlaceId: String? = null,
+        @SerialName("trip_destination_name") val tripDestinationName: String? = null,
+        @SerialName("trip_destination_lat") val tripDestinationLat: Double? = null,
+        @SerialName("trip_destination_lng") val tripDestinationLng: Double? = null,
     ) {
-        fun toDomain() = TravelGroup(id = id, name = name, adminUserId = adminUserId)
+        fun toDomain() = TravelGroup(
+            id = id,
+            name = name,
+            adminUserId = adminUserId,
+            tripDestinationPlaceId = tripDestinationPlaceId,
+            tripDestinationName = tripDestinationName,
+            tripDestinationLat = tripDestinationLat,
+            tripDestinationLng = tripDestinationLng,
+        )
     }
 
     @Serializable
@@ -481,8 +493,14 @@ class SupabaseTravelRepositoryImpl @Inject constructor(
         return Result.success(token.groupId)
     }
 
-    override suspend fun setTripDestination(groupId: String, placeId: String, name: String, lat: Double, lng: Double): Unit =
-        TODO("setTripDestination — implemented in #51")
+    override suspend fun setTripDestination(groupId: String, placeId: String, name: String, lat: Double, lng: Double) {
+        supabase.from("travel_groups").update({
+            set("trip_destination_place_id", placeId)
+            set("trip_destination_name", name)
+            set("trip_destination_lat", lat)
+            set("trip_destination_lng", lng)
+        }) { filter { eq("id", groupId) } }
+    }
 
     override fun observeItineraryEvents(groupId: String): Flow<List<ItineraryEvent>> =
         TODO("observeItineraryEvents — implemented in #53")

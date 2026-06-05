@@ -21,7 +21,7 @@ _Avoid_: Participant, traveler, person
 ### Groups & Invites
 
 **Travel Group**:
-A named collection of Group Members organized around a single trip. Has one ADMIN and zero or more USER members. Always has a single currency (ARS in MVP).
+A named collection of Group Members organized around a single trip. Has one ADMIN and zero or more USER members. Always has a single currency (ARS in MVP). Each User belongs to at most one Travel Group at a time — enforced as a hard database constraint.
 _Avoid_: Trip, team, party
 
 **Invite Token**:
@@ -35,20 +35,28 @@ _Avoid_: Exit group, quit group, remove self
 ### Trip Planning
 
 **Trip Destination**:
-The physical location a Travel Group is traveling to. Set by the ADMIN at group creation or later. Used as the anchor for destination recommendations, Place Recommendations, and weather data.
+The physical location a Travel Group is traveling to. Set by the ADMIN via the Destinations tab. Stored as a Google Place ID, a human-readable display name, and WGS-84 coordinates (latitude + longitude). The Place ID anchors Place Recommendation queries; the coordinates anchor the Google Places Nearby Search radius for Level 2 POI queries.
 _Avoid_: Location, place, city
 
 **Place Recommendation**:
-A point of interest (landmark, activity, restaurant, etc.) suggested for the Trip Destination, sourced from an external places API (Google Places primary; OpenTripMap / Foursquare as fallback).
+A point of interest suggested for the Trip Destination, sourced from Google Places. Belongs to one of four categories: Alojamiento (lodging), Gastronomía (restaurants/bars/cafes), Actividades (tourist attractions), or Naturaleza (parks/hiking). Displayed in two sections: a top section for places with rating ≥ 4.2 AND reviewCount ≥ 50 (sorted by rating × log(reviewCount) descending), and an "Otros" section below the threshold. Each Place Recommendation carries a name, photo, rating, review count, address, and Google Place ID.
 _Avoid_: Activity, suggestion, result
 
 **Group Itinerary**:
-The ordered collection of Itinerary Events for a Travel Group. Shared and editable by all Group Members.
+The ordered collection of Itinerary Events for a Travel Group. Shared and editable by all Group Members in real time. Accessed via the Destinations tab; not a separate bottom-nav tab.
 _Avoid_: Schedule, plan, agenda
 
 **Itinerary Event**:
-A single scheduled activity or milestone in the Group Itinerary, with a date, optional time, name, and optional description.
+A single scheduled activity or milestone in the Group Itinerary, with a date, optional time, name, and optional description. Can be created manually or pre-filled from a Place Recommendation via "Añadir al itinerario".
 _Avoid_: Activity, appointment, event (too generic)
+
+**Group Poll**:
+An optional, ADMIN-created vote among Group Members over a typed set of candidates. Two types: Destination Poll (candidates are Trip Destination options sourced from Level 1) and Activity Poll (candidates are Place Recommendations sourced from Level 2). The ADMIN is prompted to create a poll before committing to a destination or activity, but may skip it. Candidates are added individually or in bulk from the browse screen while the poll is active. The ADMIN creates and closes the poll; any Group Member can add Poll Candidates and cast thumbs-up votes. Only one Group Poll may be active at a time. The poll banner is dismissible by any member and recoverable via a persistent chip on the Destinations tab. An optional expiry date can be set at creation. Once closed by the ADMIN, the app prompts the ADMIN to select the winner and applies the corresponding action (set Trip Destination or add to Group Itinerary).
+_Avoid_: Survey, vote, question
+
+**Poll Candidate**:
+A single option in a Group Poll, sourced from the Places API. Carries a name, photo, and Place ID. Members can thumb-up any number of Poll Candidates; the thumbs-up count updates live via Realtime.
+_Avoid_: Option, choice, item
 
 ### Safety & Documents
 
