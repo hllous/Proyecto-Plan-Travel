@@ -20,6 +20,7 @@ import io.github.jan.supabase.postgrest.from
 import io.github.jan.supabase.postgrest.query.Columns
 import io.github.jan.supabase.realtime.PostgresAction
 import io.github.jan.supabase.realtime.channel
+import io.github.jan.supabase.realtime.broadcastFlow
 import io.github.jan.supabase.realtime.postgresChangeFlow
 import io.github.jan.supabase.realtime.realtime
 import com.hllous.plantravel.domain.settlement.ExpenseAssignmentPolicy
@@ -31,12 +32,37 @@ import java.time.format.DateTimeFormatter
 import java.util.UUID
 import javax.inject.Inject
 import javax.inject.Singleton
+import kotlinx.coroutines.coroutineScope
 import kotlinx.coroutines.flow.Flow
 import kotlinx.coroutines.flow.channelFlow
 import kotlinx.coroutines.flow.flow
+import kotlinx.coroutines.flow.map
 import kotlinx.coroutines.flow.merge
+import kotlinx.coroutines.launch
 import kotlinx.serialization.SerialName
 import kotlinx.serialization.Serializable
+import kotlinx.serialization.json.JsonObject
+import kotlinx.serialization.json.buildJsonObject
+
+internal fun isMissingExpenseGroupsColumnError(message: String?, column: String): Boolean {
+    val normalized = message?.lowercase() ?: return false
+    return "expense_groups" in normalized &&
+        column.lowercase() in normalized &&
+        (
+            "column" in normalized ||
+                "schema cache" in normalized ||
+                "could not find" in normalized
+            )
+}
+
+internal fun isMissingExpenseGroupsCategoryColumnError(message: String?): Boolean =
+    isMissingExpenseGroupsColumnError(message, "category")
+
+internal fun isMissingExpenseGroupsPinnedAtColumnError(message: String?): Boolean =
+    isMissingExpenseGroupsColumnError(message, "pinned_at")
+
+internal fun isMissingExpenseGroupsPaidByMemberIdColumnError(message: String?): Boolean =
+    isMissingExpenseGroupsColumnError(message, "paid_by_member_id")
 
 @Singleton
 class SupabaseTravelRepositoryImpl @Inject constructor(
@@ -137,6 +163,10 @@ class SupabaseTravelRepositoryImpl @Inject constructor(
         @SerialName("group_id") val groupId: String,
         val name: String,
         val state: String,
+        val category: String? = null,
+        @SerialName("created_at") val createdAt: String? = null,
+        @SerialName("pinned_at") val pinnedAt: String? = null,
+        @SerialName("paid_by_member_id") val paidByMemberId: String? = null,
         @SerialName("expense_items") val expenseItems: List<ExpenseItemSumDto> = emptyList()
     ) {
         fun toDomain() = ExpenseGroup(
@@ -144,7 +174,15 @@ class SupabaseTravelRepositoryImpl @Inject constructor(
             groupId = groupId,
             name = name,
             state = if (state == "finalized") ExpenseGroupState.Finalized else ExpenseGroupState.Open,
-            totalPriceCents = expenseItems.sumOf { it.totalPriceCents }
+            totalPriceCents = expenseItems.sumOf { it.totalPriceCents },
+            category = category,
+            createdAtMillis = createdAt?.let {
+                runCatching { OffsetDateTime.parse(it).toInstant().toEpochMilli() }.getOrNull()
+            },
+            pinnedAtMillis = pinnedAt?.let {
+                runCatching { OffsetDateTime.parse(it).toInstant().toEpochMilli() }.getOrNull()
+            },
+            paidByMemberId = paidByMemberId,
         )
     }
 
@@ -152,7 +190,8 @@ class SupabaseTravelRepositoryImpl @Inject constructor(
     private data class InsertExpenseGroupDto(
         val id: String,
         @SerialName("group_id") val groupId: String,
-        val name: String
+        val name: String,
+        val category: String? = null,
     )
 
     @Serializable
@@ -296,14 +335,35 @@ class SupabaseTravelRepositoryImpl @Inject constructor(
     override fun observeMembers(groupId: String): Flow<List<GroupMember>> = channelFlow {
         send(fetchMembers(groupId))
 
-        val channel = supabase.channel("members-$groupId-${UUID.randomUUID()}")
-        val changes = channel.postgresChangeFlow<PostgresAction>(schema = "public") {
+        // Postgres Changes: detects local inserts/updates/deletes (same-user actions work reliably)
+        val pgChannel = supabase.channel("members-$groupId-${UUID.randomUUID()}")
+        val pgChanges = pgChannel.postgresChangeFlow<PostgresAction>(schema = "public") {
             table = "group_members"
         }
-        channel.subscribe(blockUntilSubscribed = true)
+
+        // Broadcast: fallback for cross-user inserts that Postgres Changes RLS may block
+        val bcChannel = supabase.channel("members-broadcast-$groupId")
+        val broadcasts = bcChannel.broadcastFlow<JsonObject>(event = "member_joined")
+
+        coroutineScope {
+            launch { pgChannel.subscribe(blockUntilSubscribed = true) }
+            launch { bcChannel.subscribe(blockUntilSubscribed = false) }
+        }
 
         try {
-            changes.collect { send(fetchMembers(groupId)) }
+            merge(pgChanges.map { Unit }, broadcasts.map { Unit })
+                .collect { send(fetchMembers(groupId)) }
+        } finally {
+            supabase.realtime.removeChannel(pgChannel)
+            supabase.realtime.removeChannel(bcChannel)
+        }
+    }
+
+    override suspend fun broadcastMemberJoined(groupId: String) {
+        val channel = supabase.channel("members-broadcast-$groupId")
+        try {
+            channel.subscribe(blockUntilSubscribed = true)
+            channel.broadcast(event = "member_joined", message = buildJsonObject {})
         } finally {
             supabase.realtime.removeChannel(channel)
         }
@@ -424,13 +484,71 @@ class SupabaseTravelRepositoryImpl @Inject constructor(
     override suspend fun getRecommendationsByRegion(region: String): List<DestinationRecommendation> =
         throw NotImplementedError("getRecommendationsByRegion not yet implemented — see #12")
 
-    private suspend fun fetchExpenseGroups(groupId: String): List<ExpenseGroup> =
-        supabase.from("expense_groups")
-            .select(Columns.raw("id, group_id, name, state, expense_items(total_price_cents)")) {
-                filter { eq("group_id", groupId) }
+    private suspend fun fetchExpenseGroups(groupId: String): List<ExpenseGroup> {
+        val withPayer = runCatching {
+            supabase.from("expense_groups")
+                .select(Columns.raw("id, group_id, name, state, category, created_at, pinned_at, paid_by_member_id, expense_items(total_price_cents)")) {
+                    filter { eq("group_id", groupId) }
+                }
+                .decodeList<ExpenseGroupDto>()
+                .map { it.toDomain() }
+        }
+        if (withPayer.isSuccess) return withPayer.getOrThrow()
+        val topError = withPayer.exceptionOrNull()!!
+        if (!isMissingExpenseGroupsPaidByMemberIdColumnError(topError.message)) {
+            // Not a missing paid_by_member_id error — fall through to existing category/pinned_at chain
+        }
+        // Fallback: existing chain without paid_by_member_id (DTO default = null)
+        return runCatching {
+            supabase.from("expense_groups")
+                .select(Columns.raw("id, group_id, name, state, category, created_at, pinned_at, expense_items(total_price_cents)")) {
+                    filter { eq("group_id", groupId) }
+                }
+                .decodeList<ExpenseGroupDto>()
+                .map { it.toDomain() }
             }
-            .decodeList<ExpenseGroupDto>()
-            .map { it.toDomain() }
+            .getOrElse { error ->
+                when {
+                    isMissingExpenseGroupsPinnedAtColumnError(error.message) -> {
+                        runCatching {
+                            supabase.from("expense_groups")
+                                .select(Columns.raw("id, group_id, name, state, category, created_at, expense_items(total_price_cents)")) {
+                                    filter { eq("group_id", groupId) }
+                                }
+                                .decodeList<ExpenseGroupDto>()
+                                .map { it.toDomain() }
+                        }.getOrElse { fallbackError ->
+                            if (!isMissingExpenseGroupsCategoryColumnError(fallbackError.message)) throw fallbackError
+                            supabase.from("expense_groups")
+                                .select(Columns.raw("id, group_id, name, state, created_at, expense_items(total_price_cents)")) {
+                                    filter { eq("group_id", groupId) }
+                                }
+                                .decodeList<ExpenseGroupDto>()
+                                .map { it.toDomain() }
+                        }
+                    }
+                    isMissingExpenseGroupsCategoryColumnError(error.message) -> {
+                        runCatching {
+                            supabase.from("expense_groups")
+                                .select(Columns.raw("id, group_id, name, state, created_at, pinned_at, expense_items(total_price_cents)")) {
+                                    filter { eq("group_id", groupId) }
+                                }
+                                .decodeList<ExpenseGroupDto>()
+                                .map { it.toDomain() }
+                        }.getOrElse { fallbackError ->
+                            if (!isMissingExpenseGroupsPinnedAtColumnError(fallbackError.message)) throw fallbackError
+                            supabase.from("expense_groups")
+                                .select(Columns.raw("id, group_id, name, state, created_at, expense_items(total_price_cents)")) {
+                                    filter { eq("group_id", groupId) }
+                                }
+                                .decodeList<ExpenseGroupDto>()
+                                .map { it.toDomain() }
+                        }
+                    }
+                    else -> throw error
+                }
+            }
+    }
 
     override fun observeExpenseGroups(groupId: String): Flow<List<ExpenseGroup>> = channelFlow {
         send(fetchExpenseGroups(groupId))
@@ -448,11 +566,23 @@ class SupabaseTravelRepositoryImpl @Inject constructor(
         }
     }
 
-    override suspend fun createExpenseGroup(groupId: String, name: String): String {
+    override suspend fun createExpenseGroup(groupId: String, name: String, category: String?): String {
         val id = UUID.randomUUID().toString()
-        supabase.from("expense_groups")
-            .insert(InsertExpenseGroupDto(id = id, groupId = groupId, name = name))
+        runCatching {
+            supabase.from("expense_groups")
+                .insert(InsertExpenseGroupDto(id = id, groupId = groupId, name = name, category = category))
+        }.getOrElse { error ->
+            if (!isMissingExpenseGroupsCategoryColumnError(error.message)) throw error
+            supabase.from("expense_groups")
+                .insert(InsertExpenseGroupDto(id = id, groupId = groupId, name = name))
+        }
         return id
+    }
+
+    override suspend fun updateExpenseGroupName(expenseGroupId: String, name: String) {
+        supabase.from("expense_groups").update({ set("name", name) }) {
+            filter { eq("id", expenseGroupId) }
+        }
     }
 
     override suspend fun deleteExpenseGroup(expenseGroupId: String) {
@@ -465,6 +595,24 @@ class SupabaseTravelRepositoryImpl @Inject constructor(
 
     override suspend fun finalizeExpenseGroup(expenseGroupId: String) {
         supabase.from("expense_groups").update({ set("state", "finalized") }) {
+            filter { eq("id", expenseGroupId) }
+        }
+    }
+
+    override suspend fun setExpenseGroupPinned(expenseGroupId: String, pinned: Boolean) {
+        supabase.from("expense_groups").update({
+            if (pinned) {
+                set("pinned_at", Instant.now().atOffset(ZoneOffset.UTC).format(DateTimeFormatter.ISO_OFFSET_DATE_TIME))
+            } else {
+                set<String?>("pinned_at", null)
+            }
+        }) {
+            filter { eq("id", expenseGroupId) }
+        }
+    }
+
+    override suspend fun setExpenseGroupPayer(expenseGroupId: String, memberId: String) {
+        supabase.from("expense_groups").update({ set("paid_by_member_id", memberId) }) {
             filter { eq("id", expenseGroupId) }
         }
     }

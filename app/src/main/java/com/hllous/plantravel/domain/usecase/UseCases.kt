@@ -105,8 +105,16 @@ class CalculateSettlementUseCase @Inject constructor(
 class CreateExpenseGroupUseCase @Inject constructor(
     private val repository: TravelRepository
 ) {
-    suspend operator fun invoke(groupId: String, name: String): String =
-        repository.createExpenseGroup(groupId, name.trim())
+    suspend operator fun invoke(groupId: String, name: String, category: String? = null): String =
+        repository.createExpenseGroup(groupId, name.trim(), category)
+}
+
+class UpdateExpenseGroupNameUseCase @Inject constructor(
+    private val repository: TravelRepository
+) {
+    suspend operator fun invoke(expenseGroupId: String, name: String) {
+        repository.updateExpenseGroupName(expenseGroupId, name.trim())
+    }
 }
 
 class DeleteExpenseGroupUseCase @Inject constructor(
@@ -122,6 +130,22 @@ class FinalizeExpenseGroupUseCase @Inject constructor(
 ) {
     suspend operator fun invoke(expenseGroupId: String) {
         repository.finalizeExpenseGroup(expenseGroupId)
+    }
+}
+
+class SetExpenseGroupPinnedUseCase @Inject constructor(
+    private val repository: TravelRepository
+) {
+    suspend operator fun invoke(expenseGroupId: String, pinned: Boolean) {
+        repository.setExpenseGroupPinned(expenseGroupId, pinned)
+    }
+}
+
+class SetExpenseGroupPayerUseCase @Inject constructor(
+    private val repository: TravelRepository
+) {
+    suspend operator fun invoke(expenseGroupId: String, memberId: String) {
+        repository.setExpenseGroupPayer(expenseGroupId, memberId)
     }
 }
 

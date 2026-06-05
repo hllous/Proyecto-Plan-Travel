@@ -12,6 +12,9 @@ import com.hllous.plantravel.domain.usecase.CreateExpenseGroupUseCase
 import com.hllous.plantravel.domain.usecase.DeleteExpenseGroupUseCase
 import com.hllous.plantravel.domain.usecase.DeleteExpenseItemUseCase
 import com.hllous.plantravel.domain.usecase.FinalizeExpenseGroupUseCase
+import com.hllous.plantravel.domain.usecase.SetExpenseGroupPayerUseCase
+import com.hllous.plantravel.domain.usecase.SetExpenseGroupPinnedUseCase
+import com.hllous.plantravel.domain.usecase.UpdateExpenseGroupNameUseCase
 import com.hllous.plantravel.presentation.expense.ExpenseViewModel
 import com.hllous.plantravel.presentation.group.SelectedGroupHolder
 import kotlinx.coroutines.CoroutineScope
@@ -50,8 +53,11 @@ class ExpenseViewModelRealtimeTest {
         deleteExpenseItemUseCase = DeleteExpenseItemUseCase(repo),
         calculateSettlementUseCase = CalculateSettlementUseCase(repo),
         createExpenseGroupUseCase = CreateExpenseGroupUseCase(repo),
+        updateExpenseGroupNameUseCase = UpdateExpenseGroupNameUseCase(repo),
         deleteExpenseGroupUseCase = DeleteExpenseGroupUseCase(repo),
         finalizeExpenseGroupUseCase = FinalizeExpenseGroupUseCase(repo),
+        setExpenseGroupPinnedUseCase = SetExpenseGroupPinnedUseCase(repo),
+        setExpenseGroupPayerUseCase = SetExpenseGroupPayerUseCase(repo),
     )
 
     // Starts a collector on the given suspend block and returns a scope to cancel it.

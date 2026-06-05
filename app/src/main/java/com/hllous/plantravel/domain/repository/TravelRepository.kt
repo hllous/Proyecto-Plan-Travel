@@ -25,6 +25,7 @@ interface TravelRepository {
     suspend fun generateInvite(groupId: String): InviteToken
     suspend fun deleteInvite(code: String)
     suspend fun consumeInvite(code: String, userId: String, displayName: String): Result<String>
+    suspend fun broadcastMemberJoined(groupId: String)
 
     suspend fun getMpAlias(userId: String): String?
     suspend fun updateMpAlias(alias: String)
@@ -37,9 +38,12 @@ interface TravelRepository {
     suspend fun getRecommendationsByRegion(region: String): List<DestinationRecommendation>
 
     fun observeExpenseGroups(groupId: String): Flow<List<ExpenseGroup>>
-    suspend fun createExpenseGroup(groupId: String, name: String): String
+    suspend fun createExpenseGroup(groupId: String, name: String, category: String? = null): String
+    suspend fun updateExpenseGroupName(expenseGroupId: String, name: String)
     suspend fun deleteExpenseGroup(expenseGroupId: String)
     suspend fun finalizeExpenseGroup(expenseGroupId: String)
+    suspend fun setExpenseGroupPinned(expenseGroupId: String, pinned: Boolean)
+    suspend fun setExpenseGroupPayer(expenseGroupId: String, memberId: String)
 
     fun observeExpenseItems(expenseGroupId: String): Flow<List<ExpenseItem>>
     fun observeAssignments(expenseGroupId: String): Flow<List<ItemAssignment>>

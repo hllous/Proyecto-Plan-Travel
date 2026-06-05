@@ -31,10 +31,14 @@ class FakeTravelRepository(
     var calculateSettlementThrows: Boolean = false,
     var assignItemThrows: Boolean = false,
     var createExpenseGroupThrows: Boolean = false,
+    var updateExpenseGroupNameThrows: Boolean = false,
     var deleteExpenseGroupThrows: Boolean = false,
     var finalizeExpenseGroupThrows: Boolean = false,
+    var setExpenseGroupPinnedThrows: Boolean = false,
+    var setExpenseGroupPayerThrows: Boolean = false,
     var mpAliasByUserId: Map<String, String?> = emptyMap(),
     var updateMpAliasThrows: Boolean = false,
+    var settlementResultsByExpenseGroupId: Map<String, SettlementResult> = emptyMap(),
     initialGroups: List<TravelGroup> = emptyList(),
     initialMembers: Map<String, List<GroupMember>> = emptyMap(),
     initialExpenseItems: Map<String, List<ExpenseItem>> = emptyMap(),
@@ -42,6 +46,7 @@ class FakeTravelRepository(
     val customObserveGroups: (() -> Flow<List<TravelGroup>>)? = null,
     val customObserveMembers: ((String) -> Flow<List<GroupMember>>)? = null,
     val customObserveInvites: ((String) -> Flow<List<InviteToken>>)? = null,
+    val customObserveExpenseGroups: ((String) -> Flow<List<ExpenseGroup>>)? = null,
 ) : TravelRepository {
 
     private val _groups = MutableStateFlow(initialGroups)
@@ -55,7 +60,12 @@ class FakeTravelRepository(
     var addExpenseItemCallCount = 0
     var deleteExpenseItemCallCount = 0
     var assignItemCallCount = 0
+    var createExpenseGroupCallCount = 0
+    var updateExpenseGroupNameCallCount = 0
     var finalizeExpenseGroupCallCount = 0
+    var setExpenseGroupPinnedCallCount = 0
+    var setExpenseGroupPayerCallCount = 0
+    var lastCreatedExpenseGroupCategory: String? = null
 
     override fun observeGroups(): Flow<List<TravelGroup>> = customObserveGroups?.invoke() ?: _groups
     override fun observeMembers(groupId: String): Flow<List<GroupMember>> =
@@ -101,16 +111,35 @@ class FakeTravelRepository(
         return consumeInviteResult
     }
 
-    override fun observeExpenseGroups(groupId: String): Flow<List<ExpenseGroup>> =
-        _expenseGroupsByGroup.map { it[groupId] ?: emptyList() }
+    override suspend fun broadcastMemberJoined(groupId: String) = Unit
 
-    override suspend fun createExpenseGroup(groupId: String, name: String): String {
+    override fun observeExpenseGroups(groupId: String): Flow<List<ExpenseGroup>> =
+        customObserveExpenseGroups?.invoke(groupId) ?: _expenseGroupsByGroup.map { it[groupId] ?: emptyList() }
+
+    override suspend fun createExpenseGroup(groupId: String, name: String, category: String?): String {
         if (createExpenseGroupThrows) throw RuntimeException("network error")
-        val group = ExpenseGroup(id = "fake-expense-group-id", groupId = groupId, name = name, state = ExpenseGroupState.Open, totalPriceCents = 0)
+        createExpenseGroupCallCount++
+        lastCreatedExpenseGroupCategory = category
+        val group = ExpenseGroup(
+            id = "fake-expense-group-id",
+            groupId = groupId,
+            name = name,
+            state = ExpenseGroupState.Open,
+            totalPriceCents = 0,
+            category = category,
+        )
         val current = _expenseGroupsByGroup.value.toMutableMap()
         current[groupId] = (current[groupId] ?: emptyList()) + group
         _expenseGroupsByGroup.value = current
         return group.id
+    }
+
+    override suspend fun updateExpenseGroupName(expenseGroupId: String, name: String) {
+        if (updateExpenseGroupNameThrows) throw RuntimeException("network error")
+        updateExpenseGroupNameCallCount++
+        _expenseGroupsByGroup.value = _expenseGroupsByGroup.value.mapValues { (_, groups) ->
+            groups.map { if (it.id == expenseGroupId) it.copy(name = name) else it }
+        }
     }
 
     override suspend fun deleteExpenseGroup(expenseGroupId: String) {
@@ -124,6 +153,27 @@ class FakeTravelRepository(
         finalizeExpenseGroupCallCount++
         _expenseGroupsByGroup.value = _expenseGroupsByGroup.value.mapValues { (_, groups) ->
             groups.map { if (it.id == expenseGroupId) it.copy(state = ExpenseGroupState.Finalized) else it }
+        }
+    }
+
+    override suspend fun setExpenseGroupPinned(expenseGroupId: String, pinned: Boolean) {
+        if (setExpenseGroupPinnedThrows) throw RuntimeException("network error")
+        setExpenseGroupPinnedCallCount++
+        val pinnedAtMillis = if (pinned) System.currentTimeMillis() else null
+        _expenseGroupsByGroup.value = _expenseGroupsByGroup.value.mapValues { (_, groups) ->
+            groups.map {
+                if (it.id == expenseGroupId) it.copy(pinnedAtMillis = pinnedAtMillis) else it
+            }
+        }
+    }
+
+    override suspend fun setExpenseGroupPayer(expenseGroupId: String, memberId: String) {
+        if (setExpenseGroupPayerThrows) throw RuntimeException("network error")
+        setExpenseGroupPayerCallCount++
+        _expenseGroupsByGroup.value = _expenseGroupsByGroup.value.mapValues { (_, groups) ->
+            groups.map {
+                if (it.id == expenseGroupId) it.copy(paidByMemberId = memberId) else it
+            }
         }
     }
 
@@ -176,6 +226,9 @@ class FakeTravelRepository(
     override suspend fun calculateSettlement(expenseGroupId: String): SettlementResult {
         if (calculateSettlementThrows) throw RuntimeException("network error")
         calculateSettlementCallCount++
-        return settlementResult
+        return settlementResultsByExpenseGroupId[expenseGroupId] ?: settlementResult
     }
+
+    fun getExpenseGroupsSnapshot(groupId: String): List<ExpenseGroup> =
+        _expenseGroupsByGroup.value[groupId] ?: emptyList()
 }

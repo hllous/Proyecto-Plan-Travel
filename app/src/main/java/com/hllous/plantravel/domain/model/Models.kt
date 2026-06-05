@@ -106,5 +106,9 @@ data class ExpenseGroup(
     val groupId: String,
     val name: String,
     val state: ExpenseGroupState,
-    val totalPriceCents: Long
+    val totalPriceCents: Long,
+    val category: String? = null,
+    val createdAtMillis: Long? = null,
+    val pinnedAtMillis: Long? = null,
+    val paidByMemberId: String? = null,
 )

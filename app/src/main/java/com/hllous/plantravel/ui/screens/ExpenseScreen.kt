@@ -8,10 +8,12 @@ import androidx.compose.animation.shrinkVertically
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
+import androidx.compose.foundation.layout.IntrinsicSize
 import androidx.compose.foundation.layout.PaddingValues
 import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.Spacer
 import androidx.compose.foundation.layout.WindowInsets
+import androidx.compose.foundation.layout.fillMaxHeight
 import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.height
@@ -19,24 +21,42 @@ import androidx.compose.foundation.layout.imePadding
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.layout.width
+import androidx.compose.foundation.rememberScrollState
+import androidx.compose.foundation.verticalScroll
 import androidx.compose.foundation.lazy.LazyColumn
-import androidx.compose.material3.LinearProgressIndicator
 import androidx.compose.foundation.lazy.LazyRow
 import androidx.compose.foundation.lazy.items
+import androidx.compose.foundation.combinedClickable
 import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.ui.draw.clip
+import androidx.compose.foundation.background
+import androidx.compose.foundation.border
+import androidx.compose.foundation.ExperimentalFoundationApi
+import androidx.compose.ui.graphics.Brush
+import androidx.compose.ui.graphics.Color
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.filled.Add
 import androidx.compose.material.icons.automirrored.filled.ArrowBack
+import androidx.compose.material.icons.filled.ArrowDropDown
 import androidx.compose.material.icons.filled.Close
 import androidx.compose.material.icons.filled.Delete
 import androidx.compose.material.icons.filled.Warning
+import androidx.compose.material.icons.filled.Fastfood
+import androidx.compose.material.icons.filled.DirectionsCar
+import androidx.compose.material.icons.filled.Hotel
+import androidx.compose.material.icons.filled.LocalActivity
+import androidx.compose.material.icons.filled.MoreHoriz
+import androidx.compose.material3.FilterChip
+import androidx.compose.material3.FilterChipDefaults
+import androidx.compose.material3.Switch
+import androidx.compose.ui.graphics.vector.ImageVector
 import androidx.compose.material3.AlertDialog
 import androidx.compose.material3.Button
+import androidx.compose.material3.DropdownMenu
+import androidx.compose.material3.DropdownMenuItem
 import androidx.compose.material3.ElevatedCard
 import androidx.compose.material3.ExperimentalMaterial3Api
-import androidx.compose.material3.ExtendedFloatingActionButton
 import androidx.compose.material3.HorizontalDivider
 import androidx.compose.material3.Icon
 import androidx.compose.material3.IconButton
@@ -71,8 +91,14 @@ import androidx.compose.ui.layout.onSizeChanged
 import androidx.compose.ui.platform.LocalDensity
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.style.TextAlign
+import androidx.compose.foundation.layout.offset
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
+import java.text.SimpleDateFormat
+import java.text.NumberFormat
+import java.util.Date
+import java.util.Locale
+import kotlin.math.abs
 import androidx.navigation.NavHostController
 import com.hllous.plantravel.domain.model.ExpenseGroup
 import com.hllous.plantravel.domain.model.ExpenseGroupState
@@ -100,6 +126,7 @@ fun ExpenseScreen(viewModel: ExpenseViewModel, navController: NavHostController)
     val selectedExpenseGroupId by viewModel.selectedExpenseGroupId.collectAsState()
     val expenseItemsUiState by viewModel.expenseItemsUiState.collectAsState()
     val members by viewModel.members.collectAsState(initial = emptyList())
+    val travelGroups by viewModel.groups.collectAsState(initial = emptyList())
     val items by viewModel.expenseItems.collectAsState(initial = emptyList())
     val assignments by viewModel.assignments.collectAsState(initial = emptyList())
     val settlements by viewModel.settlements.collectAsState(initial = emptyList())
@@ -108,7 +135,9 @@ fun ExpenseScreen(viewModel: ExpenseViewModel, navController: NavHostController)
     val peerToPerDebtsWithLinks by viewModel.peerToPerDebtsWithLinks.collectAsState(initial = emptyList())
     val selectedGroupId by viewModel.selectedGroupId.collectAsState(initial = null)
     val currentMember by viewModel.currentMember.collectAsState(initial = null)
+    val dashboardState by viewModel.dashboardState.collectAsState()
     val currentMemberId: String? = currentMember?.id
+    val selectedTravelGroup = travelGroups.firstOrNull { it.id == selectedGroupId }
 
     val snackbarHostState = remember { SnackbarHostState() }
     val message by viewModel.message.collectAsState()
@@ -125,16 +154,29 @@ fun ExpenseScreen(viewModel: ExpenseViewModel, navController: NavHostController)
         // ── Expense Group List ─────────────────────────────────────────────
         ExpenseGroupListScreen(
             groups = expenseGroups,
+            members = members,
+            travelGroupName = selectedTravelGroup?.name ?: "Tu grupo",
+            dashboardState = dashboardState,
             snackbarHostState = snackbarHostState,
             scrollBehavior = scrollBehavior,
-            onCreateGroup = { name -> viewModel.createExpenseGroup(name) },
+            onCreateGroup = { name, category, onSuccess ->
+                viewModel.createExpenseGroup(name, category, onSuccess)
+            },
+            onRenameGroup = { id, name -> viewModel.renameExpenseGroup(id, name) },
             onDeleteGroup = { id -> viewModel.deleteExpenseGroup(id) },
+            onSetGroupPinned = { id, pinned -> viewModel.setExpenseGroupPinned(id, pinned) },
             onSelectGroup = { id -> viewModel.selectExpenseGroup(id) },
         )
     } else {
         // ── Expense Item Drill-in ──────────────────────────────────────────
         val selectedGroup = expenseGroups.firstOrNull { it.id == selectedExpenseGroupId }
         val isFinalized = selectedGroup?.state == ExpenseGroupState.Finalized
+        val payerMember = members.firstOrNull { it.id == selectedGroup?.paidByMemberId }
+        val isPayerView = currentMemberId != null && currentMemberId == selectedGroup?.paidByMemberId
+        val myDebtAmountCents = if (isPayerView)
+            peerToPerDebts.sumOf { it.amountCents }
+        else
+            settlements.firstOrNull { it.memberId == currentMemberId }?.amountCents ?: 0L
         val totalCents = items.sumOf { it.totalPriceCents }
         val pendingCents = calculatePendingCents(settlementWarnings)
         val density = LocalDensity.current
@@ -144,6 +186,7 @@ fun ExpenseScreen(viewModel: ExpenseViewModel, navController: NavHostController)
         var addItemExpanded by rememberSaveable { mutableStateOf(false) }
         var settlementsExpanded by rememberSaveable { mutableStateOf(false) }
         var showFinalizeDialog by rememberSaveable { mutableStateOf(false) }
+        var divideEqually by rememberSaveable { mutableStateOf(false) }
         var itemName by rememberSaveable { mutableStateOf("") }
         var price by rememberSaveable { mutableStateOf("") }
         var quantity by rememberSaveable { mutableStateOf("") }
@@ -183,7 +226,7 @@ fun ExpenseScreen(viewModel: ExpenseViewModel, navController: NavHostController)
                         scrollBehavior = scrollBehavior,
                         colors = TopAppBarDefaults.largeTopAppBarColors(
                             containerColor = MaterialTheme.colorScheme.primary,
-                            scrolledContainerColor = MaterialTheme.colorScheme.primaryContainer,
+                            scrolledContainerColor = MaterialTheme.colorScheme.primary,
                             titleContentColor = MaterialTheme.colorScheme.onPrimary,
                             navigationIconContentColor = MaterialTheme.colorScheme.onPrimary,
                             actionIconContentColor = MaterialTheme.colorScheme.onPrimary,
@@ -196,12 +239,11 @@ fun ExpenseScreen(viewModel: ExpenseViewModel, navController: NavHostController)
                         .fillMaxSize()
                         .padding(innerPadding),
                 ) {
-                    if (selectedGroupId != null) {
-                        ExpenseSummaryStrip(
-                            totalCents = totalCents,
-                            pendingCents = pendingCents,
-                        )
-                    }
+                    ExpenseHeroCard(
+                        group = selectedGroup,
+                        totalCents = totalCents,
+                        pendingCents = pendingCents,
+                    )
 
                     LazyColumn(
                         modifier = Modifier
@@ -237,6 +279,90 @@ fun ExpenseScreen(viewModel: ExpenseViewModel, navController: NavHostController)
                                         }
                                     },
                                 )
+                            }
+                        }
+
+                        item {
+                            PayerSelectorCard(
+                                paidByMemberId = selectedGroup?.paidByMemberId,
+                                payerMember = payerMember,
+                                members = members,
+                                isAdmin = currentMember?.role == MemberRole.ADMIN,
+                                isFinalized = isFinalized,
+                                onPayerSelected = { memberId -> viewModel.setPayer(memberId) },
+                            )
+                        }
+
+                        item {
+                            Row(
+                                modifier = Modifier
+                                    .fillMaxWidth()
+                                    .padding(horizontal = 4.dp, vertical = 2.dp),
+                                horizontalArrangement = Arrangement.SpaceBetween,
+                                verticalAlignment = Alignment.CenterVertically,
+                            ) {
+                                Text(
+                                    text = "ITEMS",
+                                    style = MaterialTheme.typography.labelSmall,
+                                    fontWeight = FontWeight.ExtraBold,
+                                    letterSpacing = 0.1.sp,
+                                    color = MaterialTheme.colorScheme.onSurfaceVariant,
+                                )
+                                if (!isFinalized) {
+                                    TextButton(
+                                        onClick = {
+                                            addItemExpanded = true
+                                            settlementsExpanded = false
+                                        },
+                                        contentPadding = PaddingValues(horizontal = 8.dp, vertical = 4.dp),
+                                    ) {
+                                        Icon(
+                                            Icons.Default.Add,
+                                            contentDescription = null,
+                                            modifier = Modifier.size(15.dp),
+                                        )
+                                        Spacer(Modifier.width(3.dp))
+                                        Text(
+                                            "Añadir item",
+                                            style = MaterialTheme.typography.labelMedium,
+                                            fontWeight = FontWeight.SemiBold,
+                                        )
+                                    }
+                                }
+                            }
+                        }
+
+                        if (!isFinalized && items.isNotEmpty()) {
+                            item {
+                                Row(
+                                    modifier = Modifier
+                                        .fillMaxWidth()
+                                        .padding(horizontal = 4.dp, vertical = 6.dp),
+                                    verticalAlignment = Alignment.CenterVertically,
+                                    horizontalArrangement = Arrangement.SpaceBetween,
+                                ) {
+                                    Column(verticalArrangement = Arrangement.spacedBy(1.dp)) {
+                                        Text(
+                                            text = "Dividir todo por igual",
+                                            style = MaterialTheme.typography.bodyMedium,
+                                            fontWeight = FontWeight.SemiBold,
+                                            color = MaterialTheme.colorScheme.onSurface,
+                                        )
+                                        Text(
+                                            text = "Asigna cantidades iguales a cada miembro",
+                                            style = MaterialTheme.typography.bodySmall,
+                                            color = MaterialTheme.colorScheme.onSurfaceVariant,
+                                        )
+                                    }
+                                    Switch(
+                                        checked = divideEqually,
+                                        onCheckedChange = { checked ->
+                                            divideEqually = checked
+                                            if (checked) viewModel.divideEqually()
+                                            else viewModel.resetAllAssignments()
+                                        },
+                                    )
+                                }
                             }
                         }
 
@@ -276,20 +402,6 @@ fun ExpenseScreen(viewModel: ExpenseViewModel, navController: NavHostController)
                 }
             }
 
-            if (!isFinalized) {
-                ExtendedFloatingActionButton(
-                    onClick = {
-                        addItemExpanded = true
-                        settlementsExpanded = false
-                    },
-                    icon = { Icon(Icons.Default.Add, contentDescription = null) },
-                    text = { Text("Agregar gasto") },
-                    modifier = Modifier
-                        .align(Alignment.BottomEnd)
-                        .padding(bottom = bottomPanelHeightDp + 16.dp, end = 16.dp),
-                )
-            }
-
             Box(
                 modifier = Modifier
                     .align(Alignment.BottomCenter)
@@ -298,8 +410,10 @@ fun ExpenseScreen(viewModel: ExpenseViewModel, navController: NavHostController)
             ) {
                 ExpenseBottomPanel(
                     member = currentMember,
-                    amountCents = settlements
-                        .firstOrNull { it.memberId == currentMemberId }?.amountCents ?: 0L,
+                    amountCents = myDebtAmountCents,
+                    isPayerView = isPayerView,
+                    hasPayer = selectedGroup?.paidByMemberId != null,
+                    payerMember = payerMember,
                     settlements = settlements,
                     peerToPerDebts = peerToPerDebtsWithLinks,
                     currentMemberId = currentMemberId,
@@ -334,15 +448,48 @@ fun ExpenseScreen(viewModel: ExpenseViewModel, navController: NavHostController)
 @Composable
 private fun ExpenseGroupListScreen(
     groups: List<ExpenseGroup>,
+    members: List<GroupMember>,
+    travelGroupName: String,
+    dashboardState: ExpenseViewModel.ExpenseDashboardState,
     snackbarHostState: SnackbarHostState,
     scrollBehavior: androidx.compose.material3.TopAppBarScrollBehavior,
-    onCreateGroup: (String) -> Unit,
+    onCreateGroup: (String, String?, () -> Unit) -> Unit,
+    onRenameGroup: (String, String) -> Unit,
     onDeleteGroup: (String) -> Unit,
+    onSetGroupPinned: (String, Boolean) -> Unit,
     onSelectGroup: (String) -> Unit,
 ) {
-    var createPanelExpanded by rememberSaveable { mutableStateOf(false) }
-    var groupName by rememberSaveable { mutableStateOf("") }
-    var groupToDelete by remember { mutableStateOf<ExpenseGroup?>(null) }
+    var showCreateScreen by rememberSaveable { mutableStateOf(false) }
+    var showAllMovements by rememberSaveable { mutableStateOf(false) }
+    var groupOptionsTarget by remember { mutableStateOf<ExpenseViewModel.ExpenseDashboardMovement?>(null) }
+    var renameTarget by remember { mutableStateOf<ExpenseViewModel.ExpenseDashboardMovement?>(null) }
+    var renameValue by rememberSaveable { mutableStateOf("") }
+
+    if (showCreateScreen) {
+        CreateExpenseGroupScreen(
+            onDismiss = { showCreateScreen = false },
+            onConfirm = { name, category ->
+                onCreateGroup(name, category) {
+                    showCreateScreen = false
+                }
+            },
+        )
+        return
+    }
+
+    val recentMovements = if (showAllMovements) {
+        dashboardState.recentMovements
+    } else {
+        dashboardState.recentMovements.take(3)
+    }
+    val pinnedMovements = dashboardState.pinnedMovements
+    val primaryGroup = (pinnedMovements + dashboardState.recentMovements).firstOrNull()?.group
+
+    fun openRenameDialog(movement: ExpenseViewModel.ExpenseDashboardMovement) {
+        renameTarget = movement
+        renameValue = movement.group.name
+        groupOptionsTarget = null
+    }
 
     Box(modifier = Modifier.fillMaxSize()) {
         Scaffold(
@@ -361,7 +508,7 @@ private fun ExpenseGroupListScreen(
                     scrollBehavior = scrollBehavior,
                     colors = TopAppBarDefaults.largeTopAppBarColors(
                         containerColor = MaterialTheme.colorScheme.primary,
-                        scrolledContainerColor = MaterialTheme.colorScheme.primaryContainer,
+                        scrolledContainerColor = MaterialTheme.colorScheme.primary,
                         titleContentColor = MaterialTheme.colorScheme.onPrimary,
                     ),
                 )
@@ -371,85 +518,588 @@ private fun ExpenseGroupListScreen(
                 modifier = Modifier
                     .fillMaxSize()
                     .padding(innerPadding),
-                contentPadding = PaddingValues(horizontal = 16.dp, vertical = 12.dp),
-                verticalArrangement = Arrangement.spacedBy(10.dp),
+                contentPadding = PaddingValues(horizontal = 16.dp, vertical = 18.dp),
+                verticalArrangement = Arrangement.spacedBy(18.dp),
             ) {
-                if (createPanelExpanded) {
+                item {
+                    ExpenseSharedHeader(
+                        travelGroupName = travelGroupName,
+                        members = members,
+                    )
+                }
+
+                item {
+                    ExpenseOverviewCard(
+                        totalCents = dashboardState.totalCents,
+                        pendingGroupsCount = dashboardState.pendingGroupsCount,
+                        onDetailClick = { primaryGroup?.let { onSelectGroup(it.id) } },
+                    )
+                }
+
+                item {
+                    ExpenseBalanceCard(memberNetCents = dashboardState.memberNetCents)
+                }
+
+                item {
+                    ExpenseMainActionButton(
+                        label = "Agregar gasto",
+                        containerBrush = Brush.horizontalGradient(
+                            listOf(
+                                MaterialTheme.colorScheme.primary,
+                                MaterialTheme.colorScheme.primary.copy(alpha = 0.88f),
+                            )
+                        ),
+                        contentColor = MaterialTheme.colorScheme.onPrimary,
+                        onClick = { showCreateScreen = true },
+                    )
+                }
+
+                if (pinnedMovements.isNotEmpty()) {
                     item {
-                        AddExpenseGroupPanel(
-                            groupName = groupName,
-                            onGroupNameChange = { groupName = it },
-                            onDismiss = { createPanelExpanded = false; groupName = "" },
-                            onConfirm = {
-                                if (groupName.isNotBlank()) {
-                                    onCreateGroup(groupName)
-                                    groupName = ""
-                                    createPanelExpanded = false
-                                }
-                            },
+                        Text(
+                            text = "Fijados",
+                            fontFamily = FrauncesFamily,
+                            fontWeight = FontWeight.Medium,
+                            fontSize = 17.sp,
+                            color = MaterialTheme.colorScheme.onSurface,
+                        )
+                    }
+                    items(pinnedMovements) { movement ->
+                        ExpenseRecentMovementCard(
+                            movement = movement,
+                            onClick = { onSelectGroup(movement.group.id) },
+                            onLongPress = { groupOptionsTarget = movement },
                         )
                     }
                 }
 
-                if (groups.isEmpty() && !createPanelExpanded) {
+                item {
+                    Row(
+                        modifier = Modifier.fillMaxWidth(),
+                        horizontalArrangement = Arrangement.SpaceBetween,
+                        verticalAlignment = Alignment.CenterVertically,
+                    ) {
+                        Text(
+                            text = "Movimientos recientes",
+                            fontFamily = FrauncesFamily,
+                            fontWeight = FontWeight.Medium,
+                            fontSize = 17.sp,
+                            color = MaterialTheme.colorScheme.onSurface,
+                        )
+                        if (dashboardState.recentMovements.size > 3) {
+                            TextButton(onClick = { showAllMovements = !showAllMovements }) {
+                                Text(if (showAllMovements) "Ver menos" else "Ver todos")
+                            }
+                        }
+                    }
+                }
+
+                if (recentMovements.isEmpty()) {
                     item {
-                        Box(
-                            modifier = Modifier
-                                .fillMaxWidth()
-                                .padding(vertical = 48.dp),
-                            contentAlignment = Alignment.Center,
+                        Surface(
+                            shape = RoundedCornerShape(24.dp),
+                            color = MaterialTheme.colorScheme.surfaceContainerLowest,
+                            modifier = Modifier.fillMaxWidth(),
                         ) {
-                            Text(
-                                text = "Creá un grupo de gastos para empezar a repartir.",
-                                style = MaterialTheme.typography.bodyMedium,
-                                color = MaterialTheme.colorScheme.onSurfaceVariant,
-                                textAlign = TextAlign.Center,
-                            )
+                            Column(
+                                modifier = Modifier.padding(horizontal = 20.dp, vertical = 28.dp),
+                                horizontalAlignment = Alignment.CenterHorizontally,
+                                verticalArrangement = Arrangement.spacedBy(10.dp),
+                            ) {
+                                Text(
+                                    text = "No hay movimientos todavía",
+                                    style = MaterialTheme.typography.titleMedium,
+                                    fontWeight = FontWeight.SemiBold,
+                                    color = MaterialTheme.colorScheme.onSurface,
+                                )
+                                Text(
+                                    text = "Creá tu primer gasto para empezar a dividir el viaje.",
+                                    style = MaterialTheme.typography.bodyMedium,
+                                    color = MaterialTheme.colorScheme.onSurfaceVariant,
+                                    textAlign = TextAlign.Center,
+                                )
+                            }
                         }
                     }
                 } else {
-                    items(groups) { group ->
-                        ExpenseGroupCard(
-                            group = group,
-                            onClick = { onSelectGroup(group.id) },
-                            onDelete = { groupToDelete = group },
+                    items(recentMovements) { movement ->
+                        ExpenseRecentMovementCard(
+                            movement = movement,
+                            onClick = { onSelectGroup(movement.group.id) },
+                            onLongPress = { groupOptionsTarget = movement },
                         )
                     }
                 }
             }
         }
 
-        ExtendedFloatingActionButton(
-            onClick = { createPanelExpanded = true },
-            icon = { Icon(Icons.Default.Add, contentDescription = null) },
-            text = { Text("Nuevo grupo") },
-            modifier = Modifier
-                .align(Alignment.BottomEnd)
-                .padding(bottom = 16.dp, end = 16.dp),
+    }
+
+    groupOptionsTarget?.let { movement ->
+        ExpenseGroupOptionsDialog(
+            group = movement.group,
+            onDismiss = { groupOptionsTarget = null },
+            onRename = { openRenameDialog(movement) },
+            onDelete = {
+                onDeleteGroup(movement.group.id)
+                groupOptionsTarget = null
+            },
+            onTogglePin = {
+                onSetGroupPinned(movement.group.id, movement.group.pinnedAtMillis == null)
+                groupOptionsTarget = null
+            },
         )
     }
 
-    groupToDelete?.let { group ->
+    if (renameTarget != null) {
         AlertDialog(
-            onDismissRequest = { groupToDelete = null },
-            title = { Text("Eliminar grupo") },
-            text = { Text("¿Eliminar \"${group.name}\"? Esta acción no se puede deshacer.") },
+            onDismissRequest = { renameTarget = null },
+            title = { Text("Renombrar grupo") },
+            text = {
+                OutlinedTextField(
+                    value = renameValue,
+                    onValueChange = { renameValue = it },
+                    label = { Text("Nombre") },
+                    singleLine = true,
+                    modifier = Modifier.fillMaxWidth(),
+                    colors = travelTextFieldColors(),
+                )
+            },
             confirmButton = {
-                Button(
+                TextButton(
                     onClick = {
-                        onDeleteGroup(group.id)
-                        groupToDelete = null
-                    },
-                    colors = androidx.compose.material3.ButtonDefaults.buttonColors(
-                        containerColor = MaterialTheme.colorScheme.error,
-                    ),
-                ) { Text("Eliminar") }
+                        val target = renameTarget ?: return@TextButton
+                        onRenameGroup(target.group.id, renameValue)
+                        renameTarget = null
+                    }
+                ) {
+                    Text("Guardar")
+                }
             },
             dismissButton = {
-                TextButton(onClick = { groupToDelete = null }) { Text("Cancelar") }
+                TextButton(onClick = { renameTarget = null }) {
+                    Text("Cancelar")
+                }
             },
         )
     }
+}
+
+@Composable
+private fun ExpenseSharedHeader(
+    travelGroupName: String,
+    members: List<GroupMember>,
+) {
+    Column(
+        modifier = Modifier.fillMaxWidth(),
+        horizontalAlignment = Alignment.CenterHorizontally,
+        verticalArrangement = Arrangement.spacedBy(10.dp),
+    ) {
+        Text(
+            text = "Gastos compartidos",
+            fontFamily = FrauncesFamily,
+            fontWeight = FontWeight.Bold,
+            fontSize = 24.sp,
+            color = MaterialTheme.colorScheme.primary,
+        )
+        Text(
+            text = travelGroupName,
+            style = MaterialTheme.typography.titleMedium,
+            color = MaterialTheme.colorScheme.onSurfaceVariant,
+        )
+        ExpenseAvatarCluster(members = members)
+    }
+}
+
+@Composable
+private fun ExpenseAvatarCluster(members: List<GroupMember>) {
+    val visibleMembers = members.take(3)
+    val overflow = members.size - visibleMembers.size
+
+    Row(
+        horizontalArrangement = Arrangement.spacedBy((-10).dp),
+        verticalAlignment = Alignment.CenterVertically,
+    ) {
+        visibleMembers.forEach { member ->
+            val accent = memberColor(member.id)
+            Box(
+                modifier = Modifier
+                    .size(42.dp)
+                    .border(3.dp, MaterialTheme.colorScheme.background, CircleShape)
+                    .background(accent.copy(alpha = 0.18f), CircleShape),
+                contentAlignment = Alignment.Center,
+            ) {
+                Text(
+                    text = memberInitial(member.name),
+                    style = MaterialTheme.typography.labelLarge,
+                    fontWeight = FontWeight.Bold,
+                    color = accent,
+                )
+            }
+        }
+        if (overflow > 0) {
+            Surface(
+                shape = CircleShape,
+                color = MaterialTheme.colorScheme.primary.copy(alpha = 0.06f),
+                border = androidx.compose.foundation.BorderStroke(
+                    2.dp,
+                    MaterialTheme.colorScheme.primary.copy(alpha = 0.24f),
+                ),
+                modifier = Modifier.size(42.dp),
+            ) {
+                Box(contentAlignment = Alignment.Center) {
+                    Text(
+                        text = "+$overflow",
+                        style = MaterialTheme.typography.labelLarge,
+                        fontWeight = FontWeight.Bold,
+                        color = MaterialTheme.colorScheme.primary,
+                    )
+                }
+            }
+        }
+    }
+}
+
+@Composable
+private fun ExpenseOverviewCard(
+    totalCents: Long,
+    pendingGroupsCount: Int,
+    onDetailClick: () -> Unit,
+) {
+    Surface(
+        modifier = Modifier.fillMaxWidth(),
+        shape = RoundedCornerShape(30.dp),
+        shadowElevation = 10.dp,
+        color = Color.Transparent,
+    ) {
+        Box(
+            modifier = Modifier
+                .background(
+                    Brush.verticalGradient(
+                        listOf(
+                            MaterialTheme.colorScheme.primary,
+                            MaterialTheme.colorScheme.primary.copy(alpha = 0.86f),
+                        )
+                    )
+                )
+                .padding(24.dp),
+        ) {
+            Column(verticalArrangement = Arrangement.spacedBy(18.dp)) {
+                Column(verticalArrangement = Arrangement.spacedBy(6.dp)) {
+                    Text(
+                        text = "GASTO TOTAL DEL GRUPO",
+                        style = MaterialTheme.typography.labelLarge,
+                        color = MaterialTheme.colorScheme.onPrimary.copy(alpha = 0.78f),
+                    )
+                    Text(
+                        text = formatDashboardCurrency(totalCents),
+                        fontFamily = FrauncesFamily,
+                        fontWeight = FontWeight.Bold,
+                        fontSize = 34.sp,
+                        color = MaterialTheme.colorScheme.onPrimary,
+                    )
+                }
+                Row(
+                    modifier = Modifier.fillMaxWidth(),
+                    horizontalArrangement = Arrangement.SpaceBetween,
+                    verticalAlignment = Alignment.CenterVertically,
+                ) {
+                    Surface(
+                        shape = RoundedCornerShape(100.dp),
+                        color = MaterialTheme.colorScheme.onPrimary.copy(alpha = 0.18f),
+                    ) {
+                        Text(
+                            text = if (pendingGroupsCount == 1) {
+                                "1 gasto pendiente"
+                            } else {
+                                "$pendingGroupsCount gastos pendientes"
+                            },
+                            modifier = Modifier.padding(horizontal = 14.dp, vertical = 8.dp),
+                            style = MaterialTheme.typography.labelLarge,
+                            fontWeight = FontWeight.Bold,
+                            color = MaterialTheme.colorScheme.onPrimary,
+                        )
+                    }
+                    Surface(
+                        onClick = onDetailClick,
+                        shape = RoundedCornerShape(18.dp),
+                        color = MaterialTheme.colorScheme.background,
+                    ) {
+                        Text(
+                            text = "Ver detalle",
+                            modifier = Modifier.padding(horizontal = 18.dp, vertical = 10.dp),
+                            style = MaterialTheme.typography.labelLarge,
+                            fontWeight = FontWeight.SemiBold,
+                            color = MaterialTheme.colorScheme.primary,
+                        )
+                    }
+                }
+            }
+        }
+    }
+}
+
+@Composable
+private fun ExpenseBalanceCard(memberNetCents: Long) {
+    val isPositive = memberNetCents < 0L
+    val isNegative = memberNetCents > 0L
+    val absoluteNet = abs(memberNetCents)
+    val accent = when {
+        isPositive -> Color(0xFF21B77A)
+        isNegative -> MaterialTheme.colorScheme.error
+        else -> MaterialTheme.colorScheme.primary
+    }
+    val title = when {
+        isPositive -> "Te deben ${formatDashboardCurrency(absoluteNet)}"
+        isNegative -> "Debes ${formatDashboardCurrency(absoluteNet)}"
+        else -> "Estás al día"
+    }
+    val subtitle = when {
+        isPositive -> "Estás en positivo"
+        isNegative -> "Tenés pagos pendientes"
+        else -> "Sin deuda pendiente"
+    }
+
+    Surface(
+        modifier = Modifier.fillMaxWidth(),
+        shape = RoundedCornerShape(28.dp),
+        color = MaterialTheme.colorScheme.surfaceContainerLowest,
+    ) {
+        Column(
+            modifier = Modifier.padding(horizontal = 24.dp, vertical = 22.dp),
+            verticalArrangement = Arrangement.spacedBy(8.dp),
+        ) {
+            Text(
+                text = "TU SALDO",
+                style = MaterialTheme.typography.labelLarge,
+                color = MaterialTheme.colorScheme.onSurfaceVariant,
+            )
+            Text(
+                text = title,
+                fontFamily = FrauncesFamily,
+                fontWeight = FontWeight.Bold,
+                fontSize = 28.sp,
+                color = MaterialTheme.colorScheme.primary,
+            )
+            Row(
+                verticalAlignment = Alignment.CenterVertically,
+                horizontalArrangement = Arrangement.spacedBy(10.dp),
+            ) {
+                Box(
+                    modifier = Modifier
+                        .size(10.dp)
+                        .background(accent, CircleShape),
+                )
+                Text(
+                    text = subtitle,
+                    style = MaterialTheme.typography.bodyLarge,
+                    color = MaterialTheme.colorScheme.onSurfaceVariant,
+                )
+            }
+        }
+    }
+}
+
+@Composable
+private fun ExpenseMainActionButton(
+    label: String,
+    containerBrush: Brush,
+    contentColor: Color,
+    enabled: Boolean = true,
+    onClick: () -> Unit,
+) {
+    Surface(
+        onClick = onClick,
+        enabled = enabled,
+        shape = RoundedCornerShape(20.dp),
+        shadowElevation = if (enabled) 4.dp else 0.dp,
+        color = Color.Transparent,
+        modifier = Modifier.fillMaxWidth(),
+    ) {
+        Box(
+            modifier = Modifier
+                .background(containerBrush)
+                .padding(vertical = 18.dp),
+            contentAlignment = Alignment.Center,
+        ) {
+            Row(
+                verticalAlignment = Alignment.CenterVertically,
+                horizontalArrangement = Arrangement.spacedBy(8.dp),
+            ) {
+                Icon(
+                    imageVector = if (label == "Agregar gasto") Icons.Default.Add else Icons.Default.Warning,
+                    contentDescription = null,
+                    tint = contentColor.copy(alpha = if (enabled) 1f else 0.5f),
+                )
+                Text(
+                    text = label,
+                    style = MaterialTheme.typography.titleMedium,
+                    fontWeight = FontWeight.SemiBold,
+                    color = contentColor.copy(alpha = if (enabled) 1f else 0.5f),
+                )
+            }
+        }
+    }
+}
+
+@OptIn(ExperimentalMaterial3Api::class, ExperimentalFoundationApi::class)
+@Composable
+private fun ExpenseRecentMovementCard(
+    movement: ExpenseViewModel.ExpenseDashboardMovement,
+    onClick: () -> Unit,
+    onLongPress: () -> Unit,
+) {
+    val group = movement.group
+    val category = group.category?.let { cat ->
+        ExpenseGroupCategory.entries.firstOrNull { it.name.lowercase() == cat }
+    } ?: ExpenseGroupCategory.OTROS
+    val memberNet = movement.memberNetCents
+    val balanceColor = when {
+        memberNet < 0L -> Color(0xFF21B77A)
+        memberNet > 0L -> MaterialTheme.colorScheme.error
+        else -> MaterialTheme.colorScheme.onSurfaceVariant
+    }
+    val balanceText = when {
+        memberNet < 0L -> "Te deben\n${formatDashboardCurrency(abs(memberNet))}"
+        memberNet > 0L -> "Debes\n${formatDashboardCurrency(memberNet)}"
+        else -> "Al día"
+    }
+
+    ElevatedCard(
+        modifier = Modifier
+            .fillMaxWidth()
+            .combinedClickable(
+                onClick = onClick,
+                onLongClick = onLongPress,
+            ),
+        shape = RoundedCornerShape(24.dp),
+    ) {
+        Row(
+            modifier = Modifier.padding(horizontal = 18.dp, vertical = 18.dp),
+            horizontalArrangement = Arrangement.spacedBy(14.dp),
+            verticalAlignment = Alignment.CenterVertically,
+        ) {
+            Surface(
+                shape = CircleShape,
+                color = MaterialTheme.colorScheme.primary.copy(alpha = 0.08f),
+                modifier = Modifier.size(48.dp),
+            ) {
+                Box(contentAlignment = Alignment.Center) {
+                    Icon(
+                        imageVector = category.icon,
+                        contentDescription = null,
+                        tint = MaterialTheme.colorScheme.primary,
+                    )
+                }
+            }
+            Column(
+                modifier = Modifier.weight(1f),
+                verticalArrangement = Arrangement.spacedBy(3.dp),
+            ) {
+                Text(
+                    text = group.name,
+                    style = MaterialTheme.typography.titleMedium,
+                    fontWeight = FontWeight.SemiBold,
+                    color = MaterialTheme.colorScheme.onSurface,
+                )
+                if (group.pinnedAtMillis != null) {
+                    Text(
+                        text = "Fijado arriba",
+                        style = MaterialTheme.typography.labelMedium,
+                        fontWeight = FontWeight.Bold,
+                        color = MaterialTheme.colorScheme.primary,
+                    )
+                }
+                Text(
+                    text = if (group.state == ExpenseGroupState.Open) {
+                        "${category.label} • Pendiente"
+                    } else {
+                        "${category.label} • Finalizado"
+                    },
+                    style = MaterialTheme.typography.bodyMedium,
+                    color = MaterialTheme.colorScheme.onSurfaceVariant,
+                )
+                Text(
+                    text = formatExpenseGroupDate(group.createdAtMillis),
+                    style = MaterialTheme.typography.bodyMedium,
+                    color = MaterialTheme.colorScheme.onSurfaceVariant,
+                )
+            }
+            Column(
+                horizontalAlignment = Alignment.End,
+                verticalArrangement = Arrangement.spacedBy(6.dp),
+            ) {
+                Text(
+                    text = formatDashboardCurrency(group.totalPriceCents),
+                    style = MaterialTheme.typography.titleMedium,
+                    fontWeight = FontWeight.SemiBold,
+                    color = MaterialTheme.colorScheme.onSurface,
+                    textAlign = TextAlign.End,
+                )
+                Text(
+                    text = balanceText,
+                    style = MaterialTheme.typography.bodyLarge,
+                    color = balanceColor,
+                    textAlign = TextAlign.End,
+                )
+            }
+        }
+    }
+}
+
+@Composable
+private fun ExpenseGroupOptionsDialog(
+    group: ExpenseGroup,
+    onDismiss: () -> Unit,
+    onRename: () -> Unit,
+    onDelete: () -> Unit,
+    onTogglePin: () -> Unit,
+) {
+    AlertDialog(
+        onDismissRequest = onDismiss,
+        title = { Text(group.name) },
+        text = {
+            Column(verticalArrangement = Arrangement.spacedBy(4.dp)) {
+                TextButton(onClick = onRename, modifier = Modifier.fillMaxWidth()) {
+                    Text("Renombrar", modifier = Modifier.fillMaxWidth(), textAlign = TextAlign.Start)
+                }
+                TextButton(onClick = onTogglePin, modifier = Modifier.fillMaxWidth()) {
+                    Text(
+                        text = if (group.pinnedAtMillis == null) "Fijar" else "Quitar Fijado",
+                        modifier = Modifier.fillMaxWidth(),
+                        textAlign = TextAlign.Start,
+                    )
+                }
+                TextButton(onClick = onDelete, modifier = Modifier.fillMaxWidth()) {
+                    Text(
+                        text = "Eliminar",
+                        modifier = Modifier.fillMaxWidth(),
+                        textAlign = TextAlign.Start,
+                        color = MaterialTheme.colorScheme.error,
+                    )
+                }
+            }
+        },
+        confirmButton = {},
+        dismissButton = {
+            TextButton(onClick = onDismiss) {
+                Text("Cerrar")
+            }
+        },
+    )
+}
+
+private fun formatDashboardCurrency(cents: Long): String {
+    val formatter = NumberFormat.getCurrencyInstance(Locale.forLanguageTag("es-AR")).apply {
+        minimumFractionDigits = if (cents % 100L == 0L) 0 else 2
+        maximumFractionDigits = if (cents % 100L == 0L) 0 else 2
+    }
+    return formatter.format(cents / 100.0)
+}
+
+private fun formatExpenseGroupDate(createdAtMillis: Long?): String {
+    if (createdAtMillis == null) return "Sin fecha"
+    return SimpleDateFormat("d MMM yyyy", Locale.forLanguageTag("es-AR")).format(Date(createdAtMillis))
 }
 
 @OptIn(ExperimentalMaterial3Api::class)
@@ -540,46 +1190,141 @@ private fun ExpenseGroupStateChip(state: ExpenseGroupState) {
     }
 }
 
+private enum class ExpenseGroupCategory(val label: String, val icon: ImageVector) {
+    COMIDA("Comida", Icons.Default.Fastfood),
+    TRANSPORTE("Transporte", Icons.Default.DirectionsCar),
+    ALOJAMIENTO("Alojamiento", Icons.Default.Hotel),
+    ENTRETENIMIENTO("Entretenimiento", Icons.Default.LocalActivity),
+    OTROS("Otros", Icons.Default.MoreHoriz),
+}
+
+private val quickSuggestions = listOf("Combustible", "Peajes", "Supermercado")
+
+@OptIn(ExperimentalMaterial3Api::class)
 @Composable
-private fun AddExpenseGroupPanel(
-    groupName: String,
-    onGroupNameChange: (String) -> Unit,
+private fun CreateExpenseGroupScreen(
     onDismiss: () -> Unit,
-    onConfirm: () -> Unit,
+    onConfirm: (name: String, category: String?) -> Unit,
 ) {
-    ElevatedCard(modifier = Modifier.fillMaxWidth()) {
+    var name by rememberSaveable { mutableStateOf("") }
+    var selectedCategory by rememberSaveable { mutableStateOf<ExpenseGroupCategory?>(null) }
+
+    Scaffold(
+        contentWindowInsets = WindowInsets(0),
+        topBar = {
+            androidx.compose.material3.TopAppBar(
+                title = {
+                    Text(
+                        "Agregar Gasto",
+                        fontFamily = FrauncesFamily,
+                        fontWeight = FontWeight.Medium,
+                    )
+                },
+                navigationIcon = {
+                    IconButton(onClick = onDismiss) {
+                        Icon(Icons.AutoMirrored.Filled.ArrowBack, contentDescription = "Volver")
+                    }
+                },
+                colors = TopAppBarDefaults.topAppBarColors(
+                    containerColor = MaterialTheme.colorScheme.primary,
+                    titleContentColor = MaterialTheme.colorScheme.onPrimary,
+                    navigationIconContentColor = MaterialTheme.colorScheme.onPrimary,
+                ),
+            )
+        },
+    ) { innerPadding ->
         Column(
-            modifier = Modifier.padding(16.dp),
-            verticalArrangement = Arrangement.spacedBy(10.dp),
+            modifier = Modifier
+                .fillMaxSize()
+                .padding(innerPadding)
+                .padding(horizontal = 20.dp, vertical = 24.dp),
+            verticalArrangement = Arrangement.spacedBy(24.dp),
         ) {
-            Row(
-                modifier = Modifier.fillMaxWidth(),
-                horizontalArrangement = Arrangement.SpaceBetween,
-                verticalAlignment = Alignment.CenterVertically,
-            ) {
+            Column(verticalArrangement = Arrangement.spacedBy(8.dp)) {
                 Text(
-                    text = "Nuevo grupo de gastos",
-                    style = MaterialTheme.typography.titleMedium,
-                    fontWeight = FontWeight.SemiBold,
+                    text = "NOMBRE DEL GASTO",
+                    style = MaterialTheme.typography.labelSmall,
+                    fontWeight = FontWeight.ExtraBold,
+                    letterSpacing = 0.1.sp,
+                    color = MaterialTheme.colorScheme.onSurfaceVariant,
                 )
-                IconButton(onClick = onDismiss) {
-                    Icon(Icons.Default.Close, contentDescription = "Cerrar")
+                OutlinedTextField(
+                    value = name,
+                    onValueChange = { name = it },
+                    placeholder = { Text("Ej: Cena en El Hornito") },
+                    singleLine = true,
+                    modifier = Modifier.fillMaxWidth(),
+                    colors = travelTextFieldColors(),
+                )
+            }
+
+            Column(verticalArrangement = Arrangement.spacedBy(10.dp)) {
+                Text(
+                    text = "SUGERENCIAS RÁPIDAS",
+                    style = MaterialTheme.typography.labelSmall,
+                    fontWeight = FontWeight.ExtraBold,
+                    letterSpacing = 0.1.sp,
+                    color = MaterialTheme.colorScheme.onSurfaceVariant,
+                )
+                LazyRow(
+                    horizontalArrangement = Arrangement.spacedBy(8.dp),
+                ) {
+                    items(quickSuggestions) { suggestion ->
+                        FilterChip(
+                            selected = false,
+                            onClick = { name = suggestion },
+                            label = { Text(suggestion) },
+                            shape = MaterialTheme.shapes.extraLarge,
+                        )
+                    }
                 }
             }
-            OutlinedTextField(
-                value = groupName,
-                onValueChange = onGroupNameChange,
-                label = { Text("Nombre del grupo") },
-                singleLine = true,
+
+            Column(verticalArrangement = Arrangement.spacedBy(10.dp)) {
+                Text(
+                    text = "CATEGORÍA",
+                    style = MaterialTheme.typography.labelSmall,
+                    fontWeight = FontWeight.ExtraBold,
+                    letterSpacing = 0.1.sp,
+                    color = MaterialTheme.colorScheme.onSurfaceVariant,
+                )
+                LazyRow(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
+                    items(ExpenseGroupCategory.entries) { category ->
+                        val isSelected = selectedCategory == category
+                        FilterChip(
+                            selected = isSelected,
+                            onClick = {
+                                selectedCategory = if (isSelected) null else category
+                            },
+                            label = { Text(category.label) },
+                            leadingIcon = {
+                                Icon(
+                                    imageVector = category.icon,
+                                    contentDescription = null,
+                                    modifier = Modifier.size(FilterChipDefaults.IconSize),
+                                )
+                            },
+                            shape = MaterialTheme.shapes.extraLarge,
+                            colors = FilterChipDefaults.filterChipColors(
+                                selectedContainerColor = MaterialTheme.colorScheme.primary,
+                                selectedLabelColor = MaterialTheme.colorScheme.onPrimary,
+                                selectedLeadingIconColor = MaterialTheme.colorScheme.onPrimary,
+                            ),
+                        )
+                    }
+                }
+            }
+
+            Spacer(modifier = Modifier.weight(1f))
+
+            Button(
+                onClick = {
+                    if (name.isNotBlank()) onConfirm(name, selectedCategory?.name?.lowercase())
+                },
                 modifier = Modifier.fillMaxWidth(),
-                colors = travelTextFieldColors(),
-            )
-            Row(
-                modifier = Modifier.fillMaxWidth(),
-                horizontalArrangement = Arrangement.spacedBy(10.dp),
+                enabled = name.isNotBlank(),
             ) {
-                OutlinedButton(onClick = onDismiss, modifier = Modifier.weight(1f)) { Text("Cancelar") }
-                Button(onClick = onConfirm, modifier = Modifier.weight(1f)) { Text("Crear") }
+                Text("Crear gasto", fontWeight = FontWeight.SemiBold)
             }
         }
     }
@@ -589,56 +1334,118 @@ private fun calculatePendingCents(warnings: List<SettlementWarning>): Long =
     warnings.sumOf { it.unassignedAmountCents }
 
 @Composable
-private fun ExpenseSummaryStrip(
+private fun ExpenseHeroCard(
+    group: ExpenseGroup?,
     totalCents: Long,
     pendingCents: Long,
 ) {
-    Row(
+    val category = group?.category?.let { cat ->
+        ExpenseGroupCategory.entries.firstOrNull { it.name.lowercase() == cat }
+    }
+    val formattedDate = remember(group?.createdAtMillis) {
+        group?.createdAtMillis?.let { millis ->
+            SimpleDateFormat("d 'de' MMMM yyyy", Locale.forLanguageTag("es")).format(Date(millis))
+        }
+    }
+
+    Box(
         modifier = Modifier
             .fillMaxWidth()
-            .padding(horizontal = 16.dp, vertical = 10.dp),
-        horizontalArrangement = Arrangement.SpaceBetween,
-        verticalAlignment = Alignment.CenterVertically,
+            .padding(horizontal = 16.dp, vertical = 12.dp)
+            .clip(RoundedCornerShape(20.dp))
+            .background(MaterialTheme.colorScheme.primary),
     ) {
-        Column(verticalArrangement = Arrangement.spacedBy(1.dp)) {
-            Text(
-                text = "Total del grupo",
-                style = MaterialTheme.typography.labelSmall,
-                fontWeight = FontWeight.ExtraBold,
-                letterSpacing = 0.08.sp,
-                color = MaterialTheme.colorScheme.onSurfaceVariant,
-            )
+        Box(
+            modifier = Modifier
+                .size(140.dp)
+                .align(Alignment.BottomEnd)
+                .offset(x = 36.dp, y = 36.dp)
+                .background(
+                    color = MaterialTheme.colorScheme.onPrimary.copy(alpha = 0.07f),
+                    shape = CircleShape,
+                ),
+        )
+        Box(
+            modifier = Modifier
+                .size(90.dp)
+                .align(Alignment.BottomEnd)
+                .offset(x = 10.dp, y = 10.dp)
+                .background(
+                    color = MaterialTheme.colorScheme.onPrimary.copy(alpha = 0.06f),
+                    shape = CircleShape,
+                ),
+        )
+
+        Column(
+            modifier = Modifier.padding(horizontal = 20.dp, vertical = 18.dp),
+            verticalArrangement = Arrangement.spacedBy(8.dp),
+        ) {
+            if (category != null) {
+                Surface(
+                    color = MaterialTheme.colorScheme.onPrimary.copy(alpha = 0.18f),
+                    shape = MaterialTheme.shapes.extraLarge,
+                ) {
+                    Row(
+                        modifier = Modifier.padding(horizontal = 10.dp, vertical = 4.dp),
+                        verticalAlignment = Alignment.CenterVertically,
+                        horizontalArrangement = Arrangement.spacedBy(5.dp),
+                    ) {
+                        Icon(
+                            imageVector = category.icon,
+                            contentDescription = null,
+                            modifier = Modifier.size(13.dp),
+                            tint = MaterialTheme.colorScheme.onPrimary,
+                        )
+                        Text(
+                            text = category.label,
+                            style = MaterialTheme.typography.labelSmall,
+                            fontWeight = FontWeight.Bold,
+                            color = MaterialTheme.colorScheme.onPrimary,
+                        )
+                    }
+                }
+            }
+
             Text(
                 text = formatCurrency(totalCents),
                 fontFamily = FrauncesFamily,
                 fontWeight = FontWeight.Bold,
-                fontSize = 22.sp,
-                color = MaterialTheme.colorScheme.primary,
+                fontSize = 34.sp,
+                letterSpacing = (-0.5).sp,
+                color = MaterialTheme.colorScheme.onPrimary,
             )
-        }
 
-        if (pendingCents > 0) {
-            Surface(
-                color = MaterialTheme.colorScheme.tertiaryContainer,
-                shape = MaterialTheme.shapes.extraLarge,
-            ) {
-                Row(
-                    modifier = Modifier.padding(horizontal = 12.dp, vertical = 6.dp),
-                    horizontalArrangement = Arrangement.spacedBy(5.dp),
-                    verticalAlignment = Alignment.CenterVertically,
+            if (formattedDate != null) {
+                Text(
+                    text = formattedDate,
+                    style = MaterialTheme.typography.bodySmall,
+                    color = MaterialTheme.colorScheme.onPrimary.copy(alpha = 0.72f),
+                )
+            }
+
+            if (pendingCents > 0) {
+                Surface(
+                    color = MaterialTheme.colorScheme.onPrimary.copy(alpha = 0.18f),
+                    shape = MaterialTheme.shapes.extraLarge,
                 ) {
-                    Icon(
-                        imageVector = Icons.Default.Warning,
-                        contentDescription = null,
-                        modifier = Modifier.size(14.dp),
-                        tint = MaterialTheme.colorScheme.onTertiaryContainer,
-                    )
-                    Text(
-                        text = "${formatCurrency(pendingCents)} por liquidar",
-                        style = MaterialTheme.typography.labelSmall,
-                        fontWeight = FontWeight.Bold,
-                        color = MaterialTheme.colorScheme.onTertiaryContainer,
-                    )
+                    Row(
+                        modifier = Modifier.padding(horizontal = 10.dp, vertical = 4.dp),
+                        verticalAlignment = Alignment.CenterVertically,
+                        horizontalArrangement = Arrangement.spacedBy(5.dp),
+                    ) {
+                        Icon(
+                            imageVector = Icons.Default.Warning,
+                            contentDescription = null,
+                            modifier = Modifier.size(12.dp),
+                            tint = MaterialTheme.colorScheme.onPrimary,
+                        )
+                        Text(
+                            text = "${formatCurrency(pendingCents)} por liquidar",
+                            style = MaterialTheme.typography.labelSmall,
+                            fontWeight = FontWeight.Bold,
+                            color = MaterialTheme.colorScheme.onPrimary,
+                        )
+                    }
                 }
             }
         }
@@ -657,199 +1464,190 @@ private fun ExpenseItemCard(
     onAssignQuantity: (Int) -> Unit,
 ) {
     val serverMyAssigned = itemAssignments.firstOrNull { it.memberId == currentMemberId }?.quantity ?: 0
-    // Optimistic local state: updates immediately on click, resets when server confirms
     var localMyAssigned by remember(serverMyAssigned) { mutableIntStateOf(serverMyAssigned) }
 
-    val assignedByOthers = itemAssignments
-        .filter { it.memberId != currentMemberId }
-        .sumOf { it.quantity }
-    val assignedTotal = assignedByOthers + localMyAssigned
-    val localRemaining = (item.quantity - assignedTotal).coerceAtLeast(0)
+    val assignedByOthers = itemAssignments.filter { it.memberId != currentMemberId }.sumOf { it.quantity }
+    val localRemaining = (item.quantity - assignedByOthers - localMyAssigned).coerceAtLeast(0)
     val unitPrice = if (item.quantity > 0) item.totalPriceCents / item.quantity else item.totalPriceCents
-
-    // Progress bar data
-    val serverAssignedTotal = itemAssignments.sumOf { it.quantity }
-    val assignmentFraction = if (item.quantity > 0) serverAssignedTotal.toFloat() / item.quantity else 0f
-    val isFullyAssigned = serverAssignedTotal >= item.quantity
-    val progressColor = when {
-        isFullyAssigned -> MaterialTheme.colorScheme.primary
-        serverAssignedTotal > 0 -> MaterialTheme.colorScheme.tertiary
-        else -> MaterialTheme.colorScheme.error
-    }
-    val animatedProgress by androidx.compose.animation.core.animateFloatAsState(
-        targetValue = assignmentFraction.coerceIn(0f, 1f),
-        label = "assignment_progress",
-    )
+    val assignedWithQuantity = itemAssignments.filter { it.quantity > 0 }
 
     ElevatedCard(
         modifier = Modifier.fillMaxWidth(),
         shape = RoundedCornerShape(18.dp),
     ) {
-        Column(
+        Row(
             modifier = Modifier
                 .fillMaxWidth()
-                .padding(start = 14.dp, end = 12.dp, top = 12.dp, bottom = 12.dp),
-            verticalArrangement = Arrangement.spacedBy(8.dp),
+                .height(IntrinsicSize.Min),
         ) {
-            Row(
-                modifier = Modifier.fillMaxWidth(),
-                horizontalArrangement = Arrangement.SpaceBetween,
-                verticalAlignment = Alignment.Top,
-            ) {
-                Column(
-                    modifier = Modifier.weight(1f),
-                    verticalArrangement = Arrangement.spacedBy(3.dp),
-                ) {
-                    Text(
-                        text = item.name,
-                        fontFamily = FrauncesFamily,
-                        fontWeight = FontWeight.SemiBold,
-                        fontSize = 16.sp,
-                        letterSpacing = (-0.01).sp,
-                        color = MaterialTheme.colorScheme.onSurface,
-                    )
-                    Text(
-                        text = "${formatCurrency(unitPrice)} c/u · x${item.quantity} unidades",
-                        style = MaterialTheme.typography.bodySmall,
-                        color = MaterialTheme.colorScheme.onSurfaceVariant,
-                    )
-                }
-                Spacer(Modifier.width(8.dp))
-                Column(
-                    horizontalAlignment = Alignment.End,
-                    verticalArrangement = Arrangement.spacedBy(2.dp),
-                ) {
-                    Text(
-                        text = formatCurrency(item.totalPriceCents),
-                        fontFamily = FrauncesFamily,
-                        fontWeight = FontWeight.Bold,
-                        fontSize = 17.sp,
-                        letterSpacing = (-0.01).sp,
-                        color = MaterialTheme.colorScheme.onSurface,
-                    )
-                    if (!isGroupFinalized) {
-                        IconButton(
-                            onClick = onDelete,
-                            modifier = Modifier.size(24.dp),
-                        ) {
-                            Icon(
-                                Icons.Default.Delete,
-                                contentDescription = "Eliminar",
-                                modifier = Modifier.size(14.dp),
-                                tint = MaterialTheme.colorScheme.onSurfaceVariant.copy(alpha = 0.5f),
-                            )
-                        }
-                    }
-                }
-            }
-
-            if (itemAssignments.any { it.quantity > 0 }) {
-                LazyRow(horizontalArrangement = Arrangement.spacedBy(6.dp)) {
-                    items(itemAssignments.filter { it.quantity > 0 }) { assignment ->
-                        val member = members.firstOrNull { it.id == assignment.memberId }
-                        if (member != null) {
-                            val accent = memberColor(member.id)
-                            Surface(
-                                color = accent.copy(alpha = 0.14f),
-                                shape = CircleShape,
-                            ) {
-                                Text(
-                                    text = "${memberInitial(member.name)} · x${assignment.quantity}",
-                                    modifier = Modifier.padding(horizontal = 9.dp, vertical = 3.dp),
-                                    fontSize = 11.sp,
-                                    fontWeight = FontWeight.Bold,
-                                    color = accent,
-                                )
-                            }
-                        }
-                    }
-                }
-            }
-
-            if (currentMemberId != null && !isGroupFinalized) {
-                Surface(
-                    color = MaterialTheme.colorScheme.surfaceVariant.copy(alpha = 0.7f),
-                    shape = RoundedCornerShape(10.dp),
-                ) {
-                    Row(
-                        modifier = Modifier
-                            .fillMaxWidth()
-                            .padding(horizontal = 10.dp, vertical = 6.dp),
-                        verticalAlignment = Alignment.CenterVertically,
-                        horizontalArrangement = Arrangement.SpaceBetween,
-                    ) {
-                        Text(
-                            text = "Mis unidades: $localMyAssigned",
-                            fontSize = 12.sp,
-                            fontWeight = FontWeight.SemiBold,
-                            color = MaterialTheme.colorScheme.onSurface,
-                        )
-                        Row(verticalAlignment = Alignment.CenterVertically) {
-                            StepperButton(
-                                label = "−",
-                                onClick = {
-                                    val next = (localMyAssigned - 1).coerceAtLeast(0)
-                                    localMyAssigned = next
-                                    onAssignQuantity(next)
-                                },
-                            )
-                            Text(
-                                text = "$localMyAssigned",
-                                modifier = Modifier.padding(horizontal = 8.dp),
-                                fontSize = 14.sp,
-                                fontWeight = FontWeight.Bold,
-                                textAlign = TextAlign.Center,
-                                color = MaterialTheme.colorScheme.onSurface,
-                            )
-                            StepperButton(
-                                label = "+",
-                                enabled = localRemaining > 0,
-                                onClick = {
-                                    val next = localMyAssigned + 1
-                                    localMyAssigned = next
-                                    onAssignQuantity(next)
-                                },
-                            )
-                        }
-                    }
-                }
-            }
+            Box(
+                modifier = Modifier
+                    .width(4.dp)
+                    .fillMaxHeight()
+                    .background(MaterialTheme.colorScheme.primary),
+            )
 
             Column(
-                modifier = Modifier.fillMaxWidth(),
-                verticalArrangement = Arrangement.spacedBy(4.dp),
+                modifier = Modifier
+                    .fillMaxWidth()
+                    .padding(start = 12.dp, end = 10.dp, top = 12.dp, bottom = 12.dp),
+                verticalArrangement = Arrangement.spacedBy(10.dp),
             ) {
                 Row(
                     modifier = Modifier.fillMaxWidth(),
                     horizontalArrangement = Arrangement.SpaceBetween,
                     verticalAlignment = Alignment.CenterVertically,
                 ) {
-                    Text(
-                        text = "$serverAssignedTotal / ${item.quantity} asignadas",
-                        fontSize = 10.sp,
-                        fontWeight = FontWeight.Bold,
-                        letterSpacing = 0.04.sp,
-                        color = MaterialTheme.colorScheme.onSurfaceVariant,
-                    )
-                    if (isFullyAssigned) {
+                    Column(
+                        modifier = Modifier.weight(1f),
+                        verticalArrangement = Arrangement.spacedBy(2.dp),
+                    ) {
                         Text(
-                            text = "Completo",
-                            fontSize = 10.sp,
-                            fontWeight = FontWeight.Bold,
-                            color = MaterialTheme.colorScheme.primary,
+                            text = item.name,
+                            fontFamily = FrauncesFamily,
+                            fontWeight = FontWeight.SemiBold,
+                            fontSize = 16.sp,
+                            letterSpacing = (-0.01).sp,
+                            color = MaterialTheme.colorScheme.onSurface,
+                        )
+                        Text(
+                            text = "${formatCurrency(unitPrice)} c/u · ${formatCurrency(item.totalPriceCents)} total",
+                            style = MaterialTheme.typography.bodySmall,
+                            color = MaterialTheme.colorScheme.onSurfaceVariant,
+                        )
+                    }
+                    Spacer(Modifier.width(8.dp))
+                    Row(
+                        verticalAlignment = Alignment.CenterVertically,
+                        horizontalArrangement = Arrangement.spacedBy(4.dp),
+                    ) {
+                        if (currentMemberId != null && !isGroupFinalized) {
+                            Surface(
+                                color = MaterialTheme.colorScheme.surfaceVariant,
+                                shape = RoundedCornerShape(50),
+                            ) {
+                                Row(
+                                    verticalAlignment = Alignment.CenterVertically,
+                                    modifier = Modifier.padding(horizontal = 4.dp, vertical = 2.dp),
+                                ) {
+                                    StepperButton(
+                                        label = "−",
+                                        onClick = {
+                                            val next = (localMyAssigned - 1).coerceAtLeast(0)
+                                            localMyAssigned = next
+                                            onAssignQuantity(next)
+                                        },
+                                    )
+                                    Text(
+                                        text = "$localMyAssigned",
+                                        modifier = Modifier.padding(horizontal = 6.dp),
+                                        fontSize = 14.sp,
+                                        fontWeight = FontWeight.Bold,
+                                        textAlign = TextAlign.Center,
+                                        color = MaterialTheme.colorScheme.onSurface,
+                                    )
+                                    StepperButton(
+                                        label = "+",
+                                        enabled = localRemaining > 0,
+                                        onClick = {
+                                            val next = localMyAssigned + 1
+                                            localMyAssigned = next
+                                            onAssignQuantity(next)
+                                        },
+                                    )
+                                }
+                            }
+                        }
+                        if (!isGroupFinalized) {
+                            IconButton(
+                                onClick = onDelete,
+                                modifier = Modifier.size(28.dp),
+                            ) {
+                                Icon(
+                                    Icons.Default.Delete,
+                                    contentDescription = "Eliminar",
+                                    modifier = Modifier.size(14.dp),
+                                    tint = MaterialTheme.colorScheme.onSurfaceVariant.copy(alpha = 0.4f),
+                                )
+                            }
+                        }
+                    }
+                }
+
+                if (assignedWithQuantity.isNotEmpty()) {
+                    Row(
+                        verticalAlignment = Alignment.CenterVertically,
+                        horizontalArrangement = Arrangement.spacedBy(8.dp),
+                    ) {
+                        Text(
+                            text = "ASIGNADO A:",
+                            style = MaterialTheme.typography.labelSmall,
+                            fontWeight = FontWeight.ExtraBold,
+                            letterSpacing = 0.08.sp,
+                            color = MaterialTheme.colorScheme.onSurfaceVariant,
+                        )
+                        StackedAvatars(
+                            assignments = assignedWithQuantity,
+                            members = members,
                         )
                     }
                 }
-                LinearProgressIndicator(
-                    progress = { animatedProgress },
-                    modifier = Modifier
-                        .fillMaxWidth()
-                        .height(4.dp)
-                        .clip(CircleShape),
-                    color = progressColor,
-                    trackColor = MaterialTheme.colorScheme.surfaceVariant,
-                )
             }
+        }
+    }
+}
+
+@Composable
+private fun StackedAvatars(
+    assignments: List<ItemAssignment>,
+    members: List<GroupMember>,
+) {
+    val avatarSize = 24.dp
+    val stepSize = 16.dp
+    val validAssignments = assignments.filter { a -> members.any { it.id == a.memberId } }
+    val maxVisible = 5
+    val visible = validAssignments.take(maxVisible)
+    val extra = validAssignments.size - maxVisible
+    if (visible.isEmpty()) return
+
+    val boxWidth = stepSize * (visible.size - 1).coerceAtLeast(0) + avatarSize
+
+    Row(
+        verticalAlignment = Alignment.CenterVertically,
+        horizontalArrangement = Arrangement.spacedBy(6.dp),
+    ) {
+        Box(
+            modifier = Modifier
+                .height(avatarSize)
+                .width(boxWidth),
+        ) {
+            visible.forEachIndexed { index, assignment ->
+                val member = members.first { it.id == assignment.memberId }
+                val accent = memberColor(member.id)
+                Box(
+                    modifier = Modifier
+                        .offset(x = stepSize * index)
+                        .size(avatarSize)
+                        .border(1.5.dp, MaterialTheme.colorScheme.surface, CircleShape)
+                        .background(accent.copy(alpha = 0.22f), CircleShape),
+                    contentAlignment = Alignment.Center,
+                ) {
+                    Text(
+                        text = memberInitial(member.name),
+                        fontSize = 9.sp,
+                        fontWeight = FontWeight.Bold,
+                        color = accent,
+                    )
+                }
+            }
+        }
+        if (extra > 0) {
+            Text(
+                text = "+$extra",
+                style = MaterialTheme.typography.labelSmall,
+                fontWeight = FontWeight.Bold,
+                color = MaterialTheme.colorScheme.onSurfaceVariant,
+            )
         }
     }
 }
@@ -1089,10 +1887,142 @@ private fun AddExpenseItemPanel(
     }
 }
 
+@OptIn(ExperimentalMaterial3Api::class)
+@Composable
+private fun PayerSelectorCard(
+    paidByMemberId: String?,
+    payerMember: GroupMember?,
+    members: List<GroupMember>,
+    isAdmin: Boolean,
+    isFinalized: Boolean,
+    onPayerSelected: (memberId: String) -> Unit,
+) {
+    var dropdownExpanded by remember { mutableStateOf(false) }
+    val canChange = isAdmin && !isFinalized
+    val hasPayer = paidByMemberId != null
+    val payerAccent = if (hasPayer) memberColor(paidByMemberId!!) else MaterialTheme.colorScheme.onSurfaceVariant
+
+    Surface(
+        modifier = Modifier.fillMaxWidth(),
+        shape = RoundedCornerShape(16.dp),
+        color = if (hasPayer)
+            MaterialTheme.colorScheme.secondaryContainer.copy(alpha = 0.5f)
+        else
+            MaterialTheme.colorScheme.errorContainer.copy(alpha = 0.25f),
+    ) {
+        Box {
+            Row(
+                modifier = Modifier
+                    .fillMaxWidth()
+                    .then(
+                        if (canChange) Modifier.padding(start = 14.dp, end = 8.dp, top = 12.dp, bottom = 12.dp)
+                        else Modifier.padding(horizontal = 14.dp, vertical = 12.dp)
+                    ),
+                verticalAlignment = Alignment.CenterVertically,
+                horizontalArrangement = Arrangement.spacedBy(12.dp),
+            ) {
+                Surface(
+                    color = payerAccent.copy(alpha = 0.18f),
+                    shape = MaterialTheme.shapes.extraLarge,
+                    modifier = Modifier.size(36.dp),
+                ) {
+                    Box(contentAlignment = Alignment.Center) {
+                        if (hasPayer && payerMember != null) {
+                            Text(
+                                text = memberInitial(payerMember.name),
+                                style = MaterialTheme.typography.labelMedium,
+                                fontWeight = FontWeight.Bold,
+                                color = payerAccent,
+                            )
+                        } else {
+                            Icon(
+                                imageVector = Icons.Default.Warning,
+                                contentDescription = null,
+                                modifier = Modifier.size(16.dp),
+                                tint = MaterialTheme.colorScheme.error.copy(alpha = 0.7f),
+                            )
+                        }
+                    }
+                }
+
+                Column(modifier = Modifier.weight(1f), verticalArrangement = Arrangement.spacedBy(1.dp)) {
+                    Text(
+                        text = "¿QUIÉN PAGÓ?",
+                        style = MaterialTheme.typography.labelSmall,
+                        fontWeight = FontWeight.ExtraBold,
+                        letterSpacing = 0.08.sp,
+                        color = MaterialTheme.colorScheme.onSurfaceVariant,
+                    )
+                    Text(
+                        text = payerMember?.name ?: "Sin pagador seleccionado",
+                        style = MaterialTheme.typography.bodyMedium,
+                        fontWeight = FontWeight.SemiBold,
+                        color = if (hasPayer) MaterialTheme.colorScheme.onSurface
+                        else MaterialTheme.colorScheme.onSurfaceVariant.copy(alpha = 0.7f),
+                    )
+                }
+
+                if (canChange) {
+                    IconButton(onClick = { dropdownExpanded = true }) {
+                        Icon(
+                            imageVector = Icons.Default.ArrowDropDown,
+                            contentDescription = "Seleccionar pagador",
+                            tint = MaterialTheme.colorScheme.onSurfaceVariant,
+                        )
+                    }
+                }
+            }
+
+            DropdownMenu(
+                expanded = dropdownExpanded,
+                onDismissRequest = { dropdownExpanded = false },
+            ) {
+                members.forEach { member ->
+                    val isSelected = member.id == paidByMemberId
+                    DropdownMenuItem(
+                        text = {
+                            Text(
+                                text = member.name,
+                                fontWeight = if (isSelected) FontWeight.Bold else FontWeight.Normal,
+                                color = if (isSelected) MaterialTheme.colorScheme.primary
+                                else MaterialTheme.colorScheme.onSurface,
+                            )
+                        },
+                        onClick = {
+                            onPayerSelected(member.id)
+                            dropdownExpanded = false
+                        },
+                        leadingIcon = {
+                            val accent = memberColor(member.id)
+                            Surface(
+                                color = accent.copy(alpha = 0.18f),
+                                shape = MaterialTheme.shapes.extraLarge,
+                                modifier = Modifier.size(28.dp),
+                            ) {
+                                Box(contentAlignment = Alignment.Center) {
+                                    Text(
+                                        text = memberInitial(member.name),
+                                        style = MaterialTheme.typography.labelSmall,
+                                        fontWeight = FontWeight.Bold,
+                                        color = accent,
+                                    )
+                                }
+                            }
+                        }
+                    )
+                }
+            }
+        }
+    }
+}
+
 @Composable
 private fun ExpenseBottomPanel(
     member: GroupMember?,
     amountCents: Long,
+    isPayerView: Boolean,
+    hasPayer: Boolean,
+    payerMember: GroupMember?,
     settlements: List<MemberSettlement>,
     peerToPerDebts: List<PeerToPerDebtUiModel>,
     currentMemberId: String?,
@@ -1102,6 +2032,17 @@ private fun ExpenseBottomPanel(
     onMarkCreditorConfirmed: (fromMemberId: String, toMemberId: String) -> Unit,
 ) {
     val accent = memberColor(member?.id ?: "")
+    val amountLabel = when {
+        !hasPayer -> "Consumido"
+        isPayerView -> "Te deben"
+        else -> "Debés"
+    }
+    val amountColor = when {
+        !hasPayer -> MaterialTheme.colorScheme.primary
+        isPayerView -> Color(0xFF21B77A)
+        else -> MaterialTheme.colorScheme.error
+    }
+
     Surface(
         shadowElevation = 4.dp,
         color = MaterialTheme.colorScheme.surface,
@@ -1118,97 +2059,139 @@ private fun ExpenseBottomPanel(
                 modifier = Modifier.padding(horizontal = 16.dp, vertical = 10.dp),
                 verticalArrangement = Arrangement.spacedBy(0.dp),
             ) {
-            Row(
-                modifier = Modifier.fillMaxWidth(),
-                horizontalArrangement = Arrangement.SpaceBetween,
-                verticalAlignment = Alignment.CenterVertically,
-            ) {
-                if (member == null) {
-                    Text(
-                        text = "Cargando tu perfil...",
-                        style = MaterialTheme.typography.bodyMedium,
-                        color = MaterialTheme.colorScheme.onSurfaceVariant,
-                    )
-                } else {
-                    Row(
-                        modifier = Modifier.weight(1f),
-                        verticalAlignment = Alignment.CenterVertically,
-                        horizontalArrangement = Arrangement.spacedBy(10.dp),
-                    ) {
-                        Surface(
-                            color = accent.copy(alpha = 0.18f),
-                            shape = MaterialTheme.shapes.extraLarge,
-                            modifier = Modifier.size(38.dp),
+                Row(
+                    modifier = Modifier.fillMaxWidth(),
+                    horizontalArrangement = Arrangement.SpaceBetween,
+                    verticalAlignment = Alignment.CenterVertically,
+                ) {
+                    if (member == null) {
+                        Text(
+                            text = "Cargando tu perfil...",
+                            style = MaterialTheme.typography.bodyMedium,
+                            color = MaterialTheme.colorScheme.onSurfaceVariant,
+                        )
+                    } else {
+                        Row(
+                            modifier = Modifier.weight(1f),
+                            verticalAlignment = Alignment.CenterVertically,
+                            horizontalArrangement = Arrangement.spacedBy(10.dp),
                         ) {
-                            Box(contentAlignment = Alignment.Center) {
+                            Surface(
+                                color = accent.copy(alpha = 0.18f),
+                                shape = MaterialTheme.shapes.extraLarge,
+                                modifier = Modifier.size(38.dp),
+                            ) {
+                                Box(contentAlignment = Alignment.Center) {
+                                    Text(
+                                        text = memberInitial(member.name),
+                                        style = MaterialTheme.typography.labelLarge,
+                                        fontWeight = FontWeight.Bold,
+                                        color = accent,
+                                    )
+                                }
+                            }
+                            Column(verticalArrangement = Arrangement.spacedBy(1.dp)) {
                                 Text(
-                                    text = memberInitial(member.name),
-                                    style = MaterialTheme.typography.labelLarge,
-                                    fontWeight = FontWeight.Bold,
-                                    color = accent,
+                                    text = member.name,
+                                    style = MaterialTheme.typography.labelMedium,
+                                    fontWeight = FontWeight.SemiBold,
+                                    color = MaterialTheme.colorScheme.onSurface,
                                 )
+                                Row(
+                                    verticalAlignment = Alignment.CenterVertically,
+                                    horizontalArrangement = Arrangement.spacedBy(4.dp),
+                                ) {
+                                    Text(
+                                        text = amountLabel,
+                                        style = MaterialTheme.typography.labelSmall,
+                                        color = MaterialTheme.colorScheme.onSurfaceVariant,
+                                    )
+                                    Text(
+                                        text = formatCurrency(amountCents),
+                                        fontFamily = FrauncesFamily,
+                                        fontWeight = FontWeight.Bold,
+                                        fontSize = 18.sp,
+                                        color = amountColor,
+                                    )
+                                }
                             }
                         }
-                        Column(verticalArrangement = Arrangement.spacedBy(1.dp)) {
-                            Text(
-                                text = member.name,
-                                style = MaterialTheme.typography.labelMedium,
-                                fontWeight = FontWeight.SemiBold,
-                                color = MaterialTheme.colorScheme.onSurface,
-                            )
-                            Text(
-                                text = formatCurrency(amountCents),
-                                fontFamily = FrauncesFamily,
-                                fontWeight = FontWeight.Bold,
-                                fontSize = 18.sp,
-                                color = MaterialTheme.colorScheme.primary,
-                            )
-                        }
                     }
-                }
-                TextButton(onClick = onToggleSettlements) {
-                    Text(
-                        text = if (settlementsExpanded) "Ocultar ›" else "Ver resumen ›",
-                        style = MaterialTheme.typography.labelMedium,
-                        fontWeight = FontWeight.Bold,
-                    )
-                }
-            }
-
-            AnimatedVisibility(
-                visible = settlementsExpanded && (settlements.isNotEmpty() || peerToPerDebts.isNotEmpty()),
-                enter = expandVertically() + fadeIn(),
-                exit = shrinkVertically() + fadeOut(),
-            ) {
-                Column {
-                    Spacer(Modifier.height(8.dp))
-                    HorizontalDivider(color = MaterialTheme.colorScheme.outlineVariant)
-                    Spacer(Modifier.height(4.dp))
-                    settlements.forEach { settlement -> SettlementCard(settlement) }
-                    if (peerToPerDebts.isNotEmpty()) {
-                        Spacer(Modifier.height(4.dp))
-                        HorizontalDivider(color = MaterialTheme.colorScheme.outlineVariant)
-                        Spacer(Modifier.height(4.dp))
+                    TextButton(onClick = onToggleSettlements) {
                         Text(
-                            text = "Deudas entre miembros",
-                            style = MaterialTheme.typography.labelSmall,
-                            fontWeight = FontWeight.ExtraBold,
-                            letterSpacing = 0.08.sp,
-                            color = MaterialTheme.colorScheme.onSurfaceVariant,
-                            modifier = Modifier.padding(horizontal = 4.dp),
+                            text = if (settlementsExpanded) "Ocultar ›" else "Ver resumen ›",
+                            style = MaterialTheme.typography.labelMedium,
+                            fontWeight = FontWeight.Bold,
                         )
-                        peerToPerDebts.forEach { uiModel ->
-                            PeerToPerDebtRow(
-                                uiModel = uiModel,
-                                currentMemberId = currentMemberId,
-                                onMarkDebtorConfirmed = onMarkDebtorConfirmed,
-                                onMarkCreditorConfirmed = onMarkCreditorConfirmed,
+                    }
+                }
+
+                AnimatedVisibility(
+                    visible = settlementsExpanded,
+                    enter = expandVertically() + fadeIn(),
+                    exit = shrinkVertically() + fadeOut(),
+                ) {
+                    Column {
+                        Spacer(Modifier.height(8.dp))
+                        HorizontalDivider(color = MaterialTheme.colorScheme.outlineVariant)
+                        Spacer(Modifier.height(8.dp))
+
+                        if (!hasPayer) {
+                            Row(
+                                modifier = Modifier
+                                    .fillMaxWidth()
+                                    .padding(vertical = 8.dp),
+                                verticalAlignment = Alignment.CenterVertically,
+                                horizontalArrangement = Arrangement.spacedBy(10.dp),
+                            ) {
+                                Icon(
+                                    imageVector = Icons.Default.Warning,
+                                    contentDescription = null,
+                                    tint = MaterialTheme.colorScheme.onSurfaceVariant,
+                                    modifier = Modifier.size(16.dp),
+                                )
+                                Text(
+                                    text = "Seleccioná quién pagó para ver el resumen",
+                                    style = MaterialTheme.typography.bodySmall,
+                                    color = MaterialTheme.colorScheme.onSurfaceVariant,
+                                )
+                            }
+                        } else {
+                            val sectionLabel = when {
+                                isPayerView -> "Lo que te deben"
+                                else -> "Lo que debés"
+                            }
+                            Text(
+                                text = sectionLabel.uppercase(),
+                                style = MaterialTheme.typography.labelSmall,
+                                fontWeight = FontWeight.ExtraBold,
+                                letterSpacing = 0.08.sp,
+                                color = MaterialTheme.colorScheme.onSurfaceVariant,
+                                modifier = Modifier.padding(horizontal = 4.dp),
                             )
+                            Spacer(Modifier.height(4.dp))
+
+                            if (peerToPerDebts.isEmpty()) {
+                                Text(
+                                    text = if (isPayerView) "Nadie te debe nada aún" else "No tenés deudas registradas",
+                                    style = MaterialTheme.typography.bodySmall,
+                                    color = MaterialTheme.colorScheme.onSurfaceVariant.copy(alpha = 0.7f),
+                                    modifier = Modifier.padding(horizontal = 4.dp, vertical = 4.dp),
+                                )
+                            } else {
+                                peerToPerDebts.forEach { uiModel ->
+                                    PeerToPerDebtRow(
+                                        uiModel = uiModel,
+                                        currentMemberId = currentMemberId,
+                                        onMarkDebtorConfirmed = onMarkDebtorConfirmed,
+                                        onMarkCreditorConfirmed = onMarkCreditorConfirmed,
+                                    )
+                                }
+                            }
                         }
                     }
                 }
             }
-        }
         }
     }
 }
