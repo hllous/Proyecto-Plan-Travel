@@ -19,7 +19,6 @@ import kotlinx.coroutines.ExperimentalCoroutinesApi
 import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.SharingStarted
 import kotlinx.coroutines.flow.StateFlow
-import kotlinx.coroutines.flow.asStateFlow
 import kotlinx.coroutines.flow.catch
 import kotlinx.coroutines.flow.combine
 import kotlinx.coroutines.flow.flatMapLatest
@@ -41,8 +40,6 @@ class GroupViewModel @Inject constructor(
     private val leaveGroupUseCase: LeaveGroupUseCase,
 ) : ViewModel() {
 
-    val selectedGroupId: StateFlow<String?> = selectedGroupHolder.selectedGroupId.asStateFlow()
-
     private val _groupsRetryTrigger = MutableStateFlow(0)
     private val _membersRetryTrigger = MutableStateFlow(0)
 
@@ -62,10 +59,12 @@ class GroupViewModel @Inject constructor(
         .map { it.firstOrNull() }
         .stateIn(viewModelScope, SharingStarted.WhileSubscribed(5000), null)
 
-    val members: StateFlow<List<GroupMember>> = combine(
-        selectedGroupHolder.selectedGroupId,
-        _membersRetryTrigger
-    ) { id, _ -> id }
+    // Eagerly derived so selectedGroupId.value is always current without requiring a collector.
+    val selectedGroupId: StateFlow<String?> = currentGroup
+        .map { it?.id }
+        .stateIn(viewModelScope, SharingStarted.Eagerly, null)
+
+    val members: StateFlow<List<GroupMember>> = combine(currentGroup, _membersRetryTrigger) { group, _ -> group?.id }
         .flatMapLatest { groupId ->
             if (groupId == null) flowOf(emptyList())
             else repository.observeMembers(groupId).catch { emit(emptyList()) }
@@ -77,23 +76,11 @@ class GroupViewModel @Inject constructor(
         .stateIn(viewModelScope, SharingStarted.WhileSubscribed(5000), null)
 
     init {
-        // Bridge realtime lag: force a fresh fetch whenever selectedGroupId diverges
-        // from the currently loaded groups list so the screen transitions immediately.
-        viewModelScope.launch {
-            selectedGroupHolder.selectedGroupId.collect { id ->
-                when {
-                    // Joined/created a group but realtime hasn't delivered it yet
-                    id != null && groups.value.none { it.id == id } -> reloadGroups()
-                    // Left/deleted a group but realtime hasn't removed it yet
-                    id == null && groups.value.isNotEmpty() -> reloadGroups()
-                }
-            }
-        }
+        // Write to selectedGroupHolder so ExpenseViewModel and MainViewModel
+        // (which still read from it) stay in sync with the one-group constraint.
         viewModelScope.launch {
             currentGroup.collect { group ->
-                if (group != null) {
-                    selectedGroupHolder.selectedGroupId.value = group.id
-                }
+                selectedGroupHolder.selectedGroupId.value = group?.id
             }
         }
     }
@@ -112,14 +99,6 @@ class GroupViewModel @Inject constructor(
         _membersRetryTrigger.value++
     }
 
-    fun selectGroup(groupId: String) {
-        selectedGroupHolder.selectedGroupId.value = groupId
-    }
-
-    fun clearSelectedGroup() {
-        selectedGroupHolder.selectedGroupId.value = null
-    }
-
     fun clearMessage() {
         _message.value = null
     }
@@ -135,7 +114,6 @@ class GroupViewModel @Inject constructor(
                 _message.value = "Error al crear grupo"
                 return@launch
             }
-            selectedGroupHolder.selectedGroupId.value = result.getOrThrow()
             reloadGroups()
             reloadMembers()
             _message.value = "Grupo creado"
@@ -144,7 +122,7 @@ class GroupViewModel @Inject constructor(
 
     fun updateSelectedGroupName(name: String) {
         viewModelScope.launch {
-            val groupId = selectedGroupHolder.selectedGroupId.value
+            val groupId = currentGroup.value?.id
             if (groupId == null || name.isBlank()) {
                 _message.value = "Selecciona grupo y nombre valido"
                 return@launch
@@ -160,13 +138,12 @@ class GroupViewModel @Inject constructor(
 
     fun deleteSelectedGroup() {
         viewModelScope.launch {
-            val groupId = selectedGroupHolder.selectedGroupId.value ?: run {
+            val groupId = currentGroup.value?.id ?: run {
                 _message.value = "Selecciona un grupo"
                 return@launch
             }
             runCatching { deleteGroupUseCase(groupId) }
                 .onSuccess {
-                    selectedGroupHolder.selectedGroupId.value = null
                     reloadGroups()
                     reloadMembers()
                     _message.value = "Grupo eliminado"
@@ -176,7 +153,7 @@ class GroupViewModel @Inject constructor(
     }
 
     fun leaveGroup() {
-        val groupId = selectedGroupHolder.selectedGroupId.value ?: run {
+        val groupId = currentGroup.value?.id ?: run {
             _message.value = "Selecciona un grupo"
             return
         }
@@ -189,7 +166,6 @@ class GroupViewModel @Inject constructor(
         viewModelScope.launch {
             runCatching { leaveGroupUseCase(groupId) }
                 .onSuccess {
-                    selectedGroupHolder.selectedGroupId.value = null
                     reloadGroups()
                     reloadMembers()
                     _message.value = "Abandonaste el grupo"

@@ -88,6 +88,7 @@ class FakeTravelRepository(
     override suspend fun deleteMember(memberId: String) = Unit
     override suspend fun leaveGroup(groupId: String) {
         if (leaveGroupThrows) throw RuntimeException("network error")
+        _groups.value = _groups.value.filter { it.id != groupId }
     }
     override suspend fun deleteGroup(groupId: String) {
         _groups.value = _groups.value.filter { it.id != groupId }

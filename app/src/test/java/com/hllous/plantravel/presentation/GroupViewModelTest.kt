@@ -15,9 +15,9 @@ import com.hllous.plantravel.presentation.group.GroupViewModel
 import com.hllous.plantravel.presentation.group.SelectedGroupHolder
 import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.ExperimentalCoroutinesApi
+import kotlinx.coroutines.flow.flow
 import kotlinx.coroutines.launch
 import kotlinx.coroutines.test.UnconfinedTestDispatcher
-import kotlinx.coroutines.flow.flow
 import org.junit.Assert.assertEquals
 import org.junit.Assert.assertNotNull
 import org.junit.Assert.assertNull
@@ -33,11 +33,10 @@ class GroupViewModelTest {
 
     private fun viewModel(
         repo: FakeTravelRepository = FakeTravelRepository(),
-        holder: SelectedGroupHolder = SelectedGroupHolder(),
         session: FakeSessionProvider = FakeSessionProvider(userId = "user-1")
     ) = GroupViewModel(
         repository = repo,
-        selectedGroupHolder = holder,
+        selectedGroupHolder = SelectedGroupHolder(),
         sessionProvider = session,
         createGroupUseCase = CreateGroupUseCase(repo),
         updateGroupNameUseCase = UpdateGroupNameUseCase(repo),
@@ -46,18 +45,44 @@ class GroupViewModelTest {
         leaveGroupUseCase = LeaveGroupUseCase(repo)
     )
 
+    // ─── Members auto-load ───────────────────────────────────────────────────────
+
     @Test
-    fun selectGroupUpdatesSelectedGroupId() {
-        val vm = viewModel()
-        vm.selectGroup("group-42")
-        assertEquals("group-42", vm.selectedGroupId.value)
+    fun membersLoadAutomaticallyWhenGroupLoaded() {
+        val group = TravelGroup(id = "group-1", name = "Viaje")
+        val members = listOf(GroupMember(id = "m1", groupId = "group-1", name = "Nico", userId = "user-1", role = MemberRole.ADMIN))
+        val repo = FakeTravelRepository(initialGroups = listOf(group), initialMembers = mapOf("group-1" to members))
+        val vm = viewModel(repo = repo)
+        val scope = CoroutineScope(UnconfinedTestDispatcher())
+        val job = scope.launch { vm.members.collect { } }
+
+        // No selectGroup() call — members must load from currentGroup automatically
+        assertEquals(members, vm.members.value)
+        job.cancel()
     }
 
     @Test
-    fun createGroupSelectsTheNewGroup() {
+    fun membersAreEmptyWhenUserHasNoGroup() {
         val vm = viewModel()
+        val scope = CoroutineScope(UnconfinedTestDispatcher())
+        val job = scope.launch { vm.members.collect { } }
+
+        assertTrue(vm.members.value.isEmpty())
+        job.cancel()
+    }
+
+    // ─── Create group ────────────────────────────────────────────────────────────
+
+    @Test
+    fun createGroupExposesSelectedGroupId() {
+        val vm = viewModel()
+        val scope = CoroutineScope(UnconfinedTestDispatcher())
+        val job = scope.launch { vm.currentGroup.collect { } }
+
         vm.createGroup("Viaje Mendoza")
+
         assertEquals("fake-group-id", vm.selectedGroupId.value)
+        job.cancel()
     }
 
     @Test
@@ -79,13 +104,20 @@ class GroupViewModelTest {
         assertNull(vm.selectedGroupId.value)
     }
 
+    // ─── Delete group ────────────────────────────────────────────────────────────
+
     @Test
     fun deleteSelectedGroupClearsSelectedGroupId() {
-        val holder = SelectedGroupHolder()
-        holder.selectedGroupId.value = "group-10"
-        val vm = viewModel(holder = holder)
+        val group = TravelGroup(id = "g1", name = "Viaje")
+        val repo = FakeTravelRepository(initialGroups = listOf(group))
+        val vm = viewModel(repo = repo)
+        val scope = CoroutineScope(UnconfinedTestDispatcher())
+        val job = scope.launch { vm.currentGroup.collect { } }
+
         vm.deleteSelectedGroup()
+
         assertNull(vm.selectedGroupId.value)
+        job.cancel()
     }
 
     @Test
@@ -96,6 +128,33 @@ class GroupViewModelTest {
     }
 
     @Test
+    fun deleteGroupMakesCurrentGroupNullEvenWithoutRealtimeEvent() {
+        val group = TravelGroup(id = "g1", name = "Viaje")
+        var subscriptionCount = 0
+        val repo = FakeTravelRepository(
+            initialGroups = listOf(group),
+            customObserveGroups = {
+                flow {
+                    subscriptionCount++
+                    emit(if (subscriptionCount >= 2) emptyList() else listOf(group))
+                }
+            }
+        )
+        val vm = viewModel(repo = repo)
+        val scope = CoroutineScope(UnconfinedTestDispatcher())
+        val job = scope.launch { vm.currentGroup.collect { } }
+
+        assertNotNull(vm.currentGroup.value)
+
+        vm.deleteSelectedGroup()
+
+        assertNull(vm.currentGroup.value)
+        job.cancel()
+    }
+
+    // ─── Update group name ────────────────────────────────────────────────────────
+
+    @Test
     fun deleteMemberShowsConfirmationMessage() {
         val vm = viewModel()
         vm.deleteMember("member-5")
@@ -104,34 +163,29 @@ class GroupViewModelTest {
 
     @Test
     fun updateSelectedGroupNameWithValidNameShowsSuccessMessage() {
-        val holder = SelectedGroupHolder()
-        holder.selectedGroupId.value = "group-1"
-        val vm = viewModel(holder = holder)
+        val group = TravelGroup(id = "group-1", name = "Viaje")
+        val repo = FakeTravelRepository(initialGroups = listOf(group))
+        val vm = viewModel(repo = repo)
+        val scope = CoroutineScope(UnconfinedTestDispatcher())
+        val job = scope.launch { vm.currentGroup.collect { } }
+
         vm.updateSelectedGroupName("Nuevo Nombre")
+
         assertEquals("Nombre del grupo actualizado", vm.message.value)
+        job.cancel()
     }
 
     @Test
     fun updateSelectedGroupNameWithBlankNameShowsErrorMessage() {
-        val holder = SelectedGroupHolder()
-        holder.selectedGroupId.value = "group-1"
-        val vm = viewModel(holder = holder)
-        vm.updateSelectedGroupName("   ")
-        assertEquals("Selecciona grupo y nombre valido", vm.message.value)
-    }
-
-    @Test
-    fun selectingGroupUpdatesMemberList() {
-        val members = listOf(GroupMember(id = "m1", groupId = "group-1", name = "Nico", userId = "user-1", role = MemberRole.ADMIN))
-        val repo = FakeTravelRepository(initialMembers = mapOf("group-1" to members))
-        val holder = SelectedGroupHolder()
-        val vm = viewModel(repo = repo, holder = holder)
+        val group = TravelGroup(id = "group-1", name = "Viaje")
+        val repo = FakeTravelRepository(initialGroups = listOf(group))
+        val vm = viewModel(repo = repo)
         val scope = CoroutineScope(UnconfinedTestDispatcher())
-        val job = scope.launch { vm.members.collect { } }
+        val job = scope.launch { vm.currentGroup.collect { } }
 
-        vm.selectGroup("group-1")
+        vm.updateSelectedGroupName("   ")
 
-        assertEquals(members, vm.members.value)
+        assertEquals("Selecciona grupo y nombre valido", vm.message.value)
         job.cancel()
     }
 
@@ -139,9 +193,9 @@ class GroupViewModelTest {
     fun membersStateUpdatesAfterConsumeInvite() {
         val groupId = "group-1"
         val userId = "user-1"
-        val repo = FakeTravelRepository(consumeInviteResult = Result.success(groupId))
-        val holder = SelectedGroupHolder().also { it.selectedGroupId.value = groupId }
-        val vm = viewModel(repo = repo, holder = holder)
+        val group = TravelGroup(id = groupId, name = "Viaje")
+        val repo = FakeTravelRepository(initialGroups = listOf(group), consumeInviteResult = Result.success(groupId))
+        val vm = viewModel(repo = repo)
         val scope = CoroutineScope(UnconfinedTestDispatcher())
         val job = scope.launch { vm.members.collect { } }
 
@@ -152,7 +206,7 @@ class GroupViewModelTest {
         job.cancel()
     }
 
-    // --- currentGroup state machine ---
+    // ─── currentGroup state machine ───────────────────────────────────────────────
 
     @Test
     fun currentGroupIsNullWhenGroupsIsEmpty() {
@@ -205,8 +259,7 @@ class GroupViewModelTest {
                 }
             }
         )
-        val holder = SelectedGroupHolder().also { it.selectedGroupId.value = "g1" }
-        val vm = viewModel(repo = repo, holder = holder)
+        val vm = viewModel(repo = repo)
         val scope = CoroutineScope(UnconfinedTestDispatcher())
         val job = scope.launch { vm.currentGroup.collect { } }
 
@@ -222,9 +275,11 @@ class GroupViewModelTest {
     @Test
     fun kickMemberRemovesMemberEvenWithoutRealtime() {
         val groupId = "g1"
+        val group = TravelGroup(id = groupId, name = "Viaje")
         val member = GroupMember(id = "m1", groupId = groupId, name = "Ana", userId = "user-2", role = MemberRole.USER)
         var subscriptionCount = 0
         val repo = FakeTravelRepository(
+            initialGroups = listOf(group),
             customObserveMembers = {
                 flow {
                     subscriptionCount++
@@ -232,8 +287,7 @@ class GroupViewModelTest {
                 }
             }
         )
-        val holder = SelectedGroupHolder().also { it.selectedGroupId.value = groupId }
-        val vm = viewModel(repo = repo, holder = holder)
+        val vm = viewModel(repo = repo)
         val scope = CoroutineScope(UnconfinedTestDispatcher())
         val job = scope.launch { vm.members.collect { } }
 
@@ -242,35 +296,6 @@ class GroupViewModelTest {
         vm.deleteMember("m1")
 
         assertTrue(vm.members.value.isEmpty())
-
-        job.cancel()
-    }
-
-    @Test
-    fun deleteGroupMakesCurrentGroupNullEvenWithoutRealtimeEvent() {
-        // Simulate: group is in the loaded list, deleteGroup succeeds and sets selectedGroupId=null,
-        // but realtime hasn't removed the group from the flow yet.
-        val group = TravelGroup(id = "g1", name = "Viaje")
-        var subscriptionCount = 0
-        val repo = FakeTravelRepository(
-            initialGroups = listOf(group),
-            customObserveGroups = {
-                flow {
-                    subscriptionCount++
-                    emit(if (subscriptionCount >= 2) emptyList() else listOf(group))
-                }
-            }
-        )
-        val vm = viewModel(repo = repo)
-        val scope = CoroutineScope(UnconfinedTestDispatcher())
-        val job = scope.launch { vm.currentGroup.collect { } }
-
-        assertNotNull(vm.currentGroup.value) // group is loaded
-
-        vm.selectGroup("g1")
-        vm.deleteSelectedGroup()
-
-        assertNull(vm.currentGroup.value) // screen should return to no-group state
 
         job.cancel()
     }
@@ -291,8 +316,7 @@ class GroupViewModelTest {
                 }
             }
         )
-        val holder = SelectedGroupHolder().also { it.selectedGroupId.value = groupId }
-        val vm = viewModel(repo = repo, holder = holder)
+        val vm = viewModel(repo = repo)
         val scope = CoroutineScope(UnconfinedTestDispatcher())
         val job = scope.launch {
             vm.currentGroup.collect { }
@@ -308,45 +332,15 @@ class GroupViewModelTest {
         job.cancel()
     }
 
-    @Test
-    fun selectedGroupIdSetToUnknownIdTriggersReloadMakingCurrentGroupNonNull() {
-        // Simulate: selectedGroupId is set (e.g. createGroup succeeded) but realtime
-        // hasn't fired yet — the first observeGroups subscription returns empty, the
-        // second (triggered by reloadGroups) returns the group.
-        val group = TravelGroup(id = "new-group-id", name = "Viaje")
-        var subscriptionCount = 0
-        val repo = FakeTravelRepository(
-            customObserveGroups = {
-                flow {
-                    subscriptionCount++
-                    emit(if (subscriptionCount >= 2) listOf(group) else emptyList())
-                }
-            }
-        )
-        val holder = SelectedGroupHolder()
-        val vm = viewModel(repo = repo, holder = holder)
-        val scope = CoroutineScope(UnconfinedTestDispatcher())
-        val job = scope.launch { vm.currentGroup.collect { } }
-
-        assertNull(vm.currentGroup.value)
-
-        holder.selectedGroupId.value = "new-group-id"
-
-        assertNotNull(vm.currentGroup.value)
-        assertEquals("Viaje", vm.currentGroup.value?.name)
-
-        job.cancel()
-    }
-
-    // --- Leave Group ---
+    // ─── Leave Group ─────────────────────────────────────────────────────────────
 
     @Test
     fun leaveGroupAsUserClearsSelectedGroup() {
         val groupId = "group-1"
+        val group = TravelGroup(id = groupId, name = "Viaje")
         val members = listOf(GroupMember(id = "m1", groupId = groupId, name = "Nico", userId = "user-1", role = MemberRole.USER))
-        val repo = FakeTravelRepository(initialMembers = mapOf(groupId to members))
-        val holder = SelectedGroupHolder().also { it.selectedGroupId.value = groupId }
-        val vm = viewModel(repo = repo, holder = holder, session = FakeSessionProvider(userId = "user-1"))
+        val repo = FakeTravelRepository(initialGroups = listOf(group), initialMembers = mapOf(groupId to members))
+        val vm = viewModel(repo = repo, session = FakeSessionProvider(userId = "user-1"))
         val scope = CoroutineScope(UnconfinedTestDispatcher())
         val job = scope.launch { vm.members.collect { } }
 
@@ -359,10 +353,10 @@ class GroupViewModelTest {
     @Test
     fun leaveGroupAsUserShowsSuccessMessage() {
         val groupId = "group-1"
+        val group = TravelGroup(id = groupId, name = "Viaje")
         val members = listOf(GroupMember(id = "m1", groupId = groupId, name = "Nico", userId = "user-1", role = MemberRole.USER))
-        val repo = FakeTravelRepository(initialMembers = mapOf(groupId to members))
-        val holder = SelectedGroupHolder().also { it.selectedGroupId.value = groupId }
-        val vm = viewModel(repo = repo, holder = holder, session = FakeSessionProvider(userId = "user-1"))
+        val repo = FakeTravelRepository(initialGroups = listOf(group), initialMembers = mapOf(groupId to members))
+        val vm = viewModel(repo = repo, session = FakeSessionProvider(userId = "user-1"))
         val scope = CoroutineScope(UnconfinedTestDispatcher())
         val job = scope.launch { vm.members.collect { } }
 
@@ -375,10 +369,10 @@ class GroupViewModelTest {
     @Test
     fun leaveGroupAsAdminShowsErrorMessage() {
         val groupId = "group-1"
+        val group = TravelGroup(id = groupId, name = "Viaje")
         val members = listOf(GroupMember(id = "m1", groupId = groupId, name = "Nico", userId = "user-1", role = MemberRole.ADMIN))
-        val repo = FakeTravelRepository(initialMembers = mapOf(groupId to members))
-        val holder = SelectedGroupHolder().also { it.selectedGroupId.value = groupId }
-        val vm = viewModel(repo = repo, holder = holder, session = FakeSessionProvider(userId = "user-1"))
+        val repo = FakeTravelRepository(initialGroups = listOf(group), initialMembers = mapOf(groupId to members))
+        val vm = viewModel(repo = repo, session = FakeSessionProvider(userId = "user-1"))
         val scope = CoroutineScope(UnconfinedTestDispatcher())
         val job = scope.launch { vm.members.collect { } }
 
@@ -399,10 +393,10 @@ class GroupViewModelTest {
     @Test
     fun leaveGroupNetworkErrorShowsErrorMessage() {
         val groupId = "group-1"
+        val group = TravelGroup(id = groupId, name = "Viaje")
         val members = listOf(GroupMember(id = "m1", groupId = groupId, name = "Nico", userId = "user-1", role = MemberRole.USER))
-        val repo = FakeTravelRepository(initialMembers = mapOf(groupId to members), leaveGroupThrows = true)
-        val holder = SelectedGroupHolder().also { it.selectedGroupId.value = groupId }
-        val vm = viewModel(repo = repo, holder = holder, session = FakeSessionProvider(userId = "user-1"))
+        val repo = FakeTravelRepository(initialGroups = listOf(group), initialMembers = mapOf(groupId to members), leaveGroupThrows = true)
+        val vm = viewModel(repo = repo, session = FakeSessionProvider(userId = "user-1"))
         val scope = CoroutineScope(UnconfinedTestDispatcher())
         val job = scope.launch { vm.members.collect { } }
 
@@ -413,7 +407,7 @@ class GroupViewModelTest {
         job.cancel()
     }
 
-    // --- ADMIN kick confirmation ---
+    // ─── ADMIN kick confirmation ──────────────────────────────────────────────────
 
     @Test
     fun requestKickMemberSetsPendingMemberId() {
