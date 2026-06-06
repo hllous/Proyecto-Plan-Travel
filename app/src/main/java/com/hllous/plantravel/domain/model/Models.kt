@@ -74,6 +74,7 @@ data class PlaceResult(
     val lng: Double,
     val primaryType: String? = null,
     val types: List<String> = emptyList(),
+    val photoReference: String = "",
 )
 
 data class RankedRecommendations(

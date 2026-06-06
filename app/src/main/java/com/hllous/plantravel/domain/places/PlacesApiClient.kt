@@ -5,4 +5,5 @@ import com.hllous.plantravel.domain.model.PlaceResult
 interface PlacesApiClient {
     suspend fun searchDestinations(query: String): List<PlaceResult>
     suspend fun searchPois(lat: Double, lng: Double, type: String): List<PlaceResult>
+    fun resolvePhotoUrl(resourceName: String): String
 }

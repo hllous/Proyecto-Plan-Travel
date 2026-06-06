@@ -67,7 +67,7 @@ class GooglePlacesApiClient @Inject constructor(
         @SerialName("primaryType") val primaryType: String? = null,
         val types: List<String> = emptyList(),
     ) {
-        fun toPlaceResult(photoUrl: String) = PlaceResult(
+        fun toPlaceResult(photoUrl: String, photoReference: String) = PlaceResult(
             placeId = id,
             name = displayName.text,
             photoUrl = photoUrl,
@@ -78,6 +78,7 @@ class GooglePlacesApiClient @Inject constructor(
             lng = location.longitude,
             primaryType = primaryType,
             types = types,
+            photoReference = photoReference,
         )
     }
 
@@ -89,11 +90,14 @@ class GooglePlacesApiClient @Inject constructor(
 
     // ─── Helpers ──────────────────────────────────────────────────────────────
 
-    private fun resolvePhotoUrl(photoName: String): String =
-        "https://places.googleapis.com/v1/$photoName/media?maxWidthPx=$PHOTO_WIDTH&key=$apiKey"
+    override fun resolvePhotoUrl(resourceName: String): String =
+        "https://places.googleapis.com/v1/$resourceName/media?maxWidthPx=$PHOTO_WIDTH&key=$apiKey"
 
     private fun PlaceDto.resolvedPhotoUrl(): String =
         photos.firstOrNull()?.name?.let { resolvePhotoUrl(it) } ?: ""
+
+    private fun PlaceDto.photoReference(): String =
+        photos.firstOrNull()?.name ?: ""
 
     // ─── PlacesApiClient ──────────────────────────────────────────────────────
 
@@ -104,7 +108,7 @@ class GooglePlacesApiClient @Inject constructor(
             contentType(ContentType.Application.Json)
             setBody(TextSearchRequest(textQuery = region))
         }.body()
-        return response.places.map { it.toPlaceResult(it.resolvedPhotoUrl()) }
+        return response.places.map { it.toPlaceResult(it.resolvedPhotoUrl(), it.photoReference()) }
     }
 
     override suspend fun searchPois(lat: Double, lng: Double, type: String): List<PlaceResult> {
@@ -122,7 +126,7 @@ class GooglePlacesApiClient @Inject constructor(
                 )
             )
         }.body()
-        return response.places.map { it.toPlaceResult(it.resolvedPhotoUrl()) }
+        return response.places.map { it.toPlaceResult(it.resolvedPhotoUrl(), it.photoReference()) }
     }
 
     private fun poiTypeToGoogleTypes(type: String): List<String> = when (type) {

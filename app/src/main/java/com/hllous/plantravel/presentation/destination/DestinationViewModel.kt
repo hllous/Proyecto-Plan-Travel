@@ -252,7 +252,12 @@ class DestinationViewModel @Inject constructor(
                 !dbPhotoIsReal
             when {
                 dbPhotoIsReal -> {
-                    _destinationPhotoUrls.update { it + (key to dbPhoto!!) }
+                    val displayUrl = if (dbPhoto!!.startsWith("places/")) {
+                        placesApiClient.resolvePhotoUrl(dbPhoto)
+                    } else {
+                        dbPhoto
+                    }
+                    _destinationPhotoUrls.update { it + (key to displayUrl) }
                 }
 
                 (cached != null && !shouldRetryFallback) || key in photoLoadingDestinationKeys -> Unit
@@ -273,16 +278,21 @@ class DestinationViewModel @Inject constructor(
     }
 
     private suspend fun resolveDestinationPhotoUrl(destination: StoredDestination): String? {
-        val googleUrl = googleDestinationPhotoFetcher(destination)?.takeIf { it.isNotBlank() }
-        if (googleUrl != null) {
+        val googleRef = googleDestinationPhotoFetcher(destination)?.takeIf { it.isNotBlank() }
+        if (googleRef != null) {
+            val displayUrl = if (googleRef.startsWith("places/")) {
+                placesApiClient.resolvePhotoUrl(googleRef)
+            } else {
+                googleRef
+            }
             if (destination.id.isNotBlank()) {
                 repository.updateDestinationPhoto(
                     destinationId = destination.id,
-                    googlePhotoUrl = googleUrl,
-                    displayPhotoUrl = googleUrl,
+                    googlePhotoUrl = googleRef,
+                    displayPhotoUrl = googleRef,
                 )
             }
-            return googleUrl
+            return displayUrl
         }
 
         val wikipediaUrl = wikipediaDestinationPhotoFetcher(destination)?.takeIf { it.isNotBlank() }
@@ -310,7 +320,7 @@ class DestinationViewModel @Inject constructor(
                 .filter { it.photoUrl.isNotBlank() }
                 .sortedByDescending { scoreDestinationMatch(it, destination) }
                 .firstOrNull()
-                ?.photoUrl
+                ?.let { it.photoReference.ifBlank { it.photoUrl } }
         }.onFailure { e ->
             Log.w(TAG, "Google Places fetch failed for '${destination.name}': ${e.message}")
         }.getOrNull()

@@ -219,7 +219,7 @@ function Resolve-Photo([string]$Name, [string]$Province, [double]$Lat, [double]$
     if ($googlePhotoName) {
         return @{
             source = "google"
-            url    = "https://places.googleapis.com/v1/$googlePhotoName/media?maxWidthPx=800&key=$GooglePlacesApiKey"
+            url    = $googlePhotoName
             title  = $null
         }
     }

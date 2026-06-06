@@ -28,4 +28,7 @@ class FakePlacesApiClient(
         lastSearchedType = type
         return poiResults
     }
+
+    override fun resolvePhotoUrl(resourceName: String): String =
+        "https://places.googleapis.com/v1/$resourceName/media?maxWidthPx=800&key=test"
 }
