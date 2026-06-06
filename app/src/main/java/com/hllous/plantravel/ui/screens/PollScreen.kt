@@ -23,6 +23,7 @@ import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.automirrored.filled.ArrowBack
 import androidx.compose.material.icons.filled.HowToVote
 import androidx.compose.material.icons.filled.ThumbUp
+import androidx.compose.material.icons.outlined.ThumbUp
 import androidx.compose.material3.AlertDialog
 import androidx.compose.material3.Button
 import androidx.compose.material3.Card
@@ -34,6 +35,8 @@ import androidx.compose.material3.ExperimentalMaterial3Api
 import androidx.compose.material3.FilledTonalButton
 import androidx.compose.material3.Icon
 import androidx.compose.material3.IconButton
+import androidx.compose.material3.IconToggleButton
+import androidx.compose.material3.LinearProgressIndicator
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.ModalBottomSheet
 import androidx.compose.material3.OutlinedButton
@@ -112,6 +115,8 @@ fun PollScreen(
         }
     }
 
+    val isAdmin = currentMember?.role == MemberRole.ADMIN
+
     Scaffold(
         contentWindowInsets = WindowInsets(0),
         snackbarHost = { SnackbarHost(snackbarHostState) },
@@ -130,6 +135,13 @@ fun PollScreen(
                             Icons.AutoMirrored.Filled.ArrowBack,
                             contentDescription = "Volver",
                         )
+                    }
+                },
+                actions = {
+                    if (isAdmin && poll?.state == PollState.OPEN) {
+                        TextButton(onClick = { viewModel.closePoll() }) {
+                            Text("Cerrar votación")
+                        }
                     }
                 },
             )
@@ -157,9 +169,8 @@ fun PollScreen(
                     PollContent(
                         poll = currentPoll,
                         candidatesState = candidatesState,
-                        isAdmin = currentMember?.role == MemberRole.ADMIN,
+                        isAdmin = isAdmin,
                         onToggleVote = { candidateId -> viewModel.toggleVote(candidateId) },
-                        onClosePoll = { viewModel.closePoll() },
                         onSelectWinner = { showWinnerDialog = true },
                     )
                 }
@@ -226,7 +237,6 @@ private fun PollContent(
     candidatesState: UiState<List<PollCandidateUiModel>>,
     isAdmin: Boolean,
     onToggleVote: (String) -> Unit,
-    onClosePoll: () -> Unit,
     onSelectWinner: () -> Unit,
 ) {
     val isClosed = poll.state == PollState.CLOSED
@@ -311,19 +321,6 @@ private fun PollContent(
             }
         }
 
-        if (!isClosed && isAdmin) {
-            item {
-                OutlinedButton(
-                    onClick = onClosePoll,
-                    modifier = Modifier
-                        .fillMaxWidth()
-                        .padding(horizontal = 16.dp, vertical = 8.dp),
-                ) {
-                    Text("Cerrar encuesta")
-                }
-            }
-        }
-
         if (isClosed && isAdmin && poll.winnerPlaceId == null) {
             item {
                 FilledTonalButton(
@@ -347,92 +344,73 @@ private fun PollCandidateCard(
     onToggleVote: () -> Unit,
 ) {
     val candidate = uiModel.candidate
-    val borderStroke = if (isWinner) {
-        BorderStroke(2.dp, MaterialTheme.colorScheme.primary)
-    } else null
 
     OutlinedCard(
         modifier = Modifier
             .fillMaxWidth()
             .padding(horizontal = 16.dp, vertical = 4.dp),
         shape = RoundedCornerShape(12.dp),
-        border = borderStroke ?: BorderStroke(1.dp, MaterialTheme.colorScheme.outlineVariant),
+        border = if (isWinner)
+            BorderStroke(2.dp, MaterialTheme.colorScheme.primary)
+        else
+            BorderStroke(1.dp, MaterialTheme.colorScheme.outlineVariant),
         colors = if (isWinner)
             CardDefaults.outlinedCardColors(containerColor = MaterialTheme.colorScheme.primaryContainer.copy(alpha = 0.3f))
         else
             CardDefaults.outlinedCardColors(),
     ) {
-        Row(
-            modifier = Modifier
-                .fillMaxWidth()
-                .padding(12.dp),
-            verticalAlignment = Alignment.CenterVertically,
-        ) {
+        Column {
             AsyncImage(
                 model = candidate.photoUrl,
                 contentDescription = candidate.name,
                 contentScale = ContentScale.Crop,
                 modifier = Modifier
-                    .size(80.dp)
-                    .clip(RoundedCornerShape(8.dp)),
+                    .fillMaxWidth()
+                    .height(120.dp)
+                    .clip(RoundedCornerShape(topStart = 12.dp, topEnd = 12.dp)),
             )
 
-            Spacer(modifier = Modifier.width(12.dp))
-
-            Column(modifier = Modifier.weight(1f)) {
-                Text(
-                    text = candidate.name,
-                    style = MaterialTheme.typography.titleSmall,
-                    fontWeight = FontWeight.SemiBold,
-                    maxLines = 2,
-                    overflow = TextOverflow.Ellipsis,
-                )
+            Column(modifier = Modifier.padding(12.dp)) {
                 if (isWinner) {
-                    Spacer(modifier = Modifier.height(4.dp))
                     Text(
                         text = "Ganador",
                         style = MaterialTheme.typography.labelSmall,
                         color = MaterialTheme.colorScheme.primary,
                         fontWeight = FontWeight.Bold,
                     )
+                    Spacer(modifier = Modifier.height(2.dp))
                 }
-                Spacer(modifier = Modifier.height(4.dp))
+                Text(
+                    text = candidate.name,
+                    style = MaterialTheme.typography.titleMedium,
+                    maxLines = 2,
+                    overflow = TextOverflow.Ellipsis,
+                )
+                Spacer(modifier = Modifier.height(8.dp))
                 Row(verticalAlignment = Alignment.CenterVertically) {
-                    Icon(
-                        imageVector = Icons.Default.ThumbUp,
-                        contentDescription = null,
-                        tint = MaterialTheme.colorScheme.onSurfaceVariant,
-                        modifier = Modifier.size(14.dp),
-                    )
+                    IconToggleButton(
+                        checked = uiModel.votedByCurrentMember,
+                        onCheckedChange = { if (votingEnabled) onToggleVote() },
+                        enabled = votingEnabled,
+                        modifier = Modifier.size(32.dp),
+                    ) {
+                        Icon(
+                            imageVector = if (uiModel.votedByCurrentMember) Icons.Filled.ThumbUp else Icons.Outlined.ThumbUp,
+                            contentDescription = if (uiModel.votedByCurrentMember) "Quitar voto" else "Votar",
+                            modifier = Modifier.size(20.dp),
+                        )
+                    }
                     Spacer(modifier = Modifier.width(4.dp))
                     Text(
                         text = "${uiModel.voteCount}",
-                        style = MaterialTheme.typography.bodySmall,
-                        color = MaterialTheme.colorScheme.onSurfaceVariant,
+                        style = MaterialTheme.typography.bodyMedium,
                     )
                 }
-            }
-
-            Spacer(modifier = Modifier.width(8.dp))
-
-            if (votingEnabled) {
-                if (uiModel.votedByCurrentMember) {
-                    FilledTonalButton(
-                        onClick = onToggleVote,
-                        modifier = Modifier.size(width = 80.dp, height = 36.dp),
-                        contentPadding = PaddingValues(horizontal = 8.dp),
-                    ) {
-                        Text("Votado", style = MaterialTheme.typography.labelSmall)
-                    }
-                } else {
-                    OutlinedButton(
-                        onClick = onToggleVote,
-                        modifier = Modifier.size(width = 80.dp, height = 36.dp),
-                        contentPadding = PaddingValues(horizontal = 8.dp),
-                    ) {
-                        Text("Votar", style = MaterialTheme.typography.labelSmall)
-                    }
-                }
+                Spacer(modifier = Modifier.height(6.dp))
+                LinearProgressIndicator(
+                    progress = { uiModel.voteProgress },
+                    modifier = Modifier.fillMaxWidth(),
+                )
             }
         }
     }

@@ -29,6 +29,7 @@ data class PollCandidateUiModel(
     val candidate: PollCandidate,
     val voteCount: Int,
     val votedByCurrentMember: Boolean,
+    val voteProgress: Float,
 )
 
 @HiltViewModel
@@ -56,11 +57,13 @@ class PollViewModel @Inject constructor(
             if (activePoll == null) return@flatMapLatest flowOf(UiState.Success(emptyList()))
             repository.observePollCandidates(activePoll.id)
                 .map<List<PollCandidate>, UiState<List<PollCandidateUiModel>>> { list ->
+                    val totalVotes = list.sumOf { it.voteCount }
                     UiState.Success(list.map {
                         PollCandidateUiModel(
                             candidate = it,
                             voteCount = it.voteCount,
                             votedByCurrentMember = it.votedByCurrentMember,
+                            voteProgress = if (totalVotes == 0) 0f else it.voteCount.toFloat() / totalVotes,
                         )
                     })
                 }

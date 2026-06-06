@@ -53,19 +53,21 @@ import androidx.compose.material3.FilterChipDefaults
 import androidx.compose.material3.HorizontalDivider
 import androidx.compose.material3.Icon
 import androidx.compose.material3.IconButton
-import androidx.compose.material3.LargeTopAppBar
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.ModalBottomSheet
 import androidx.compose.material3.OutlinedButton
 import androidx.compose.material3.OutlinedTextField
 import androidx.compose.material3.Scaffold
+import androidx.compose.material3.ScrollableTabRow
 import androidx.compose.material3.SnackbarHost
 import androidx.compose.material3.SnackbarHostState
+import androidx.compose.material3.SuggestionChip
+import androidx.compose.material3.SuggestionChipDefaults
 import androidx.compose.material3.Surface
+import androidx.compose.material3.Tab
 import androidx.compose.material3.Text
 import androidx.compose.material3.TextButton
 import androidx.compose.material3.TopAppBar
-import androidx.compose.material3.TopAppBarDefaults
 import androidx.compose.material3.rememberModalBottomSheetState
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.LaunchedEffect
@@ -82,7 +84,6 @@ import androidx.compose.ui.draw.clip
 import androidx.compose.ui.graphics.Brush
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.graphics.vector.ImageVector
-import androidx.compose.ui.input.nestedscroll.nestedScroll
 import androidx.compose.ui.layout.ContentScale
 import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.res.painterResource
@@ -239,7 +240,7 @@ private fun Level2Content(
                 }
 
                 is UiState.Success -> {
-                    PoiResultsList(
+                    PoiGrid(
                         ranked = state.data,
                         onPoiClick = { selectedPoi = it },
                     )
@@ -272,8 +273,10 @@ private fun Level2Content(
     }
 }
 
+private data class PoiItem(val place: PlaceResult, val isTop: Boolean)
+
 @Composable
-private fun PoiResultsList(
+private fun PoiGrid(
     ranked: RankedRecommendations,
     onPoiClick: (PlaceResult) -> Unit,
 ) {
@@ -283,7 +286,7 @@ private fun PoiResultsList(
             contentAlignment = Alignment.Center,
         ) {
             Text(
-                text = "Sin resultados para esta categoría",
+                text = "Sin resultados en esta categoría",
                 style = MaterialTheme.typography.bodyMedium,
                 color = MaterialTheme.colorScheme.onSurfaceVariant,
             )
@@ -291,59 +294,41 @@ private fun PoiResultsList(
         return
     }
 
-    LazyColumn(
-        contentPadding = PaddingValues(vertical = 8.dp),
-        verticalArrangement = Arrangement.spacedBy(4.dp),
+    val items = ranked.top.map { PoiItem(it, isTop = true) } +
+        ranked.others.map { PoiItem(it, isTop = false) }
+
+    LazyVerticalGrid(
+        columns = GridCells.Fixed(2),
+        contentPadding = PaddingValues(12.dp),
+        horizontalArrangement = Arrangement.spacedBy(10.dp),
+        verticalArrangement = Arrangement.spacedBy(10.dp),
         modifier = Modifier.fillMaxSize(),
     ) {
-        if (ranked.top.isNotEmpty()) {
-            item {
-                Text(
-                    text = "Destacados",
-                    style = MaterialTheme.typography.labelLarge,
-                    color = MaterialTheme.colorScheme.secondary,
-                    modifier = Modifier.padding(horizontal = 16.dp, vertical = 8.dp),
-                )
-            }
-            items(ranked.top) { place ->
-                PoiCard(place = place, onClick = { onPoiClick(place) })
-            }
-        }
-
-        if (ranked.others.isNotEmpty()) {
-            item {
-                Text(
-                    text = "Otros",
-                    style = MaterialTheme.typography.labelLarge,
-                    color = MaterialTheme.colorScheme.onSurfaceVariant,
-                    modifier = Modifier.padding(horizontal = 16.dp, vertical = 8.dp),
-                )
-            }
-            items(ranked.others) { place ->
-                PoiCard(place = place, onClick = { onPoiClick(place) })
-            }
+        items(items, key = { it.place.placeId }) { item ->
+            PoiGridCard(
+                place = item.place,
+                isTop = item.isTop,
+                onClick = { onPoiClick(item.place) },
+            )
         }
     }
 }
 
 @Composable
-private fun PoiCard(
+private fun PoiGridCard(
     place: PlaceResult,
+    isTop: Boolean,
     onClick: () -> Unit,
 ) {
     Card(
         onClick = onClick,
-        modifier = Modifier
-            .fillMaxWidth()
-            .padding(horizontal = 16.dp, vertical = 4.dp),
         shape = RoundedCornerShape(12.dp),
         elevation = CardDefaults.cardElevation(defaultElevation = 1.dp),
     ) {
-        Row(
+        Box(
             modifier = Modifier
                 .fillMaxWidth()
-                .padding(12.dp),
-            verticalAlignment = Alignment.CenterVertically,
+                .height(160.dp),
         ) {
             DestinationImage(
                 imageUrl = place.photoUrl,
@@ -351,50 +336,40 @@ private fun PoiCard(
                 title = place.name,
                 subtitle = place.address,
                 icon = Icons.Default.Map,
-                modifier = Modifier
-                    .size(80.dp)
-                    .clip(RoundedCornerShape(10.dp)),
+                modifier = Modifier.fillMaxSize(),
             )
-            Spacer(modifier = Modifier.width(12.dp))
-            Column(modifier = Modifier.weight(1f)) {
-                Text(
-                    text = place.name,
-                    style = MaterialTheme.typography.titleSmall,
-                    fontWeight = FontWeight.SemiBold,
-                    maxLines = 1,
-                    overflow = TextOverflow.Ellipsis,
+            Box(
+                modifier = Modifier
+                    .fillMaxSize()
+                    .background(
+                        Brush.verticalGradient(
+                            colors = listOf(Color.Transparent, Color(0x80000000)),
+                            startY = 60f,
+                        ),
+                    ),
+            )
+            Text(
+                text = place.name,
+                style = MaterialTheme.typography.labelLarge,
+                color = Color.White,
+                maxLines = 2,
+                overflow = TextOverflow.Ellipsis,
+                modifier = Modifier
+                    .align(Alignment.BottomStart)
+                    .padding(8.dp),
+            )
+            if (isTop) {
+                SuggestionChip(
+                    onClick = {},
+                    label = { Text("Top", style = MaterialTheme.typography.labelSmall) },
+                    colors = SuggestionChipDefaults.suggestionChipColors(
+                        containerColor = MaterialTheme.colorScheme.primaryContainer,
+                        labelColor = MaterialTheme.colorScheme.onPrimaryContainer,
+                    ),
+                    modifier = Modifier
+                        .align(Alignment.TopStart)
+                        .padding(6.dp),
                 )
-                if (place.address.isNotBlank()) {
-                    Spacer(modifier = Modifier.height(2.dp))
-                    Text(
-                        text = place.address,
-                        style = MaterialTheme.typography.bodySmall,
-                        color = MaterialTheme.colorScheme.onSurfaceVariant,
-                        maxLines = 1,
-                        overflow = TextOverflow.Ellipsis,
-                    )
-                }
-                Spacer(modifier = Modifier.height(4.dp))
-                Row(verticalAlignment = Alignment.CenterVertically) {
-                    Icon(
-                        Icons.Default.Star,
-                        contentDescription = null,
-                        tint = MaterialTheme.colorScheme.primary,
-                        modifier = Modifier.size(13.dp),
-                    )
-                    Spacer(modifier = Modifier.width(3.dp))
-                    Text(
-                        text = "%.1f".format(place.rating),
-                        style = MaterialTheme.typography.bodySmall,
-                        fontWeight = FontWeight.Medium,
-                    )
-                    Spacer(modifier = Modifier.width(4.dp))
-                    Text(
-                        text = "(${place.reviewCount})",
-                        style = MaterialTheme.typography.bodySmall,
-                        color = MaterialTheme.colorScheme.onSurfaceVariant,
-                    )
-                }
             }
         }
     }
@@ -539,9 +514,7 @@ private fun Level1BrowseContent(viewModel: DestinationViewModel, navController: 
     val currentMember by viewModel.currentMember.collectAsState()
     val tripDestination by viewModel.tripDestination.collectAsState()
 
-    val scrollBehavior = TopAppBarDefaults.exitUntilCollapsedScrollBehavior()
-
-    var selectedRegion by rememberSaveable { mutableStateOf<String?>(null) }
+    var selectedTabIndex by rememberSaveable { mutableStateOf(0) }
     var searchQuery by rememberSaveable { mutableStateOf("") }
     var isSearchActive by rememberSaveable { mutableStateOf(false) }
     var pollBannerDismissed by rememberSaveable { mutableStateOf(false) }
@@ -549,17 +522,19 @@ private fun Level1BrowseContent(viewModel: DestinationViewModel, navController: 
 
     val showPollBanner = activePoll != null && !pollBannerDismissed
 
+    LaunchedEffect(Unit) {
+        viewModel.selectRegion(REGIONS[0])
+    }
+
     val displayedDestinations: List<StoredDestination> = when {
         isSearchActive -> searchDestinations
-        selectedRegion != null -> regionDestinations
-        else -> emptyList()
+        else -> regionDestinations
     }
 
     Scaffold(
-        modifier = Modifier.nestedScroll(scrollBehavior.nestedScrollConnection),
         contentWindowInsets = WindowInsets(0),
         topBar = {
-            LargeTopAppBar(
+            TopAppBar(
                 title = {
                     Text(
                         "Destinos",
@@ -567,7 +542,6 @@ private fun Level1BrowseContent(viewModel: DestinationViewModel, navController: 
                         fontWeight = FontWeight.Medium,
                     )
                 },
-                scrollBehavior = scrollBehavior,
             )
         },
     ) { innerPadding ->
@@ -593,7 +567,6 @@ private fun Level1BrowseContent(viewModel: DestinationViewModel, navController: 
                     searchQuery = q
                     if (q.isNotBlank()) {
                         isSearchActive = true
-                        selectedRegion = null
                         viewModel.search(q)
                     } else {
                         isSearchActive = false
@@ -618,54 +591,48 @@ private fun Level1BrowseContent(viewModel: DestinationViewModel, navController: 
                 shape = RoundedCornerShape(28.dp),
             )
 
-            LazyRow(
-                contentPadding = PaddingValues(horizontal = 16.dp, vertical = 4.dp),
-                horizontalArrangement = Arrangement.spacedBy(8.dp),
-            ) {
-                if (activePoll != null && pollBannerDismissed) {
-                    item {
-                        FilterChip(
-                            selected = false,
-                            onClick = { pollBannerDismissed = false },
-                            label = { Text("Encuesta activa") },
-                            leadingIcon = {
-                                Icon(
-                                    Icons.Default.HowToVote,
-                                    contentDescription = null,
-                                    modifier = Modifier.size(16.dp),
-                                )
-                            },
-                            colors = FilterChipDefaults.filterChipColors(
-                                containerColor = MaterialTheme.colorScheme.secondaryContainer,
-                                labelColor = MaterialTheme.colorScheme.onSecondaryContainer,
-                                iconColor = MaterialTheme.colorScheme.onSecondaryContainer,
-                            ),
-                        )
-                    }
-                }
-
-                items(REGIONS) { region ->
+            if (activePoll != null && pollBannerDismissed) {
+                Box(modifier = Modifier.padding(horizontal = 16.dp, vertical = 4.dp)) {
                     FilterChip(
-                        selected = selectedRegion == region,
-                        onClick = {
-                            if (selectedRegion == region) {
-                                selectedRegion = null
-                            } else {
-                                selectedRegion = region
-                                isSearchActive = false
-                                searchQuery = ""
-                                viewModel.selectRegion(region)
-                            }
+                        selected = false,
+                        onClick = { pollBannerDismissed = false },
+                        label = { Text("Encuesta activa") },
+                        leadingIcon = {
+                            Icon(
+                                Icons.Default.HowToVote,
+                                contentDescription = null,
+                                modifier = Modifier.size(16.dp),
+                            )
                         },
-                        label = { Text(region) },
+                        colors = FilterChipDefaults.filterChipColors(
+                            containerColor = MaterialTheme.colorScheme.secondaryContainer,
+                            labelColor = MaterialTheme.colorScheme.onSecondaryContainer,
+                            iconColor = MaterialTheme.colorScheme.onSecondaryContainer,
+                        ),
                     )
                 }
             }
 
-            HorizontalDivider(modifier = Modifier.padding(top = 4.dp))
+            if (!isSearchActive) {
+                ScrollableTabRow(
+                    selectedTabIndex = selectedTabIndex,
+                    edgePadding = 16.dp,
+                ) {
+                    REGIONS.forEachIndexed { index, region ->
+                        Tab(
+                            selected = selectedTabIndex == index,
+                            onClick = {
+                                selectedTabIndex = index
+                                viewModel.selectRegion(region)
+                            },
+                            text = { Text(region) },
+                        )
+                    }
+                }
+            }
 
             when {
-                displayedDestinations.isEmpty() && (selectedRegion != null || isSearchActive) -> {
+                isSearchActive && displayedDestinations.isEmpty() -> {
                     Box(
                         modifier = Modifier.fillMaxSize(),
                         contentAlignment = Alignment.Center,
@@ -677,28 +644,43 @@ private fun Level1BrowseContent(viewModel: DestinationViewModel, navController: 
                         )
                     }
                 }
+                isSearchActive -> {
+                    LazyColumn(
+                        contentPadding = PaddingValues(vertical = 8.dp),
+                        modifier = Modifier.fillMaxSize(),
+                    ) {
+                        items(displayedDestinations) { destination ->
+                            CompactDestinationRow(
+                                destination = destination,
+                                imageUrl = destinationPhotoUrls[destinationCardKey(destination)].orEmpty(),
+                                onClick = { selectedDestination = destination },
+                            )
+                        }
+                    }
+                }
                 displayedDestinations.isEmpty() -> {
                     Box(
                         modifier = Modifier.fillMaxSize(),
                         contentAlignment = Alignment.Center,
                     ) {
-                        Text(
-                            text = "Seleccioná una región para explorar destinos",
-                            style = MaterialTheme.typography.bodyMedium,
-                            color = MaterialTheme.colorScheme.onSurfaceVariant,
-                        )
+                        CircularProgressIndicator()
                     }
                 }
                 else -> {
-                    LazyVerticalGrid(
-                        columns = GridCells.Fixed(2),
-                        contentPadding = PaddingValues(16.dp),
-                        horizontalArrangement = Arrangement.spacedBy(12.dp),
-                        verticalArrangement = Arrangement.spacedBy(12.dp),
+                    LazyColumn(
+                        contentPadding = PaddingValues(bottom = 24.dp),
                         modifier = Modifier.fillMaxSize(),
                     ) {
-                        items(displayedDestinations) { destination ->
-                            DestinationCard(
+                        val hero = displayedDestinations.first()
+                        item(key = "hero-${hero.id}") {
+                            HeroDestinationCard(
+                                destination = hero,
+                                imageUrl = destinationPhotoUrls[destinationCardKey(hero)].orEmpty(),
+                                onClick = { selectedDestination = hero },
+                            )
+                        }
+                        items(displayedDestinations.drop(1), key = { it.id }) { destination ->
+                            CompactDestinationRow(
                                 destination = destination,
                                 imageUrl = destinationPhotoUrls[destinationCardKey(destination)].orEmpty(),
                                 onClick = { selectedDestination = destination },
@@ -723,6 +705,117 @@ private fun Level1BrowseContent(viewModel: DestinationViewModel, navController: 
             },
             onNavigateToPoll = { navController.navigate("poll_detail") },
         )
+    }
+}
+
+@Composable
+private fun HeroDestinationCard(
+    destination: StoredDestination,
+    imageUrl: String,
+    onClick: () -> Unit,
+) {
+    Card(
+        onClick = onClick,
+        modifier = Modifier
+            .fillMaxWidth()
+            .padding(horizontal = 16.dp, vertical = 12.dp),
+        shape = RoundedCornerShape(16.dp),
+        elevation = CardDefaults.cardElevation(defaultElevation = 2.dp),
+    ) {
+        Box(
+            modifier = Modifier
+                .fillMaxWidth()
+                .height(220.dp),
+        ) {
+            DestinationImage(
+                imageUrl = imageUrl,
+                contentDescription = destination.name,
+                title = destination.name,
+                subtitle = destination.province,
+                icon = Icons.Default.LocationOn,
+                modifier = Modifier.fillMaxSize(),
+            )
+            Box(
+                modifier = Modifier
+                    .fillMaxSize()
+                    .background(
+                        Brush.verticalGradient(
+                            colors = listOf(Color.Transparent, Color(0x99000000)),
+                            startY = 80f,
+                        ),
+                    ),
+            )
+            Column(
+                modifier = Modifier
+                    .align(Alignment.BottomStart)
+                    .padding(16.dp),
+            ) {
+                Text(
+                    text = destination.name,
+                    style = MaterialTheme.typography.displaySmall,
+                    fontFamily = FrauncesFamily,
+                    color = Color.White,
+                    fontWeight = FontWeight.Medium,
+                    maxLines = 2,
+                    overflow = TextOverflow.Ellipsis,
+                )
+                Text(
+                    text = destination.province,
+                    style = MaterialTheme.typography.bodyMedium,
+                    color = Color.White.copy(alpha = 0.85f),
+                )
+            }
+        }
+    }
+}
+
+@Composable
+private fun CompactDestinationRow(
+    destination: StoredDestination,
+    imageUrl: String,
+    onClick: () -> Unit,
+) {
+    Card(
+        onClick = onClick,
+        modifier = Modifier
+            .fillMaxWidth()
+            .padding(horizontal = 16.dp, vertical = 4.dp),
+        shape = RoundedCornerShape(12.dp),
+        colors = CardDefaults.cardColors(containerColor = MaterialTheme.colorScheme.surface),
+    ) {
+        Row(
+            modifier = Modifier
+                .fillMaxWidth()
+                .padding(8.dp),
+            verticalAlignment = Alignment.CenterVertically,
+        ) {
+            DestinationImage(
+                imageUrl = imageUrl,
+                contentDescription = destination.name,
+                title = destination.name,
+                subtitle = destination.province,
+                icon = Icons.Default.LocationOn,
+                modifier = Modifier
+                    .size(56.dp)
+                    .clip(RoundedCornerShape(8.dp)),
+            )
+            Spacer(modifier = Modifier.width(12.dp))
+            Column(modifier = Modifier.weight(1f)) {
+                Text(
+                    text = destination.name,
+                    style = MaterialTheme.typography.titleMedium,
+                    maxLines = 1,
+                    overflow = TextOverflow.Ellipsis,
+                )
+                Text(
+                    text = destination.province,
+                    style = MaterialTheme.typography.bodySmall,
+                    color = MaterialTheme.colorScheme.onSurfaceVariant,
+                    maxLines = 1,
+                    overflow = TextOverflow.Ellipsis,
+                )
+            }
+        }
     }
 }
 

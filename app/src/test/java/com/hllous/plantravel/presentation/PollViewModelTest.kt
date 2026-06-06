@@ -188,4 +188,50 @@ class PollViewModelTest {
         assertNotNull(vm.errorMessage.value)
         assertEquals("Ya hay una encuesta activa", vm.errorMessage.value)
     }
+
+    // ── Cycle 1A: voteProgress is proportional to total votes ────────────────
+
+    @Test
+    fun voteProgressIsProportionalToTotalVotes() {
+        val member = GroupMember(id = "m1", groupId = "group-1", userId = "user-1", name = "User", role = MemberRole.USER)
+        val repo = FakeTravelRepository(initialMembers = mapOf("group-1" to listOf(member)))
+        val holder = SelectedGroupHolder().also { it.selectedGroupId.value = "group-1" }
+        repo.simulatePollUpdate("group-1", openPoll)
+        val candidates = listOf(
+            PollCandidate(id = "c1", pollId = "poll-1", placeId = "p1", name = "A", photoUrl = "", addedByMemberId = "m1", voteCount = 3, votedByCurrentMember = false),
+            PollCandidate(id = "c2", pollId = "poll-1", placeId = "p2", name = "B", photoUrl = "", addedByMemberId = "m1", voteCount = 1, votedByCurrentMember = false),
+        )
+        repo.simulateCandidatesUpdate("poll-1", candidates)
+
+        val vm = viewModel(repo = repo, holder = holder)
+        val job = CoroutineScope(UnconfinedTestDispatcher()).launch { vm.candidates.collect {} }
+
+        val uiCandidates = (vm.candidates.value as UiState.Success).data
+        assertEquals(0.75f, uiCandidates[0].voteProgress, 0.001f)
+        assertEquals(0.25f, uiCandidates[1].voteProgress, 0.001f)
+        job.cancel()
+    }
+
+    // ── Cycle 1B: voteProgress is 0 for all when total votes is zero ─────────
+
+    @Test
+    fun voteProgressIsZeroWhenNoVotesCast() {
+        val member = GroupMember(id = "m1", groupId = "group-1", userId = "user-1", name = "User", role = MemberRole.USER)
+        val repo = FakeTravelRepository(initialMembers = mapOf("group-1" to listOf(member)))
+        val holder = SelectedGroupHolder().also { it.selectedGroupId.value = "group-1" }
+        repo.simulatePollUpdate("group-1", openPoll)
+        val candidates = listOf(
+            PollCandidate(id = "c1", pollId = "poll-1", placeId = "p1", name = "A", photoUrl = "", addedByMemberId = "m1", voteCount = 0, votedByCurrentMember = false),
+            PollCandidate(id = "c2", pollId = "poll-1", placeId = "p2", name = "B", photoUrl = "", addedByMemberId = "m1", voteCount = 0, votedByCurrentMember = false),
+        )
+        repo.simulateCandidatesUpdate("poll-1", candidates)
+
+        val vm = viewModel(repo = repo, holder = holder)
+        val job = CoroutineScope(UnconfinedTestDispatcher()).launch { vm.candidates.collect {} }
+
+        val uiCandidates = (vm.candidates.value as UiState.Success).data
+        assertEquals(0f, uiCandidates[0].voteProgress, 0.001f)
+        assertEquals(0f, uiCandidates[1].voteProgress, 0.001f)
+        job.cancel()
+    }
 }
