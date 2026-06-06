@@ -25,7 +25,6 @@ import io.github.jan.supabase.SupabaseClient
 import io.github.jan.supabase.auth.auth
 import io.github.jan.supabase.postgrest.from
 import io.github.jan.supabase.postgrest.query.Columns
-import io.github.jan.supabase.postgrest.query.Order
 import io.github.jan.supabase.realtime.PostgresAction
 import io.github.jan.supabase.realtime.channel
 import io.github.jan.supabase.realtime.broadcastFlow
@@ -289,8 +288,8 @@ class SupabaseTravelRepositoryImpl @Inject constructor(
     ) {
         fun toDomain() = Poll(
             id = id, groupId = groupId,
-            type = if (type == "DESTINATION") PollType.DESTINATION else PollType.ACTIVITY,
-            state = if (state == "CLOSED") PollState.CLOSED else PollState.OPEN,
+            type = if (type.equals("destination", ignoreCase = true)) PollType.DESTINATION else PollType.ACTIVITY,
+            state = if (state.equals("closed", ignoreCase = true)) PollState.CLOSED else PollState.OPEN,
             expiresAt = expiresAt, winnerPlaceId = winnerPlaceId,
         )
     }
@@ -411,11 +410,7 @@ class SupabaseTravelRepositoryImpl @Inject constructor(
 
     private suspend fun fetchActivePoll(groupId: String): Poll? =
         supabase.from("group_polls")
-            .select {
-                filter { eq("group_id", groupId) }
-                order("created_at", Order.DESCENDING)
-                limit(1)
-            }
+            .select { filter { eq("group_id", groupId) } }
             .decodeList<PollDto>()
             .firstOrNull()?.toDomain()
 
@@ -773,7 +768,7 @@ class SupabaseTravelRepositoryImpl @Inject constructor(
     override suspend fun createPoll(groupId: String, type: PollType, expiresAt: String?): String {
         val id = UUID.randomUUID().toString()
         supabase.from("group_polls")
-            .insert(InsertPollDto(id = id, groupId = groupId, type = type.name, expiresAt = expiresAt))
+            .insert(InsertPollDto(id = id, groupId = groupId, type = type.name.lowercase(), expiresAt = expiresAt))
         sendBroadcast("group-polls-broadcast-$groupId", "poll_changed")
         return id
     }
