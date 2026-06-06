@@ -32,7 +32,6 @@ class GooglePlacesApiClient @Inject constructor(
         val textQuery: String,
         val languageCode: String = "es",
         val regionCode: String = "AR",
-        val includedType: String = "locality",
     )
 
     @Serializable

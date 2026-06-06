@@ -1,5 +1,6 @@
 package com.hllous.plantravel.presentation.destination
 
+import android.util.Log
 import androidx.lifecycle.ViewModel
 import androidx.lifecycle.viewModelScope
 import com.hllous.plantravel.data.destination.DestinationFallbackImage
@@ -243,12 +244,15 @@ class DestinationViewModel @Inject constructor(
         destinations.forEach { destination ->
             val key = destination.photoKey()
             val cached = _destinationPhotoUrls.value[key]
+            val dbPhoto = destination.displayPhotoUrl
+            val dbPhotoIsReal = !dbPhoto.isNullOrBlank() &&
+                DestinationFallbackImage.regionSlugFromToken(dbPhoto) == null
             val shouldRetryFallback = cached != null &&
                 DestinationFallbackImage.regionSlugFromToken(cached) != null &&
-                destination.displayPhotoUrl.isNullOrBlank()
+                !dbPhotoIsReal
             when {
-                !destination.displayPhotoUrl.isNullOrBlank() -> {
-                    _destinationPhotoUrls.update { it + (key to destination.displayPhotoUrl) }
+                dbPhotoIsReal -> {
+                    _destinationPhotoUrls.update { it + (key to dbPhoto!!) }
                 }
 
                 (cached != null && !shouldRetryFallback) || key in photoLoadingDestinationKeys -> Unit
@@ -307,6 +311,8 @@ class DestinationViewModel @Inject constructor(
                 .sortedByDescending { scoreDestinationMatch(it, destination) }
                 .firstOrNull()
                 ?.photoUrl
+        }.onFailure { e ->
+            Log.w(TAG, "Google Places fetch failed for '${destination.name}': ${e.message}")
         }.getOrNull()
     }
 
@@ -327,12 +333,12 @@ class DestinationViewModel @Inject constructor(
         runCatching {
             // Step 1: direct name lookup on Spanish Wikipedia.
             // On es.wikipedia.org, "Gaiman" = the Patagonian town, not Neil Gaiman (who is "Neil Gaiman").
-            val direct = wikipediaThumbnail(destination.name)
+            val direct = wikipediaThumbnail(destination.name, destination)
             if (direct != null) return@runCatching direct
 
             // Step 2: parenthetical disambiguation form → "Cervantes (Río Negro)".
             // Needed when the bare name is a disambiguation page or maps to a different article.
-            val parenthetical = wikipediaThumbnail("${destination.name} (${destination.province})")
+            val parenthetical = wikipediaThumbnail("${destination.name} (${destination.province})", destination)
             if (parenthetical != null) return@runCatching parenthetical
 
             // Step 3: coordinate geosearch — catches towns whose Spanish Wikipedia article
@@ -342,7 +348,7 @@ class DestinationViewModel @Inject constructor(
         }.getOrNull()
     }
 
-    private fun wikipediaThumbnail(title: String): String? {
+    private fun wikipediaThumbnail(title: String, destination: StoredDestination? = null): String? {
         val encoded = URLEncoder.encode(title, "UTF-8").replace("+", "_")
         val conn = URL("https://es.wikipedia.org/api/rest_v1/page/summary/$encoded")
             .openConnection() as HttpURLConnection
@@ -351,7 +357,42 @@ class DestinationViewModel @Inject constructor(
         if (conn.responseCode != 200) return null
         val json = JSONObject(conn.inputStream.bufferedReader().readText())
         if (json.optString("type") == "disambiguation") return null
-        return json.optJSONObject("thumbnail")?.optString("source")?.takeIf { it.isNotBlank() }
+
+        if (destination != null && !isWikipediaArticleRelevant(json, destination)) return null
+
+        val thumbnailUrl = json.optJSONObject("thumbnail")?.optString("source")
+            ?.takeIf { it.isNotBlank() } ?: return null
+
+        // SVG thumbnails are location maps, flags, or diagrams — not destination photos.
+        if (thumbnailUrl.contains(".svg", ignoreCase = true)) return null
+
+        return thumbnailUrl
+    }
+
+    private fun isWikipediaArticleRelevant(json: JSONObject, destination: StoredDestination): Boolean {
+        val coords = json.optJSONObject("coordinates")
+        if (coords != null) {
+            val lat = coords.optDouble("lat", Double.NaN)
+            val lon = coords.optDouble("lon", Double.NaN)
+            if (!lat.isNaN() && !lon.isNaN()) {
+                return haversineKm(destination.lat, destination.lng, lat, lon) <= 500.0
+            }
+        }
+        // No coordinates: accept only if the article text mentions Argentina or the province.
+        val text = (json.optString("description", "") + " " + json.optString("extract", ""))
+            .lowercase()
+        val province = DestinationTextNormalizer.normalize(destination.province).lowercase()
+        return text.contains("argentina") || text.contains(province)
+    }
+
+    private fun haversineKm(lat1: Double, lon1: Double, lat2: Double, lon2: Double): Double {
+        val r = 6371.0
+        val dLat = Math.toRadians(lat2 - lat1)
+        val dLon = Math.toRadians(lon2 - lon1)
+        val a = Math.sin(dLat / 2).let { it * it } +
+            Math.cos(Math.toRadians(lat1)) * Math.cos(Math.toRadians(lat2)) *
+            Math.sin(dLon / 2).let { it * it }
+        return r * 2 * Math.atan2(Math.sqrt(a), Math.sqrt(1 - a))
     }
 
     private fun wikipediaThumbnailByGeosearch(destination: StoredDestination): String? {
@@ -379,8 +420,10 @@ class DestinationViewModel @Inject constructor(
             if (startsWithMatch == null && norm.startsWith(destNorm)) startsWithMatch = title
             if (containsMatch == null && norm.contains(destNorm)) containsMatch = title
         }
-        val best = startsWithMatch ?: containsMatch ?: firstTitle ?: return null
-        return wikipediaThumbnail(best)
+        // Only use a geosearch hit if it starts with the destination name.
+        // containsMatch / firstTitle may be unrelated POIs (stations, museums) near the town.
+        val best = startsWithMatch ?: return null
+        return wikipediaThumbnail(best, destination)
     }
 
     fun setTripDestination(destination: StoredDestination) {
@@ -453,5 +496,9 @@ class DestinationViewModel @Inject constructor(
 
     fun reloadGroups() {
         _reloadTrigger.value++
+    }
+
+    private companion object {
+        private const val TAG = "DestinationViewModel"
     }
 }
