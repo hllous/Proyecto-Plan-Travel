@@ -765,7 +765,8 @@ class SupabaseTravelRepositoryImpl @Inject constructor(
                 .collect { send(fetchActivePoll(groupId)) }
         } finally {
             supabase.realtime.removeChannel(pgChannel)
-            supabase.realtime.removeChannel(bcChannel)
+            // bcChannel ("group-polls-broadcast-$groupId") is shared between DestinationViewModel
+            // and PollViewModel; removing it here would kill sibling subscribers.
         }
     }
 

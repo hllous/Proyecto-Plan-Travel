@@ -579,6 +579,13 @@ private fun Level1BrowseContent(viewModel: DestinationViewModel, navController: 
                 },
             )
         },
+        floatingActionButton = {
+            ExtendedFloatingActionButton(
+                onClick = { navController.navigate("poll_detail") },
+                icon = { Icon(Icons.Default.HowToVote, contentDescription = null) },
+                text = { Text(if (activePoll != null) "Ver encuesta" else "Crear encuesta") },
+            )
+        },
     ) { innerPadding ->
         Column(
             modifier = Modifier
