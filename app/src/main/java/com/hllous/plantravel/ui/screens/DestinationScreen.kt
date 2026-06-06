@@ -35,6 +35,7 @@ import androidx.compose.material.icons.filled.Close
 import androidx.compose.material.icons.filled.Hotel
 import androidx.compose.material.icons.filled.HowToVote
 import androidx.compose.material.icons.filled.Image
+import androidx.compose.material.icons.filled.Info
 import androidx.compose.material.icons.filled.LocalActivity
 import androidx.compose.material.icons.filled.LocationOn
 import androidx.compose.material.icons.filled.Map
@@ -48,6 +49,7 @@ import androidx.compose.material3.Card
 import androidx.compose.material3.CardDefaults
 import androidx.compose.material3.CircularProgressIndicator
 import androidx.compose.material3.ExperimentalMaterial3Api
+import androidx.compose.material3.ExtendedFloatingActionButton
 import androidx.compose.material3.FilterChip
 import androidx.compose.material3.FilterChipDefaults
 import androidx.compose.material3.HorizontalDivider
@@ -59,8 +61,6 @@ import androidx.compose.material3.OutlinedButton
 import androidx.compose.material3.OutlinedTextField
 import androidx.compose.material3.Scaffold
 import androidx.compose.material3.ScrollableTabRow
-import androidx.compose.material3.SnackbarHost
-import androidx.compose.material3.SnackbarHostState
 import androidx.compose.material3.SuggestionChip
 import androidx.compose.material3.SuggestionChipDefaults
 import androidx.compose.material3.Surface
@@ -75,7 +75,6 @@ import androidx.compose.runtime.collectAsState
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
-import androidx.compose.runtime.rememberCoroutineScope
 import androidx.compose.runtime.saveable.rememberSaveable
 import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
@@ -94,6 +93,7 @@ import androidx.navigation.NavHostController
 import coil3.compose.AsyncImage
 import com.hllous.plantravel.R
 import com.hllous.plantravel.data.destination.DestinationFallbackImage
+import com.hllous.plantravel.domain.model.GroupMember
 import com.hllous.plantravel.domain.model.MemberRole
 import com.hllous.plantravel.domain.model.PlaceResult
 import com.hllous.plantravel.domain.model.RankedRecommendations
@@ -102,7 +102,6 @@ import com.hllous.plantravel.presentation.UiState
 import com.hllous.plantravel.presentation.destination.DestinationViewModel
 import com.hllous.plantravel.presentation.destination.TripDestinationState
 import com.hllous.plantravel.ui.theme.FrauncesFamily
-import kotlinx.coroutines.launch
 
 private val REGIONS = listOf("Patagonia", "Cuyo", "Noroeste", "Litoral", "Buenos Aires", "Córdoba")
 private data class PoiCategory(val label: String, val icon: ImageVector)
@@ -147,11 +146,10 @@ private fun Level2Content(
 ) {
     val poisByCategory by viewModel.poisByCategory.collectAsState()
     val activePoll by viewModel.activePoll.collectAsState()
+    val currentMember by viewModel.currentMember.collectAsState()
 
     var selectedCategory by rememberSaveable { mutableStateOf(POI_CATEGORIES.first().label) }
     var selectedPoi by remember { mutableStateOf<PlaceResult?>(null) }
-    val snackbarHostState = remember { SnackbarHostState() }
-    val scope = rememberCoroutineScope()
 
     LaunchedEffect(Unit) {
         viewModel.selectPoiCategory(selectedCategory)
@@ -180,7 +178,15 @@ private fun Level2Content(
                 },
             )
         },
-        snackbarHost = { SnackbarHost(snackbarHostState) },
+        floatingActionButton = {
+            if (activePoll == null) {
+                ExtendedFloatingActionButton(
+                    onClick = { navController.navigate("poll_detail") },
+                    icon = { Icon(Icons.Default.HowToVote, contentDescription = null) },
+                    text = { Text("Crear encuesta") },
+                )
+            }
+        },
     ) { innerPadding ->
         Column(
             modifier = Modifier
@@ -266,6 +272,10 @@ private fun Level2Content(
                 selectedPoi = null
             },
             onAddToPoll = {
+                navController.navigate("poll_detail")
+                selectedPoi = null
+            },
+            onCreatePoll = {
                 navController.navigate("poll_detail")
                 selectedPoi = null
             },
@@ -383,6 +393,7 @@ private fun PoiBottomSheet(
     onDismiss: () -> Unit,
     onAddToItinerary: () -> Unit,
     onAddToPoll: () -> Unit,
+    onCreatePoll: () -> Unit,
 ) {
     val context = LocalContext.current
     val sheetState = rememberModalBottomSheetState()
@@ -472,12 +483,20 @@ private fun PoiBottomSheet(
 
                 Spacer(modifier = Modifier.height(8.dp))
 
-                OutlinedButton(
-                    onClick = onAddToPoll,
-                    modifier = Modifier.fillMaxWidth(),
-                    enabled = hasActivePoll,
-                ) {
-                    Text(if (hasActivePoll) "Añadir a encuesta" else "Sin encuesta activa")
+                if (hasActivePoll) {
+                    OutlinedButton(
+                        onClick = onAddToPoll,
+                        modifier = Modifier.fillMaxWidth(),
+                    ) {
+                        Text("Añadir a encuesta")
+                    }
+                } else {
+                    OutlinedButton(
+                        onClick = onCreatePoll,
+                        modifier = Modifier.fillMaxWidth(),
+                    ) {
+                        Text("Crear encuesta primero")
+                    }
                 }
 
                 Spacer(modifier = Modifier.height(8.dp))
@@ -512,6 +531,7 @@ private fun Level1BrowseContent(viewModel: DestinationViewModel, navController: 
     val destinationPhotoUrls by viewModel.destinationPhotoUrls.collectAsState()
     val activePoll by viewModel.activePoll.collectAsState()
     val currentMember by viewModel.currentMember.collectAsState()
+    val regionLoading by viewModel.regionLoading.collectAsState()
     val tripDestination by viewModel.tripDestination.collectAsState()
 
     var selectedTabIndex by rememberSaveable { mutableStateOf(0) }
@@ -541,6 +561,23 @@ private fun Level1BrowseContent(viewModel: DestinationViewModel, navController: 
                         fontFamily = FrauncesFamily,
                         fontWeight = FontWeight.Medium,
                     )
+                },
+                actions = {
+                    if (currentMember != null && currentMember?.role != MemberRole.ADMIN) {
+                        SuggestionChip(
+                            onClick = {},
+                            label = {
+                                Text(
+                                    "Solo admins pueden configurar",
+                                    style = MaterialTheme.typography.labelSmall,
+                                )
+                            },
+                            colors = SuggestionChipDefaults.suggestionChipColors(
+                                containerColor = MaterialTheme.colorScheme.surfaceVariant,
+                            ),
+                            modifier = Modifier.padding(end = 8.dp),
+                        )
+                    }
                 },
             )
         },
@@ -663,7 +700,15 @@ private fun Level1BrowseContent(viewModel: DestinationViewModel, navController: 
                         modifier = Modifier.fillMaxSize(),
                         contentAlignment = Alignment.Center,
                     ) {
-                        CircularProgressIndicator()
+                        if (regionLoading) {
+                            CircularProgressIndicator()
+                        } else {
+                            Text(
+                                text = "Sin destinos en esta región",
+                                style = MaterialTheme.typography.bodyMedium,
+                                color = MaterialTheme.colorScheme.onSurfaceVariant,
+                            )
+                        }
                     }
                 }
                 else -> {
@@ -696,7 +741,7 @@ private fun Level1BrowseContent(viewModel: DestinationViewModel, navController: 
         CityBottomSheet(
             destination = destination,
             imageUrl = destinationPhotoUrls[destinationCardKey(destination)].orEmpty(),
-            isAdmin = currentMember?.role == MemberRole.ADMIN,
+            currentMember = currentMember,
             tripDestination = tripDestination,
             onDismiss = { selectedDestination = null },
             onSetDestination = {
@@ -857,57 +902,12 @@ private fun PollBanner(onDismiss: () -> Unit, onTap: () -> Unit) {
     }
 }
 
-@Composable
-private fun DestinationCard(
-    destination: StoredDestination,
-    imageUrl: String,
-    onClick: () -> Unit,
-) {
-    Card(
-        onClick = onClick,
-        modifier = Modifier.fillMaxWidth(),
-        shape = RoundedCornerShape(16.dp),
-        elevation = CardDefaults.cardElevation(defaultElevation = 2.dp),
-    ) {
-        Column {
-            DestinationImage(
-                imageUrl = imageUrl,
-                contentDescription = destination.name,
-                title = destination.name,
-                subtitle = destination.province,
-                icon = Icons.Default.LocationOn,
-                modifier = Modifier
-                    .fillMaxWidth()
-                    .height(120.dp)
-                    .clip(RoundedCornerShape(topStart = 16.dp, topEnd = 16.dp)),
-            )
-            Column(modifier = Modifier.padding(10.dp)) {
-                Text(
-                    text = destination.name,
-                    style = MaterialTheme.typography.titleSmall,
-                    fontWeight = FontWeight.SemiBold,
-                    maxLines = 1,
-                    overflow = TextOverflow.Ellipsis,
-                )
-                Spacer(modifier = Modifier.height(2.dp))
-                Text(
-                    text = destination.province,
-                    style = MaterialTheme.typography.bodySmall,
-                    color = MaterialTheme.colorScheme.onSurfaceVariant,
-                    maxLines = 1,
-                    overflow = TextOverflow.Ellipsis,
-                )
-            }
-        }
-    }
-}
-
 @OptIn(ExperimentalMaterial3Api::class)
 @Composable
 private fun CityBottomSheet(
     destination: StoredDestination,
     imageUrl: String,
-    isAdmin: Boolean,
+    currentMember: GroupMember?,
     tripDestination: TripDestinationState,
     onDismiss: () -> Unit,
     onSetDestination: () -> Unit,
@@ -961,18 +961,42 @@ private fun CityBottomSheet(
                         color = MaterialTheme.colorScheme.onSurfaceVariant,
                     )
                 }
-                if (isAdmin) {
-                    Spacer(modifier = Modifier.height(24.dp))
-                    Button(
-                        onClick = {
-                            when (tripDestination) {
-                                is TripDestinationState.None -> showPollPromptDialog = true
-                                is TripDestinationState.Set -> showReplaceDialog = true
-                            }
-                        },
-                        modifier = Modifier.fillMaxWidth(),
-                    ) {
-                        Text("Establecer como destino")
+                val isAdmin = currentMember?.role == MemberRole.ADMIN
+                when {
+                    currentMember == null -> {
+                        Spacer(modifier = Modifier.height(24.dp))
+                        CircularProgressIndicator(modifier = Modifier.align(Alignment.CenterHorizontally))
+                    }
+                    isAdmin -> {
+                        Spacer(modifier = Modifier.height(24.dp))
+                        Button(
+                            onClick = {
+                                when (tripDestination) {
+                                    is TripDestinationState.None -> showPollPromptDialog = true
+                                    is TripDestinationState.Set -> showReplaceDialog = true
+                                }
+                            },
+                            modifier = Modifier.fillMaxWidth(),
+                        ) {
+                            Text("Establecer como destino")
+                        }
+                    }
+                    else -> {
+                        Spacer(modifier = Modifier.height(16.dp))
+                        Row(verticalAlignment = Alignment.CenterVertically) {
+                            Icon(
+                                Icons.Default.Info,
+                                contentDescription = null,
+                                tint = MaterialTheme.colorScheme.onSurfaceVariant,
+                                modifier = Modifier.size(16.dp),
+                            )
+                            Spacer(modifier = Modifier.width(8.dp))
+                            Text(
+                                text = "Solo los administradores pueden establecer el destino",
+                                style = MaterialTheme.typography.bodySmall,
+                                color = MaterialTheme.colorScheme.onSurfaceVariant,
+                            )
+                        }
                     }
                 }
             }

@@ -64,6 +64,9 @@ class DestinationViewModel @Inject constructor(
     private val _regionDestinations = MutableStateFlow<List<StoredDestination>>(emptyList())
     val regionDestinations: StateFlow<List<StoredDestination>> = _regionDestinations.asStateFlow()
 
+    private val _regionLoading = MutableStateFlow(false)
+    val regionLoading: StateFlow<Boolean> = _regionLoading.asStateFlow()
+
     private val _searchDestinations = MutableStateFlow<List<StoredDestination>>(emptyList())
     val searchDestinations: StateFlow<List<StoredDestination>> = _searchDestinations.asStateFlow()
 
@@ -120,9 +123,14 @@ class DestinationViewModel @Inject constructor(
 
     fun selectRegion(region: String) {
         viewModelScope.launch {
-            val destinations = repository.browseDestinations(region)
-            _regionDestinations.value = destinations
-            loadPhotosFor(destinations)
+            _regionLoading.value = true
+            try {
+                val destinations = repository.browseDestinations(region)
+                _regionDestinations.value = destinations
+                loadPhotosFor(destinations)
+            } finally {
+                _regionLoading.value = false
+            }
         }
     }
 
