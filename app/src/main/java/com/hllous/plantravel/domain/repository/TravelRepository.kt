@@ -1,5 +1,6 @@
 package com.hllous.plantravel.domain.repository
 
+import com.hllous.plantravel.domain.model.DestinationDraft
 import com.hllous.plantravel.domain.model.ExpenseGroup
 import com.hllous.plantravel.domain.model.ExpenseItem
 import com.hllous.plantravel.domain.model.GroupMember
@@ -11,6 +12,7 @@ import com.hllous.plantravel.domain.model.ItineraryEvent
 import com.hllous.plantravel.domain.model.Poll
 import com.hllous.plantravel.domain.model.PollCandidate
 import com.hllous.plantravel.domain.model.PollType
+import com.hllous.plantravel.domain.model.StoredDestination
 import com.hllous.plantravel.domain.model.TravelGroup
 import com.hllous.plantravel.domain.settlement.AssignmentOutcome
 import kotlinx.coroutines.flow.Flow
@@ -36,6 +38,17 @@ interface TravelRepository {
     suspend fun getPaymentStatus(fromMemberId: String, toMemberId: String, expenseGroupId: String): PaymentStatus?
     suspend fun markDebtorConfirmed(fromMemberId: String, toMemberId: String, expenseGroupId: String)
     suspend fun markCreditorConfirmed(fromMemberId: String, toMemberId: String, expenseGroupId: String)
+
+    suspend fun browseDestinations(region: String): List<StoredDestination>
+    suspend fun searchDestinations(query: String): List<StoredDestination>
+    suspend fun upsertDestination(destination: DestinationDraft): StoredDestination
+    suspend fun updateDestinationPhoto(
+        destinationId: String,
+        googlePhotoUrl: String? = null,
+        wikipediaTitle: String? = null,
+        wikipediaPhotoUrl: String? = null,
+        displayPhotoUrl: String? = null,
+    ): StoredDestination
 
     suspend fun setTripDestination(groupId: String, placeId: String, name: String, lat: Double, lng: Double)
 

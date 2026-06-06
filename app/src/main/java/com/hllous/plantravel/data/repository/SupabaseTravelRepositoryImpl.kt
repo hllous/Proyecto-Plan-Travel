@@ -1,6 +1,8 @@
 package com.hllous.plantravel.data.repository
 
+import com.hllous.plantravel.data.destination.DestinationTextNormalizer
 import com.hllous.plantravel.domain.model.ConsumeInviteFailure
+import com.hllous.plantravel.domain.model.DestinationDraft
 import com.hllous.plantravel.domain.model.ExpenseGroup
 import com.hllous.plantravel.domain.model.ExpenseGroupState
 import com.hllous.plantravel.domain.model.ExpenseItem
@@ -15,6 +17,7 @@ import com.hllous.plantravel.domain.model.Poll
 import com.hllous.plantravel.domain.model.PollCandidate
 import com.hllous.plantravel.domain.model.PollState
 import com.hllous.plantravel.domain.model.PollType
+import com.hllous.plantravel.domain.model.StoredDestination
 import com.hllous.plantravel.domain.model.TravelGroup
 import com.hllous.plantravel.domain.repository.TravelRepository
 import com.hllous.plantravel.domain.settlement.AssignmentOutcome
@@ -331,6 +334,67 @@ class SupabaseTravelRepositoryImpl @Inject constructor(
     private data class PollVoteDto(
         @SerialName("candidate_id") val candidateId: String,
         @SerialName("member_id") val memberId: String,
+    )
+
+    @Serializable
+    private data class StoredDestinationDto(
+        val id: String,
+        val source: String,
+        @SerialName("source_id") val sourceId: String,
+        val name: String,
+        @SerialName("normalized_name") val normalizedName: String,
+        val province: String,
+        val region: String,
+        @SerialName("country_code") val countryCode: String,
+        val lat: Double,
+        val lng: Double,
+        val population: Int,
+        @SerialName("google_place_id") val googlePlaceId: String? = null,
+        @SerialName("google_photo_url") val googlePhotoUrl: String? = null,
+        @SerialName("wikipedia_title") val wikipediaTitle: String? = null,
+        @SerialName("wikipedia_photo_url") val wikipediaPhotoUrl: String? = null,
+        @SerialName("display_photo_url") val displayPhotoUrl: String? = null,
+        @SerialName("is_active") val isActive: Boolean = true,
+    ) {
+        fun toDomain() = StoredDestination(
+            id = id,
+            source = source,
+            sourceId = sourceId,
+            name = name,
+            normalizedName = normalizedName,
+            province = province,
+            region = region,
+            countryCode = countryCode,
+            lat = lat,
+            lng = lng,
+            population = population,
+            googlePlaceId = googlePlaceId,
+            googlePhotoUrl = googlePhotoUrl,
+            wikipediaTitle = wikipediaTitle,
+            wikipediaPhotoUrl = wikipediaPhotoUrl,
+            displayPhotoUrl = displayPhotoUrl,
+            isActive = isActive,
+        )
+    }
+
+    @Serializable
+    private data class UpsertStoredDestinationDto(
+        val source: String,
+        @SerialName("source_id") val sourceId: String,
+        val name: String,
+        @SerialName("normalized_name") val normalizedName: String,
+        val province: String,
+        val region: String,
+        @SerialName("country_code") val countryCode: String,
+        val lat: Double,
+        val lng: Double,
+        val population: Int,
+        @SerialName("google_place_id") val googlePlaceId: String? = null,
+        @SerialName("google_photo_url") val googlePhotoUrl: String? = null,
+        @SerialName("wikipedia_title") val wikipediaTitle: String? = null,
+        @SerialName("wikipedia_photo_url") val wikipediaPhotoUrl: String? = null,
+        @SerialName("display_photo_url") val displayPhotoUrl: String? = null,
+        @SerialName("is_active") val isActive: Boolean = true,
     )
 
     // ─── Fetch helpers ───────────────────────────────────────────────────────
@@ -1109,4 +1173,79 @@ class SupabaseTravelRepositoryImpl @Inject constructor(
             }
         }
     }
+
+    override suspend fun browseDestinations(region: String): List<StoredDestination> =
+        supabase.from("destinations")
+            .select {
+                filter {
+                    eq("region", region)
+                    eq("is_active", true)
+                }
+            }
+            .decodeList<StoredDestinationDto>()
+            .map { it.toDomain() }
+            .sortedWith(compareByDescending<StoredDestination> { it.population }.thenBy { it.normalizedName })
+
+    override suspend fun searchDestinations(query: String): List<StoredDestination> {
+        val normalizedQuery = DestinationTextNormalizer.normalize(query)
+        return supabase.from("destinations")
+            .select {
+                filter { eq("is_active", true) }
+            }
+            .decodeList<StoredDestinationDto>()
+            .map { it.toDomain() }
+            .filter {
+                it.normalizedName.contains(normalizedQuery) ||
+                    DestinationTextNormalizer.normalize(it.province).contains(normalizedQuery)
+            }
+            .sortedWith(compareByDescending<StoredDestination> { it.population }.thenBy { it.normalizedName })
+    }
+
+    override suspend fun upsertDestination(destination: DestinationDraft): StoredDestination =
+        supabase.from("destinations")
+            .upsert(
+                UpsertStoredDestinationDto(
+                    source = destination.source,
+                    sourceId = destination.sourceId,
+                    name = destination.name,
+                    normalizedName = DestinationTextNormalizer.normalize(destination.name),
+                    province = destination.province,
+                    region = destination.region,
+                    countryCode = destination.countryCode,
+                    lat = destination.lat,
+                    lng = destination.lng,
+                    population = destination.population,
+                    googlePlaceId = destination.googlePlaceId,
+                    googlePhotoUrl = destination.googlePhotoUrl,
+                    wikipediaTitle = destination.wikipediaTitle,
+                    wikipediaPhotoUrl = destination.wikipediaPhotoUrl,
+                    displayPhotoUrl = destination.displayPhotoUrl,
+                    isActive = destination.isActive,
+                ),
+            ) {
+                onConflict = "source,source_id"
+                select()
+            }
+            .decodeSingle<StoredDestinationDto>()
+            .toDomain()
+
+    override suspend fun updateDestinationPhoto(
+        destinationId: String,
+        googlePhotoUrl: String?,
+        wikipediaTitle: String?,
+        wikipediaPhotoUrl: String?,
+        displayPhotoUrl: String?,
+    ): StoredDestination =
+        supabase.from("destinations")
+            .update({
+                if (googlePhotoUrl != null) set("google_photo_url", googlePhotoUrl)
+                if (wikipediaTitle != null) set("wikipedia_title", wikipediaTitle)
+                if (wikipediaPhotoUrl != null) set("wikipedia_photo_url", wikipediaPhotoUrl)
+                if (displayPhotoUrl != null) set("display_photo_url", displayPhotoUrl)
+            }) {
+                filter { eq("id", destinationId) }
+                select()
+            }
+            .decodeSingle<StoredDestinationDto>()
+            .toDomain()
 }

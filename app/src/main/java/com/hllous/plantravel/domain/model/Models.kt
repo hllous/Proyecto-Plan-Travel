@@ -16,6 +16,53 @@ data class TravelGroup(
     val tripDestinationLng: Double? = null,
 )
 
+data class DestinationCity(
+    val name: String,
+    val province: String,
+    val region: String,
+    val lat: Double,
+    val lng: Double,
+    val wikipediaTitle: String = "",
+)
+
+data class StoredDestination(
+    val id: String,
+    val source: String,
+    val sourceId: String,
+    val name: String,
+    val normalizedName: String,
+    val province: String,
+    val region: String,
+    val countryCode: String,
+    val lat: Double,
+    val lng: Double,
+    val population: Int,
+    val googlePlaceId: String? = null,
+    val googlePhotoUrl: String? = null,
+    val wikipediaTitle: String? = null,
+    val wikipediaPhotoUrl: String? = null,
+    val displayPhotoUrl: String? = null,
+    val isActive: Boolean = true,
+)
+
+data class DestinationDraft(
+    val source: String,
+    val sourceId: String,
+    val name: String,
+    val province: String,
+    val region: String,
+    val countryCode: String = "AR",
+    val lat: Double,
+    val lng: Double,
+    val population: Int = 0,
+    val googlePlaceId: String? = null,
+    val googlePhotoUrl: String? = null,
+    val wikipediaTitle: String? = null,
+    val wikipediaPhotoUrl: String? = null,
+    val displayPhotoUrl: String? = null,
+    val isActive: Boolean = true,
+)
+
 data class PlaceResult(
     val placeId: String,
     val name: String,
@@ -25,6 +72,8 @@ data class PlaceResult(
     val address: String,
     val lat: Double,
     val lng: Double,
+    val primaryType: String? = null,
+    val types: List<String> = emptyList(),
 )
 
 data class RankedRecommendations(

@@ -4,16 +4,20 @@ import com.hllous.plantravel.FakePlacesApiClient
 import com.hllous.plantravel.FakeSessionProvider
 import com.hllous.plantravel.FakeTravelRepository
 import com.hllous.plantravel.MainDispatcherRule
+import com.hllous.plantravel.data.destination.DestinationFallbackImage
+import com.hllous.plantravel.data.destination.DestinationTextNormalizer
 import com.hllous.plantravel.domain.model.PlaceResult
+import com.hllous.plantravel.domain.model.StoredDestination
 import com.hllous.plantravel.domain.model.TravelGroup
 import com.hllous.plantravel.domain.places.PlaceRecommendationRanker
 import com.hllous.plantravel.presentation.destination.DestinationViewModel
 import com.hllous.plantravel.presentation.destination.TripDestinationState
 import com.hllous.plantravel.presentation.group.SelectedGroupHolder
-import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.ExperimentalCoroutinesApi
+import kotlinx.coroutines.flow.collect
 import kotlinx.coroutines.launch
-import kotlinx.coroutines.test.UnconfinedTestDispatcher
+import kotlinx.coroutines.test.advanceUntilIdle
+import kotlinx.coroutines.test.runTest
 import org.junit.Assert.assertEquals
 import org.junit.Assert.assertNull
 import org.junit.Assert.assertTrue
@@ -32,9 +36,37 @@ class DestinationViewModelTest {
         photoUrl = "https://example.com/photo.jpg",
         rating = 4.8,
         reviewCount = 200,
-        address = "Bariloche, Río Negro",
+        address = "Bariloche, Río Negro, Argentina",
         lat = -41.1335,
         lng = -71.3103,
+        primaryType = "locality",
+        types = listOf("locality"),
+    )
+
+    private fun storedDestination(
+        id: String,
+        name: String,
+        region: String,
+        province: String,
+        population: Int = 1000,
+        googlePlaceId: String? = null,
+        displayPhotoUrl: String? = null,
+        lat: Double = -41.0,
+        lng: Double = -71.0,
+    ) = StoredDestination(
+        id = id,
+        source = "geonames",
+        sourceId = id,
+        name = name,
+        normalizedName = DestinationTextNormalizer.normalize(name),
+        province = province,
+        region = region,
+        countryCode = "AR",
+        lat = lat,
+        lng = lng,
+        population = population,
+        googlePlaceId = googlePlaceId,
+        displayPhotoUrl = displayPhotoUrl,
     )
 
     private fun viewModel(
@@ -51,68 +83,273 @@ class DestinationViewModelTest {
         ranker = ranker,
     )
 
-    // ── Test 1: selectRegion maps chip name to query and emits results ──────
-
     @Test
-    fun selectRegionTriggersCorrectQueryAndEmitsResults() {
-        val places = FakePlacesApiClient(destinationResults = listOf(fakePlace))
-        val vm = viewModel(places = places)
-        val job = CoroutineScope(UnconfinedTestDispatcher()).launch { vm.regionResults.collect {} }
+    fun selectRegionUsesStoredDestinationsFromRepository() = runTest {
+        val repo = FakeTravelRepository(
+            initialDestinations = listOf(
+                storedDestination("1", "Bariloche", "Patagonia", "Río Negro", population = 135000),
+                storedDestination("2", "Ushuaia", "Patagonia", "Tierra del Fuego", population = 82615),
+            ),
+        )
+        val vm = viewModel(repo = repo).apply {
+            googleDestinationPhotoFetcher = { "https://example.com/${it.name}.jpg" }
+            wikipediaDestinationPhotoFetcher = { null }
+        }
 
         vm.selectRegion("Patagonia")
+        advanceUntilIdle()
 
-        assertEquals("turismo Patagonia Argentina", places.lastSearchedRegion)
-        val state = vm.regionResults.value
-        assertTrue(state is UiState.Success)
-        assertEquals(listOf(fakePlace), (state as UiState.Success).data)
-        job.cancel()
+        assertEquals("Patagonia", repo.lastBrowsedDestinationRegion)
+        assertEquals(listOf("Bariloche", "Ushuaia"), vm.regionDestinations.value.map { it.name })
+        assertEquals("https://example.com/Bariloche.jpg", vm.destinationPhotoUrls.value["1"])
     }
 
-    // ── Test 2: search emits results into searchResults ──────────────────────
-
     @Test
-    fun searchQueryEmitsResultsIntoSearchResults() {
-        val places = FakePlacesApiClient(destinationResults = listOf(fakePlace))
-        val vm = viewModel(places = places)
-        val job = CoroutineScope(UnconfinedTestDispatcher()).launch { vm.searchResults.collect {} }
+    fun searchReturnsStoredResultsFirst() = runTest {
+        val repo = FakeTravelRepository(
+            initialDestinations = listOf(
+                storedDestination("1", "Malargüe", "Cuyo", "Mendoza", population = 23000),
+            ),
+        )
+        val places = FakePlacesApiClient(
+            destinationResults = listOf(
+                PlaceResult(
+                    placeId = "place-google",
+                    name = "Malargüe Centro Cívico",
+                    photoUrl = "",
+                    rating = 4.0,
+                    reviewCount = 10,
+                    address = "Malargüe, Mendoza, Argentina",
+                    lat = -35.47,
+                    lng = -69.58,
+                    primaryType = "tourist_attraction",
+                    types = listOf("tourist_attraction"),
+                ),
+            ),
+        )
+        val vm = viewModel(repo = repo, places = places)
 
-        vm.search("Mendoza")
+        vm.search("malargue")
+        advanceUntilIdle()
 
-        assertEquals("Mendoza", places.lastSearchedRegion)
-        val state = vm.searchResults.value
-        assertTrue(state is UiState.Success)
-        assertEquals(listOf(fakePlace), (state as UiState.Success).data)
-        job.cancel()
+        assertEquals("malargue", repo.lastDestinationSearchQuery)
+        assertEquals(listOf("Malargüe"), vm.searchDestinations.value.map { it.name })
     }
 
-    // ── Test 3: setTripDestination persists and updates tripDestination ───────
+    @Test
+    fun emptyStoredSearchTriggersGoogleLocalityFallback() = runTest {
+        val repo = FakeTravelRepository()
+        val places = FakePlacesApiClient(
+            destinationResults = listOf(
+                PlaceResult(
+                    placeId = "place-locality",
+                    name = "Belgrano",
+                    photoUrl = "https://example.com/belgrano.jpg",
+                    rating = 4.8,
+                    reviewCount = 200,
+                    address = "Belgrano, CABA, Argentina",
+                    lat = -34.56,
+                    lng = -58.46,
+                    primaryType = "locality",
+                    types = listOf("locality"),
+                ),
+                PlaceResult(
+                    placeId = "place-poi",
+                    name = "Barrio Chino",
+                    photoUrl = "",
+                    rating = 4.9,
+                    reviewCount = 2000,
+                    address = "Belgrano, Buenos Aires, Argentina",
+                    lat = -34.56,
+                    lng = -58.45,
+                    primaryType = "tourist_attraction",
+                    types = listOf("tourist_attraction"),
+                ),
+            ),
+        )
+        val vm = viewModel(repo = repo, places = places)
+
+        vm.search("belgrano")
+        advanceUntilIdle()
+
+        assertTrue(places.lastSearchedRegion!!.startsWith("belgrano"))
+        assertEquals(listOf("Belgrano"), vm.searchDestinations.value.map { it.name })
+        assertEquals("place-locality", vm.searchDestinations.value.single().googlePlaceId)
+    }
 
     @Test
-    fun setTripDestinationCallsRepositoryAndUpdatesTripDestinationState() {
+    fun selectingGoogleFallbackDestinationStoresItAndSetsTripDestination() = runTest {
         val group = TravelGroup(id = "group-1", name = "Viaje")
         val repo = FakeTravelRepository(initialGroups = listOf(group))
+        val places = FakePlacesApiClient(
+            destinationResults = listOf(
+                PlaceResult(
+                    placeId = "place-pehuenia",
+                    name = "Villa Pehuenia",
+                    photoUrl = "https://example.com/pehuenia.jpg",
+                    rating = 4.7,
+                    reviewCount = 120,
+                    address = "Villa Pehuenia, Neuquén, Argentina",
+                    lat = -38.88,
+                    lng = -71.21,
+                    primaryType = "locality",
+                    types = listOf("locality"),
+                ),
+            ),
+        )
         val holder = SelectedGroupHolder().also { it.selectedGroupId.value = "group-1" }
-        val vm = viewModel(repo = repo, holder = holder)
-        val job = CoroutineScope(UnconfinedTestDispatcher()).launch { vm.tripDestination.collect {} }
+        val vm = viewModel(repo = repo, places = places, holder = holder)
+        backgroundScope.launch { vm.tripDestination.collect {} }
 
-        vm.setTripDestination(fakePlace)
+        vm.search("pehuenia")
+        advanceUntilIdle()
+        vm.setTripDestination(vm.searchDestinations.value.single())
+        advanceUntilIdle()
 
+        assertEquals(1, repo.upsertDestinationCallCount)
+        assertEquals("Villa Pehuenia", repo.lastUpsertedDestination?.name)
         assertEquals(1, repo.setTripDestinationCallCount)
-        assertEquals(fakePlace.placeId, repo.lastTripDestinationPlaceId)
-        val state = vm.tripDestination.value
-        assertTrue(state is TripDestinationState.Set)
-        state as TripDestinationState.Set
-        assertEquals(fakePlace.placeId, state.placeId)
-        assertEquals(fakePlace.name, state.name)
-        assertEquals(fakePlace.lat, state.lat, 0.0001)
-        assertEquals(fakePlace.lng, state.lng, 0.0001)
-        job.cancel()
+        assertEquals("place-pehuenia", repo.lastTripDestinationPlaceId)
+        assertTrue(vm.tripDestination.value is TripDestinationState.Set)
     }
 
-    // ── Test 4: existing destination in repository propagates to state ────────
+    @Test
+    fun photoResolutionFallsBackToWikipediaAndCachesSuccess() = runTest {
+        val repo = FakeTravelRepository(
+            initialDestinations = listOf(
+                storedDestination("dest-1", "El Chaltén", "Patagonia", "Santa Cruz"),
+            ),
+        )
+        val vm = viewModel(repo = repo).apply {
+            googleDestinationPhotoFetcher = { null }
+            wikipediaDestinationPhotoFetcher = { dest -> "https://wikipedia.example/${dest.name}.jpg" }
+        }
+
+        vm.selectRegion("Patagonia")
+        advanceUntilIdle()
+
+        assertEquals("dest-1", repo.lastUpdatedDestinationPhotoId)
+        assertEquals(
+            "https://wikipedia.example/El Chaltén.jpg",
+            vm.destinationPhotoUrls.value["dest-1"],
+        )
+    }
 
     @Test
-    fun tripDestinationObservedFromRepositoryPropagatesToState() {
+    fun wikipediaFetcherReceivesFullDestinationEnablingProvinceDisambiguation() = runTest {
+        val repo = FakeTravelRepository(
+            initialDestinations = listOf(
+                storedDestination("dest-gaiman", "Gaiman", "Patagonia", "Chubut"),
+            ),
+        )
+        var capturedName: String? = null
+        var capturedProvince: String? = null
+        val vm = viewModel(repo = repo).apply {
+            googleDestinationPhotoFetcher = { null }
+            wikipediaDestinationPhotoFetcher = { dest ->
+                capturedName = dest.name
+                capturedProvince = dest.province
+                "https://es.wikipedia.example/${dest.name}-${dest.province}.jpg"
+            }
+        }
+
+        vm.selectRegion("Patagonia")
+        advanceUntilIdle()
+
+        assertEquals("Gaiman", capturedName)
+        assertEquals("Chubut", capturedProvince)
+        assertEquals(
+            "https://es.wikipedia.example/Gaiman-Chubut.jpg",
+            vm.destinationPhotoUrls.value["dest-gaiman"],
+        )
+    }
+
+    @Test
+    fun wikipediaFetcherReceivesCoordinatesForGeographicDisambiguation() = runTest {
+        val repo = FakeTravelRepository(
+            initialDestinations = listOf(
+                storedDestination(
+                    "dest-cervantes", "Cervantes", "Patagonia", "Río Negro",
+                    lat = -39.123, lng = -67.456,
+                ),
+            ),
+        )
+        var capturedLat: Double? = null
+        var capturedLng: Double? = null
+        val vm = viewModel(repo = repo).apply {
+            googleDestinationPhotoFetcher = { null }
+            wikipediaDestinationPhotoFetcher = { dest ->
+                capturedLat = dest.lat
+                capturedLng = dest.lng
+                "https://es.wikipedia.example/geo-${dest.lat}_${dest.lng}.jpg"
+            }
+        }
+
+        vm.selectRegion("Patagonia")
+        advanceUntilIdle()
+
+        assertEquals(-39.123, capturedLat!!, 0.0001)
+        assertEquals(-67.456, capturedLng!!, 0.0001)
+        assertEquals(
+            "https://es.wikipedia.example/geo--39.123_-67.456.jpg",
+            vm.destinationPhotoUrls.value["dest-cervantes"],
+        )
+    }
+
+    @Test
+    fun photoResolutionRetriesAfterInitialFailure() = runTest {
+        val repo = FakeTravelRepository(
+            initialDestinations = listOf(
+                storedDestination("dest-1", "El Chaltén", "Patagonia", "Santa Cruz"),
+            ),
+        )
+        var attempts = 0
+        val vm = viewModel(repo = repo).apply {
+            googleDestinationPhotoFetcher = {
+                attempts++
+                if (attempts == 1) null else "https://example.com/el-chalten.jpg"
+            }
+            wikipediaDestinationPhotoFetcher = { null }
+        }
+
+        vm.selectRegion("Patagonia")
+        advanceUntilIdle()
+        assertEquals(
+            DestinationFallbackImage.tokenForRegion("Patagonia"),
+            vm.destinationPhotoUrls.value["dest-1"],
+        )
+
+        vm.selectRegion("Patagonia")
+        advanceUntilIdle()
+
+        assertEquals(2, attempts)
+        assertEquals("https://example.com/el-chalten.jpg", vm.destinationPhotoUrls.value["dest-1"])
+    }
+
+    @Test
+    fun photoResolutionFallsBackToRegionArtworkAndPersistsToken() = runTest {
+        val repo = FakeTravelRepository(
+            initialDestinations = listOf(
+                storedDestination("dest-1", "Lago Puelo", "Patagonia", "Chubut"),
+            ),
+        )
+        val vm = viewModel(repo = repo).apply {
+            googleDestinationPhotoFetcher = { null }
+            wikipediaDestinationPhotoFetcher = { null }
+        }
+
+        vm.selectRegion("Patagonia")
+        advanceUntilIdle()
+
+        assertNull(repo.lastUpdatedDestinationPhotoId)
+        assertEquals(
+            DestinationFallbackImage.tokenForRegion("Patagonia"),
+            vm.destinationPhotoUrls.value["dest-1"],
+        )
+    }
+
+    @Test
+    fun tripDestinationObservedFromRepositoryPropagatesToState() = runTest {
         val group = TravelGroup(
             id = "group-1",
             name = "Viaje",
@@ -123,7 +360,8 @@ class DestinationViewModelTest {
         )
         val repo = FakeTravelRepository(initialGroups = listOf(group))
         val vm = viewModel(repo = repo)
-        val job = CoroutineScope(UnconfinedTestDispatcher()).launch { vm.tripDestination.collect {} }
+        backgroundScope.launch { vm.tripDestination.collect {} }
+        advanceUntilIdle()
 
         val state = vm.tripDestination.value
 
@@ -131,28 +369,10 @@ class DestinationViewModelTest {
         state as TripDestinationState.Set
         assertEquals("place-99", state.placeId)
         assertEquals("Ushuaia", state.name)
-        job.cancel()
     }
 
-    // ── Test 5: API error emits UiState.Error into regionResults ─────────────
-
     @Test
-    fun apiErrorEmitsUiStateErrorIntoRegionResults() {
-        val places = FakePlacesApiClient(searchDestinationsThrows = true)
-        val vm = viewModel(places = places)
-        val job = CoroutineScope(UnconfinedTestDispatcher()).launch { vm.regionResults.collect {} }
-
-        vm.selectRegion("Cuyo")
-
-        val state = vm.regionResults.value
-        assertTrue(state is UiState.Error)
-        job.cancel()
-    }
-
-    // ── Test 6: selectPoiCategory calls searchPois with correct params ────────
-
-    @Test
-    fun selectPoiCategoryCallsSearchPoisAndEmitsRankedRecommendations() {
+    fun selectPoiCategoryCallsSearchPoisAndEmitsRankedRecommendations() = runTest {
         val topPlace = fakePlace.copy(placeId = "top", rating = 4.5, reviewCount = 100)
         val otherPlace = fakePlace.copy(placeId = "other", rating = 3.0, reviewCount = 10)
         val places = FakePlacesApiClient(poiResults = listOf(topPlace, otherPlace))
@@ -165,12 +385,12 @@ class DestinationViewModelTest {
         )
         val repo = FakeTravelRepository(initialGroups = listOf(group))
         val vm = viewModel(repo = repo, places = places)
-        val job = CoroutineScope(UnconfinedTestDispatcher()).launch {
-            vm.tripDestination.collect {}
-            vm.poisByCategory.collect {}
-        }
+        backgroundScope.launch { vm.tripDestination.collect {} }
+        backgroundScope.launch { vm.poisByCategory.collect {} }
+        advanceUntilIdle()
 
         vm.selectPoiCategory("Alojamiento")
+        advanceUntilIdle()
 
         assertEquals(-41.1335, places.lastSearchedLat!!, 0.0001)
         assertEquals(-71.3103, places.lastSearchedLng!!, 0.0001)
@@ -181,28 +401,22 @@ class DestinationViewModelTest {
         val ranked = (state as UiState.Success).data
         assertEquals(listOf(topPlace), ranked.top)
         assertEquals(listOf(otherPlace), ranked.others)
-        job.cancel()
     }
 
-    // ── Test 7: selectPoiCategory when no destination does nothing ────────────
-
     @Test
-    fun selectPoiCategoryWhenDestinationNoneDoesNothing() {
+    fun selectPoiCategoryWhenDestinationNoneDoesNothing() = runTest {
         val places = FakePlacesApiClient()
         val vm = viewModel(places = places)
-        val job = CoroutineScope(UnconfinedTestDispatcher()).launch { vm.poisByCategory.collect {} }
 
         vm.selectPoiCategory("Naturaleza")
+        advanceUntilIdle()
 
         assertNull(places.lastSearchedType)
         assertTrue(vm.poisByCategory.value is UiState.Loading)
-        job.cancel()
     }
 
-    // ── Test 8: POI API error emits UiState.Error into poisByCategory ─────────
-
     @Test
-    fun poiApiErrorEmitsUiStateErrorIntoPoisByCategory() {
+    fun poiApiErrorEmitsUiStateErrorIntoPoisByCategory() = runTest {
         val places = FakePlacesApiClient(searchPoisThrows = true)
         val group = TravelGroup(
             id = "group-1", name = "Viaje",
@@ -213,14 +427,13 @@ class DestinationViewModelTest {
         )
         val repo = FakeTravelRepository(initialGroups = listOf(group))
         val vm = viewModel(repo = repo, places = places)
-        val job = CoroutineScope(UnconfinedTestDispatcher()).launch {
-            vm.tripDestination.collect {}
-            vm.poisByCategory.collect {}
-        }
+        backgroundScope.launch { vm.tripDestination.collect {} }
+        backgroundScope.launch { vm.poisByCategory.collect {} }
+        advanceUntilIdle()
 
         vm.selectPoiCategory("Gastronomía")
+        advanceUntilIdle()
 
         assertTrue(vm.poisByCategory.value is UiState.Error)
-        job.cancel()
     }
 }

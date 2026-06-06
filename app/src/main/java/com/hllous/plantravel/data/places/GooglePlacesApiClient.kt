@@ -16,7 +16,7 @@ import javax.inject.Named
 import javax.inject.Singleton
 
 private const val BASE_URL = "https://places.googleapis.com/v1/places"
-private const val FIELD_MASK = "places.id,places.displayName,places.rating,places.userRatingCount,places.photos,places.formattedAddress,places.location"
+private const val FIELD_MASK = "places.id,places.displayName,places.rating,places.userRatingCount,places.photos,places.formattedAddress,places.location,places.primaryType,places.types"
 private const val PHOTO_WIDTH = 800
 
 @Singleton
@@ -32,6 +32,7 @@ class GooglePlacesApiClient @Inject constructor(
         val textQuery: String,
         val languageCode: String = "es",
         val regionCode: String = "AR",
+        val includedType: String = "locality",
     )
 
     @Serializable
@@ -64,6 +65,8 @@ class GooglePlacesApiClient @Inject constructor(
         val photos: List<PhotoDto> = emptyList(),
         @SerialName("formattedAddress") val formattedAddress: String = "",
         val location: LatLng = LatLng(0.0, 0.0),
+        @SerialName("primaryType") val primaryType: String? = null,
+        val types: List<String> = emptyList(),
     ) {
         fun toPlaceResult(photoUrl: String) = PlaceResult(
             placeId = id,
@@ -74,6 +77,8 @@ class GooglePlacesApiClient @Inject constructor(
             address = formattedAddress,
             lat = location.latitude,
             lng = location.longitude,
+            primaryType = primaryType,
+            types = types,
         )
     }
 
@@ -86,7 +91,7 @@ class GooglePlacesApiClient @Inject constructor(
     // ─── Helpers ──────────────────────────────────────────────────────────────
 
     private fun resolvePhotoUrl(photoName: String): String =
-        "https://places.googleapis.com/v1/$photoName/media?maxWidthPx=$PHOTO_WIDTH&skipHttpRedirect=true&key=$apiKey"
+        "https://places.googleapis.com/v1/$photoName/media?maxWidthPx=$PHOTO_WIDTH&key=$apiKey"
 
     private fun PlaceDto.resolvedPhotoUrl(): String =
         photos.firstOrNull()?.name?.let { resolvePhotoUrl(it) } ?: ""

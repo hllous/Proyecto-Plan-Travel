@@ -1,5 +1,7 @@
 package com.hllous.plantravel
 
+import com.hllous.plantravel.data.destination.DestinationTextNormalizer
+import com.hllous.plantravel.domain.model.DestinationDraft
 import com.hllous.plantravel.domain.model.ExpenseGroup
 import com.hllous.plantravel.domain.model.ExpenseGroupState
 import com.hllous.plantravel.domain.model.ExpenseItem
@@ -13,6 +15,7 @@ import com.hllous.plantravel.domain.model.ItineraryEvent
 import com.hllous.plantravel.domain.model.Poll
 import com.hllous.plantravel.domain.model.PollCandidate
 import com.hllous.plantravel.domain.model.PollType
+import com.hllous.plantravel.domain.model.StoredDestination
 import com.hllous.plantravel.domain.model.TravelGroup
 import com.hllous.plantravel.domain.repository.TravelRepository
 import com.hllous.plantravel.domain.settlement.AssignmentOutcome
@@ -46,6 +49,7 @@ class FakeTravelRepository(
     initialMembers: Map<String, List<GroupMember>> = emptyMap(),
     initialExpenseItems: Map<String, List<ExpenseItem>> = emptyMap(),
     initialExpenseGroups: Map<String, List<ExpenseGroup>> = emptyMap(),
+    initialDestinations: List<StoredDestination> = emptyList(),
     val customObserveGroups: (() -> Flow<List<TravelGroup>>)? = null,
     val customObserveMembers: ((String) -> Flow<List<GroupMember>>)? = null,
     val customObserveInvites: ((String) -> Flow<List<InviteToken>>)? = null,
@@ -57,6 +61,7 @@ class FakeTravelRepository(
     private val _itemsByGroup = MutableStateFlow(initialExpenseItems)
     private val _expenseGroupsByGroup = MutableStateFlow(initialExpenseGroups)
     private val _assignmentsByGroup = MutableStateFlow<Map<String, List<ItemAssignment>>>(emptyMap())
+    private val _destinations = MutableStateFlow(initialDestinations)
 
     var lastConsumeUserId: String? = null
     var calculateSettlementCallCount = 0
@@ -69,6 +74,11 @@ class FakeTravelRepository(
     var setExpenseGroupPinnedCallCount = 0
     var setExpenseGroupPayerCallCount = 0
     var lastCreatedExpenseGroupCategory: String? = null
+    var lastBrowsedDestinationRegion: String? = null
+    var lastDestinationSearchQuery: String? = null
+    var upsertDestinationCallCount = 0
+    var lastUpsertedDestination: DestinationDraft? = null
+    var lastUpdatedDestinationPhotoId: String? = null
 
     override fun observeGroups(): Flow<List<TravelGroup>> = customObserveGroups?.invoke() ?: _groups
     override fun observeMembers(groupId: String): Flow<List<GroupMember>> =
@@ -192,6 +202,77 @@ class FakeTravelRepository(
     override suspend fun markDebtorConfirmed(fromMemberId: String, toMemberId: String, expenseGroupId: String) = Unit
 
     override suspend fun markCreditorConfirmed(fromMemberId: String, toMemberId: String, expenseGroupId: String) = Unit
+
+    override suspend fun browseDestinations(region: String): List<StoredDestination> =
+        _destinations.value
+            .also { lastBrowsedDestinationRegion = region }
+            .filter { it.isActive && it.region == region }
+            .sortedWith(compareByDescending<StoredDestination> { it.population }.thenBy { it.normalizedName })
+
+    override suspend fun searchDestinations(query: String): List<StoredDestination> {
+        lastDestinationSearchQuery = query
+        val normalizedQuery = DestinationTextNormalizer.normalize(query)
+        return _destinations.value
+            .filter {
+                it.isActive && (
+                    it.normalizedName.contains(normalizedQuery) ||
+                        DestinationTextNormalizer.normalize(it.province).contains(normalizedQuery)
+                    )
+            }
+            .sortedWith(compareByDescending<StoredDestination> { it.population }.thenBy { it.normalizedName })
+    }
+
+    override suspend fun upsertDestination(destination: DestinationDraft): StoredDestination {
+        upsertDestinationCallCount++
+        lastUpsertedDestination = destination
+        val existing = _destinations.value.firstOrNull {
+            it.source == destination.source && it.sourceId == destination.sourceId
+        }
+        val stored = StoredDestination(
+            id = existing?.id ?: "dest-${_destinations.value.size + 1}",
+            source = destination.source,
+            sourceId = destination.sourceId,
+            name = destination.name,
+            normalizedName = DestinationTextNormalizer.normalize(destination.name),
+            province = destination.province,
+            region = destination.region,
+            countryCode = destination.countryCode,
+            lat = destination.lat,
+            lng = destination.lng,
+            population = destination.population,
+            googlePlaceId = destination.googlePlaceId,
+            googlePhotoUrl = destination.googlePhotoUrl,
+            wikipediaTitle = destination.wikipediaTitle,
+            wikipediaPhotoUrl = destination.wikipediaPhotoUrl,
+            displayPhotoUrl = destination.displayPhotoUrl,
+            isActive = destination.isActive,
+        )
+        _destinations.value = if (existing == null) {
+            _destinations.value + stored
+        } else {
+            _destinations.value.map { if (it.id == existing.id) stored else it }
+        }
+        return stored
+    }
+
+    override suspend fun updateDestinationPhoto(
+        destinationId: String,
+        googlePhotoUrl: String?,
+        wikipediaTitle: String?,
+        wikipediaPhotoUrl: String?,
+        displayPhotoUrl: String?,
+    ): StoredDestination {
+        lastUpdatedDestinationPhotoId = destinationId
+        val current = _destinations.value.first { it.id == destinationId }
+        val updated = current.copy(
+            googlePhotoUrl = googlePhotoUrl ?: current.googlePhotoUrl,
+            wikipediaTitle = wikipediaTitle ?: current.wikipediaTitle,
+            wikipediaPhotoUrl = wikipediaPhotoUrl ?: current.wikipediaPhotoUrl,
+            displayPhotoUrl = displayPhotoUrl ?: current.displayPhotoUrl,
+        )
+        _destinations.value = _destinations.value.map { if (it.id == destinationId) updated else it }
+        return updated
+    }
 
     // ─── Trip planning stubs ──────────────────────────────────────────────────
 
@@ -365,4 +446,6 @@ class FakeTravelRepository(
 
     fun getExpenseGroupsSnapshot(groupId: String): List<ExpenseGroup> =
         _expenseGroupsByGroup.value[groupId] ?: emptyList()
+
+    fun getStoredDestinationsSnapshot(): List<StoredDestination> = _destinations.value
 }

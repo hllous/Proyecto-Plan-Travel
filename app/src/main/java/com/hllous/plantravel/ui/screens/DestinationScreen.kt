@@ -8,6 +8,8 @@ import kotlinx.serialization.json.Json
 import androidx.compose.animation.AnimatedVisibility
 import androidx.compose.animation.expandVertically
 import androidx.compose.animation.shrinkVertically
+import androidx.compose.foundation.Image
+import androidx.compose.foundation.background
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
@@ -32,6 +34,7 @@ import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.filled.Close
 import androidx.compose.material.icons.filled.Hotel
 import androidx.compose.material.icons.filled.HowToVote
+import androidx.compose.material.icons.filled.Image
 import androidx.compose.material.icons.filled.LocalActivity
 import androidx.compose.material.icons.filled.LocationOn
 import androidx.compose.material.icons.filled.Map
@@ -76,18 +79,24 @@ import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
+import androidx.compose.ui.graphics.Brush
+import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.graphics.vector.ImageVector
 import androidx.compose.ui.input.nestedscroll.nestedScroll
 import androidx.compose.ui.layout.ContentScale
 import androidx.compose.ui.platform.LocalContext
+import androidx.compose.ui.res.painterResource
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.dp
 import androidx.navigation.NavHostController
 import coil3.compose.AsyncImage
+import com.hllous.plantravel.R
+import com.hllous.plantravel.data.destination.DestinationFallbackImage
 import com.hllous.plantravel.domain.model.MemberRole
 import com.hllous.plantravel.domain.model.PlaceResult
 import com.hllous.plantravel.domain.model.RankedRecommendations
+import com.hllous.plantravel.domain.model.StoredDestination
 import com.hllous.plantravel.presentation.UiState
 import com.hllous.plantravel.presentation.destination.DestinationViewModel
 import com.hllous.plantravel.presentation.destination.TripDestinationState
@@ -95,7 +104,6 @@ import com.hllous.plantravel.ui.theme.FrauncesFamily
 import kotlinx.coroutines.launch
 
 private val REGIONS = listOf("Patagonia", "Cuyo", "Noroeste", "Litoral", "Buenos Aires", "Córdoba")
-
 private data class PoiCategory(val label: String, val icon: ImageVector)
 private val POI_CATEGORIES = listOf(
     PoiCategory("Alojamiento", Icons.Default.Hotel),
@@ -337,10 +345,12 @@ private fun PoiCard(
                 .padding(12.dp),
             verticalAlignment = Alignment.CenterVertically,
         ) {
-            AsyncImage(
-                model = place.photoUrl,
+            DestinationImage(
+                imageUrl = place.photoUrl,
                 contentDescription = place.name,
-                contentScale = ContentScale.Crop,
+                title = place.name,
+                subtitle = place.address,
+                icon = Icons.Default.Map,
                 modifier = Modifier
                     .size(80.dp)
                     .clip(RoundedCornerShape(10.dp)),
@@ -411,10 +421,11 @@ private fun PoiBottomSheet(
                 .fillMaxWidth()
                 .padding(bottom = 32.dp),
         ) {
-            AsyncImage(
-                model = place.photoUrl,
+            DestinationImage(
+                imageUrl = place.photoUrl,
                 contentDescription = place.name,
-                contentScale = ContentScale.Crop,
+                title = place.name,
+                icon = Icons.Default.Map,
                 modifier = Modifier
                     .fillMaxWidth()
                     .height(220.dp)
@@ -521,10 +532,12 @@ private fun PoiBottomSheet(
 @OptIn(ExperimentalMaterial3Api::class)
 @Composable
 private fun Level1BrowseContent(viewModel: DestinationViewModel, navController: NavHostController) {
-    val regionResults by viewModel.regionResults.collectAsState()
-    val searchResults by viewModel.searchResults.collectAsState()
+    val regionDestinations by viewModel.regionDestinations.collectAsState()
+    val searchDestinations by viewModel.searchDestinations.collectAsState()
+    val destinationPhotoUrls by viewModel.destinationPhotoUrls.collectAsState()
     val activePoll by viewModel.activePoll.collectAsState()
     val currentMember by viewModel.currentMember.collectAsState()
+    val tripDestination by viewModel.tripDestination.collectAsState()
 
     val scrollBehavior = TopAppBarDefaults.exitUntilCollapsedScrollBehavior()
 
@@ -532,14 +545,14 @@ private fun Level1BrowseContent(viewModel: DestinationViewModel, navController: 
     var searchQuery by rememberSaveable { mutableStateOf("") }
     var isSearchActive by rememberSaveable { mutableStateOf(false) }
     var pollBannerDismissed by rememberSaveable { mutableStateOf(false) }
-    var selectedPlace by remember { mutableStateOf<PlaceResult?>(null) }
+    var selectedDestination by remember { mutableStateOf<StoredDestination?>(null) }
 
     val showPollBanner = activePoll != null && !pollBannerDismissed
 
-    val displayedResults: UiState<List<PlaceResult>> = when {
-        isSearchActive -> searchResults
-        selectedRegion != null -> regionResults
-        else -> UiState.Success(emptyList())
+    val displayedDestinations: List<StoredDestination> = when {
+        isSearchActive -> searchDestinations
+        selectedRegion != null -> regionDestinations
+        else -> emptyList()
     }
 
     Scaffold(
@@ -563,7 +576,6 @@ private fun Level1BrowseContent(viewModel: DestinationViewModel, navController: 
                 .fillMaxSize()
                 .padding(innerPadding),
         ) {
-            // ── Active poll banner ────────────────────────────────────────────
             AnimatedVisibility(
                 visible = showPollBanner,
                 enter = expandVertically(),
@@ -575,7 +587,6 @@ private fun Level1BrowseContent(viewModel: DestinationViewModel, navController: 
                 )
             }
 
-            // ── Search bar ────────────────────────────────────────────────────
             OutlinedTextField(
                 value = searchQuery,
                 onValueChange = { q ->
@@ -607,7 +618,6 @@ private fun Level1BrowseContent(viewModel: DestinationViewModel, navController: 
                 shape = RoundedCornerShape(28.dp),
             )
 
-            // ── Region chip row ───────────────────────────────────────────────
             LazyRow(
                 contentPadding = PaddingValues(horizontal = 16.dp, vertical = 4.dp),
                 horizontalArrangement = Arrangement.spacedBy(8.dp),
@@ -654,69 +664,45 @@ private fun Level1BrowseContent(viewModel: DestinationViewModel, navController: 
 
             HorizontalDivider(modifier = Modifier.padding(top = 4.dp))
 
-            // ── Results ───────────────────────────────────────────────────────
-            when (val state = displayedResults) {
-                is UiState.Loading -> {
+            when {
+                displayedDestinations.isEmpty() && (selectedRegion != null || isSearchActive) -> {
                     Box(
                         modifier = Modifier.fillMaxSize(),
                         contentAlignment = Alignment.Center,
                     ) {
-                        CircularProgressIndicator()
-                    }
-                }
-
-                is UiState.Error -> {
-                    Box(
-                        modifier = Modifier
-                            .fillMaxSize()
-                            .padding(24.dp),
-                        contentAlignment = Alignment.Center,
-                    ) {
                         Text(
-                            text = state.message,
+                            text = "Sin resultados",
                             style = MaterialTheme.typography.bodyMedium,
-                            color = MaterialTheme.colorScheme.error,
+                            color = MaterialTheme.colorScheme.onSurfaceVariant,
                         )
                     }
                 }
-
-                is UiState.Success -> {
-                    if (state.data.isEmpty() && (selectedRegion != null || isSearchActive)) {
-                        Box(
-                            modifier = Modifier.fillMaxSize(),
-                            contentAlignment = Alignment.Center,
-                        ) {
-                            Text(
-                                text = "Sin resultados",
-                                style = MaterialTheme.typography.bodyMedium,
-                                color = MaterialTheme.colorScheme.onSurfaceVariant,
+                displayedDestinations.isEmpty() -> {
+                    Box(
+                        modifier = Modifier.fillMaxSize(),
+                        contentAlignment = Alignment.Center,
+                    ) {
+                        Text(
+                            text = "Seleccioná una región para explorar destinos",
+                            style = MaterialTheme.typography.bodyMedium,
+                            color = MaterialTheme.colorScheme.onSurfaceVariant,
+                        )
+                    }
+                }
+                else -> {
+                    LazyVerticalGrid(
+                        columns = GridCells.Fixed(2),
+                        contentPadding = PaddingValues(16.dp),
+                        horizontalArrangement = Arrangement.spacedBy(12.dp),
+                        verticalArrangement = Arrangement.spacedBy(12.dp),
+                        modifier = Modifier.fillMaxSize(),
+                    ) {
+                        items(displayedDestinations) { destination ->
+                            DestinationCard(
+                                destination = destination,
+                                imageUrl = destinationPhotoUrls[destinationCardKey(destination)].orEmpty(),
+                                onClick = { selectedDestination = destination },
                             )
-                        }
-                    } else if (state.data.isEmpty()) {
-                        Box(
-                            modifier = Modifier.fillMaxSize(),
-                            contentAlignment = Alignment.Center,
-                        ) {
-                            Text(
-                                text = "Seleccioná una región para explorar destinos",
-                                style = MaterialTheme.typography.bodyMedium,
-                                color = MaterialTheme.colorScheme.onSurfaceVariant,
-                            )
-                        }
-                    } else {
-                        LazyVerticalGrid(
-                            columns = GridCells.Fixed(2),
-                            contentPadding = PaddingValues(16.dp),
-                            horizontalArrangement = Arrangement.spacedBy(12.dp),
-                            verticalArrangement = Arrangement.spacedBy(12.dp),
-                            modifier = Modifier.fillMaxSize(),
-                        ) {
-                            items(state.data) { place ->
-                                DestinationCard(
-                                    place = place,
-                                    onClick = { selectedPlace = place },
-                                )
-                            }
                         }
                     }
                 }
@@ -724,13 +710,17 @@ private fun Level1BrowseContent(viewModel: DestinationViewModel, navController: 
         }
     }
 
-    // ── Destination bottom sheet ──────────────────────────────────────────────
-    selectedPlace?.let { place ->
-        DestinationBottomSheet(
-            place = place,
+    selectedDestination?.let { destination ->
+        CityBottomSheet(
+            destination = destination,
+            imageUrl = destinationPhotoUrls[destinationCardKey(destination)].orEmpty(),
             isAdmin = currentMember?.role == MemberRole.ADMIN,
-            viewModel = viewModel,
-            onDismiss = { selectedPlace = null },
+            tripDestination = tripDestination,
+            onDismiss = { selectedDestination = null },
+            onSetDestination = {
+                viewModel.setTripDestination(destination)
+                selectedDestination = null
+            },
             onNavigateToPoll = { navController.navigate("poll_detail") },
         )
     }
@@ -776,7 +766,8 @@ private fun PollBanner(onDismiss: () -> Unit, onTap: () -> Unit) {
 
 @Composable
 private fun DestinationCard(
-    place: PlaceResult,
+    destination: StoredDestination,
+    imageUrl: String,
     onClick: () -> Unit,
 ) {
     Card(
@@ -786,10 +777,12 @@ private fun DestinationCard(
         elevation = CardDefaults.cardElevation(defaultElevation = 2.dp),
     ) {
         Column {
-            AsyncImage(
-                model = place.photoUrl,
-                contentDescription = place.name,
-                contentScale = ContentScale.Crop,
+            DestinationImage(
+                imageUrl = imageUrl,
+                contentDescription = destination.name,
+                title = destination.name,
+                subtitle = destination.province,
+                icon = Icons.Default.LocationOn,
                 modifier = Modifier
                     .fillMaxWidth()
                     .height(120.dp)
@@ -797,27 +790,20 @@ private fun DestinationCard(
             )
             Column(modifier = Modifier.padding(10.dp)) {
                 Text(
-                    text = place.name,
+                    text = destination.name,
                     style = MaterialTheme.typography.titleSmall,
                     fontWeight = FontWeight.SemiBold,
                     maxLines = 1,
                     overflow = TextOverflow.Ellipsis,
                 )
-                Spacer(modifier = Modifier.height(4.dp))
-                Row(verticalAlignment = Alignment.CenterVertically) {
-                    Icon(
-                        Icons.Default.Star,
-                        contentDescription = null,
-                        tint = MaterialTheme.colorScheme.primary,
-                        modifier = Modifier.size(14.dp),
-                    )
-                    Spacer(modifier = Modifier.width(3.dp))
-                    Text(
-                        text = "%.1f".format(place.rating),
-                        style = MaterialTheme.typography.bodySmall,
-                        color = MaterialTheme.colorScheme.onSurfaceVariant,
-                    )
-                }
+                Spacer(modifier = Modifier.height(2.dp))
+                Text(
+                    text = destination.province,
+                    style = MaterialTheme.typography.bodySmall,
+                    color = MaterialTheme.colorScheme.onSurfaceVariant,
+                    maxLines = 1,
+                    overflow = TextOverflow.Ellipsis,
+                )
             }
         }
     }
@@ -825,16 +811,16 @@ private fun DestinationCard(
 
 @OptIn(ExperimentalMaterial3Api::class)
 @Composable
-private fun DestinationBottomSheet(
-    place: PlaceResult,
+private fun CityBottomSheet(
+    destination: StoredDestination,
+    imageUrl: String,
     isAdmin: Boolean,
-    viewModel: DestinationViewModel,
+    tripDestination: TripDestinationState,
     onDismiss: () -> Unit,
-    onNavigateToPoll: () -> Unit = {},
+    onSetDestination: () -> Unit,
+    onNavigateToPoll: () -> Unit,
 ) {
-    val tripDestination by viewModel.tripDestination.collectAsState()
     val sheetState = rememberModalBottomSheetState()
-
     var showPollPromptDialog by remember { mutableStateOf(false) }
     var showReplaceDialog by remember { mutableStateOf(false) }
 
@@ -847,70 +833,41 @@ private fun DestinationBottomSheet(
                 .fillMaxWidth()
                 .padding(bottom = 32.dp),
         ) {
-            AsyncImage(
-                model = place.photoUrl,
-                contentDescription = place.name,
-                contentScale = ContentScale.Crop,
+            DestinationImage(
+                imageUrl = imageUrl,
+                contentDescription = destination.name,
+                title = destination.name,
+                subtitle = destination.province,
+                icon = Icons.Default.LocationOn,
                 modifier = Modifier
                     .fillMaxWidth()
                     .height(220.dp)
                     .padding(horizontal = 16.dp)
                     .clip(RoundedCornerShape(16.dp)),
             )
-
             Spacer(modifier = Modifier.height(16.dp))
-
             Column(modifier = Modifier.padding(horizontal = 24.dp)) {
                 Text(
-                    text = place.name,
+                    text = destination.name,
                     style = MaterialTheme.typography.headlineSmall,
                     fontFamily = FrauncesFamily,
                     fontWeight = FontWeight.SemiBold,
                 )
-
-                Spacer(modifier = Modifier.height(8.dp))
-
+                Spacer(modifier = Modifier.height(4.dp))
                 Row(verticalAlignment = Alignment.CenterVertically) {
                     Icon(
-                        Icons.Default.Star,
+                        Icons.Default.LocationOn,
                         contentDescription = null,
-                        tint = MaterialTheme.colorScheme.primary,
-                        modifier = Modifier.size(16.dp),
+                        tint = MaterialTheme.colorScheme.onSurfaceVariant,
+                        modifier = Modifier.size(14.dp),
                     )
                     Spacer(modifier = Modifier.width(4.dp))
                     Text(
-                        text = "%.1f".format(place.rating),
-                        style = MaterialTheme.typography.bodyLarge,
-                        fontWeight = FontWeight.Medium,
-                    )
-                    Spacer(modifier = Modifier.width(8.dp))
-                    Text(
-                        text = "(${place.reviewCount} reseñas)",
-                        style = MaterialTheme.typography.bodyMedium,
+                        text = destination.province,
+                        style = MaterialTheme.typography.bodySmall,
                         color = MaterialTheme.colorScheme.onSurfaceVariant,
                     )
                 }
-
-                if (place.address.isNotBlank()) {
-                    Spacer(modifier = Modifier.height(6.dp))
-                    Row(verticalAlignment = Alignment.CenterVertically) {
-                        Icon(
-                            Icons.Default.LocationOn,
-                            contentDescription = null,
-                            tint = MaterialTheme.colorScheme.onSurfaceVariant,
-                            modifier = Modifier.size(14.dp),
-                        )
-                        Spacer(modifier = Modifier.width(4.dp))
-                        Text(
-                            text = place.address,
-                            style = MaterialTheme.typography.bodySmall,
-                            color = MaterialTheme.colorScheme.onSurfaceVariant,
-                            maxLines = 2,
-                            overflow = TextOverflow.Ellipsis,
-                        )
-                    }
-                }
-
                 if (isAdmin) {
                     Spacer(modifier = Modifier.height(24.dp))
                     Button(
@@ -944,18 +901,13 @@ private fun DestinationBottomSheet(
                 TextButton(onClick = {
                     showPollPromptDialog = false
                     onNavigateToPoll()
-                }) {
-                    Text("Crear encuesta")
-                }
+                }) { Text("Crear encuesta") }
             },
             dismissButton = {
                 Button(onClick = {
                     showPollPromptDialog = false
-                    viewModel.setTripDestination(place)
-                    onDismiss()
-                }) {
-                    Text("Saltear y establecer")
-                }
+                    onSetDestination()
+                }) { Text("Saltear y establecer") }
             },
         )
     }
@@ -967,23 +919,126 @@ private fun DestinationBottomSheet(
             title = { Text("¿Reemplazar destino?") },
             text = {
                 Text(
-                    "El destino actual es \"$currentName\". ¿Querés reemplazarlo por \"${place.name}\"?",
+                    "El destino actual es \"$currentName\". ¿Querés reemplazarlo por \"${destination.name}\"?",
                 )
             },
             confirmButton = {
                 Button(onClick = {
                     showReplaceDialog = false
-                    viewModel.setTripDestination(place)
-                    onDismiss()
-                }) {
-                    Text("Reemplazar")
-                }
+                    onSetDestination()
+                }) { Text("Reemplazar") }
             },
             dismissButton = {
-                TextButton(onClick = { showReplaceDialog = false }) {
-                    Text("Cancelar")
-                }
+                TextButton(onClick = { showReplaceDialog = false }) { Text("Cancelar") }
             },
         )
+    }
+}
+
+private fun destinationCardKey(destination: StoredDestination): String =
+    if (destination.id.isNotBlank()) destination.id else "${destination.source}:${destination.sourceId}"
+
+@Composable
+private fun DestinationImage(
+    imageUrl: String,
+    contentDescription: String,
+    title: String,
+    modifier: Modifier = Modifier,
+    subtitle: String? = null,
+    icon: ImageVector = Icons.Default.Image,
+) {
+    val fallbackRegionSlug = DestinationFallbackImage.regionSlugFromToken(imageUrl)
+    if (fallbackRegionSlug != null) {
+        Image(
+            painter = painterResource(destinationFallbackResId(fallbackRegionSlug)),
+            contentDescription = contentDescription,
+            contentScale = ContentScale.Crop,
+            modifier = modifier,
+        )
+        return
+    }
+
+    if (imageUrl.isBlank()) {
+        DestinationImageFallback(
+            title = title,
+            subtitle = subtitle,
+            icon = icon,
+            modifier = modifier,
+        )
+        return
+    }
+
+    AsyncImage(
+        model = imageUrl,
+        contentDescription = contentDescription,
+        contentScale = ContentScale.Crop,
+        modifier = modifier,
+    )
+}
+
+private fun destinationFallbackResId(regionSlug: String): Int = when (regionSlug) {
+    "patagonia" -> R.drawable.destination_fallback_patagonia
+    "cuyo" -> R.drawable.destination_fallback_cuyo
+    "noroeste" -> R.drawable.destination_fallback_noroeste
+    "litoral" -> R.drawable.destination_fallback_litoral
+    "buenos_aires" -> R.drawable.destination_fallback_buenos_aires
+    "cordoba" -> R.drawable.destination_fallback_cordoba
+    else -> R.drawable.destination_fallback_argentina
+}
+
+@Composable
+private fun DestinationImageFallback(
+    title: String,
+    subtitle: String?,
+    icon: ImageVector,
+    modifier: Modifier = Modifier,
+) {
+    Box(
+        modifier = modifier
+            .fillMaxWidth()
+            .background(
+                Brush.linearGradient(
+                    colors = listOf(
+                        MaterialTheme.colorScheme.secondaryContainer,
+                        MaterialTheme.colorScheme.surfaceVariant,
+                        Color.White.copy(alpha = 0.35f),
+                    ),
+                ),
+            ),
+        contentAlignment = Alignment.Center,
+    ) {
+        Column(
+            modifier = Modifier.padding(16.dp),
+            horizontalAlignment = Alignment.CenterHorizontally,
+            verticalArrangement = Arrangement.spacedBy(8.dp),
+        ) {
+            Surface(
+                shape = RoundedCornerShape(999.dp),
+                color = MaterialTheme.colorScheme.onSecondaryContainer.copy(alpha = 0.12f),
+            ) {
+                Icon(
+                    imageVector = icon,
+                    contentDescription = null,
+                    tint = MaterialTheme.colorScheme.onSecondaryContainer,
+                    modifier = Modifier.padding(10.dp),
+                )
+            }
+            Text(
+                text = title,
+                style = MaterialTheme.typography.labelLarge,
+                color = MaterialTheme.colorScheme.onSecondaryContainer,
+                maxLines = 2,
+                overflow = TextOverflow.Ellipsis,
+            )
+            subtitle?.takeIf { it.isNotBlank() }?.let {
+                Text(
+                    text = it,
+                    style = MaterialTheme.typography.bodySmall,
+                    color = MaterialTheme.colorScheme.onSecondaryContainer.copy(alpha = 0.82f),
+                    maxLines = 1,
+                    overflow = TextOverflow.Ellipsis,
+                )
+            }
+        }
     }
 }
