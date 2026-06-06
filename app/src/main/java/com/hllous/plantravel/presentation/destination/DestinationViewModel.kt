@@ -447,6 +447,22 @@ class DestinationViewModel @Inject constructor(
         return wikipediaThumbnail(best, destination)
     }
 
+    fun addDestinationToPoll(destination: StoredDestination) {
+        val pollId = activePoll.value?.id ?: return
+        viewModelScope.launch {
+            runCatching {
+                repository.addPollCandidate(
+                    pollId = pollId,
+                    placeId = destination.googlePlaceId ?: destination.sourceId,
+                    name = destination.name,
+                    photoUrl = destination.displayPhotoUrl.orEmpty(),
+                    lat = destination.lat,
+                    lng = destination.lng,
+                )
+            }
+        }
+    }
+
     fun setTripDestination(destination: StoredDestination) {
         val groupId = selectedGroupHolder.selectedGroupId.value ?: return
         viewModelScope.launch {

@@ -388,6 +388,12 @@ class FakeTravelRepository(
         }
     }
 
+    override suspend fun deletePoll(pollId: String) {
+        _activePollByGroup.value = _activePollByGroup.value.mapValues { (_, poll) ->
+            if (poll?.id == pollId) null else poll
+        }
+    }
+
     override fun observePollCandidates(pollId: String): Flow<List<PollCandidate>> =
         _candidatesByPoll.map { it[pollId] ?: emptyList() }
 

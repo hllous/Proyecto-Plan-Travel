@@ -110,7 +110,17 @@ class PollViewModel @Inject constructor(
         val pollId = poll.value?.id ?: return
         viewModelScope.launch {
             runCatching { repository.closePoll(pollId) }
+                .onFailure { _errorMessage.value = "Error al cerrar la encuesta" }
             reloadPoll()
+        }
+    }
+
+    fun deletePoll() {
+        val pollId = poll.value?.id ?: return
+        viewModelScope.launch {
+            runCatching { repository.deletePoll(pollId) }
+                .onFailure { _errorMessage.value = "Error al eliminar la encuesta" }
+                .onSuccess { reloadPoll() }
         }
     }
 

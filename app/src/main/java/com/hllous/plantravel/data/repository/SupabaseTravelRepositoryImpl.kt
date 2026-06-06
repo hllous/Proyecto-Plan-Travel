@@ -558,13 +558,12 @@ class SupabaseTravelRepositoryImpl @Inject constructor(
     }
 
     private suspend fun sendBroadcast(channelName: String, event: String) {
+        // Do NOT remove the channel after broadcasting — it may be the same shared channel
+        // that observers (DestinationViewModel, PollViewModel) are listening on. Removing it
+        // here would destroy their subscriptions and break real-time updates.
         val channel = supabase.channel(channelName)
-        try {
-            channel.subscribe(blockUntilSubscribed = true)
-            channel.broadcast(event = event, message = buildJsonObject {})
-        } finally {
-            runCatching { supabase.realtime.removeChannel(channel) }
-        }
+        channel.subscribe(blockUntilSubscribed = true)
+        channel.broadcast(event = event, message = buildJsonObject {})
     }
 
     // ─── Group CRUD ──────────────────────────────────────────────────────────
@@ -798,15 +797,33 @@ class SupabaseTravelRepositoryImpl @Inject constructor(
     }
 
     override suspend fun closePoll(pollId: String) {
-        supabase.from("group_polls").update({ set("state", "CLOSED") }) {
+        val groupId = supabase.from("group_polls")
+            .select { filter { eq("id", pollId) } }
+            .decodeList<PollDto>().firstOrNull()?.groupId ?: return
+        supabase.from("group_polls").update({ set("state", "closed") }) {
             filter { eq("id", pollId) }
         }
+        sendBroadcast("group-polls-broadcast-$groupId", "poll_changed")
     }
 
     override suspend fun setPollWinner(pollId: String, placeId: String) {
+        val groupId = supabase.from("group_polls")
+            .select { filter { eq("id", pollId) } }
+            .decodeList<PollDto>().firstOrNull()?.groupId ?: return
         supabase.from("group_polls").update({ set("winner_place_id", placeId) }) {
             filter { eq("id", pollId) }
         }
+        sendBroadcast("group-polls-broadcast-$groupId", "poll_changed")
+    }
+
+    override suspend fun deletePoll(pollId: String) {
+        val groupId = supabase.from("group_polls")
+            .select { filter { eq("id", pollId) } }
+            .decodeList<PollDto>().firstOrNull()?.groupId ?: return
+        supabase.from("group_polls").delete {
+            filter { eq("id", pollId) }
+        }
+        sendBroadcast("group-polls-broadcast-$groupId", "poll_changed")
     }
 
     override fun observePollCandidates(pollId: String): Flow<List<PollCandidate>> = channelFlow {

@@ -97,6 +97,7 @@ fun PollScreen(
     val snackbarHostState = remember { SnackbarHostState() }
     var showCreationSheet by rememberSaveable { mutableStateOf(false) }
     var showWinnerDialog by rememberSaveable { mutableStateOf(false) }
+    var showDeleteDialog by rememberSaveable { mutableStateOf(false) }
     var winnerSnackbarShown by rememberSaveable { mutableStateOf(false) }
 
     LaunchedEffect(errorMessage) {
@@ -138,9 +139,14 @@ fun PollScreen(
                     }
                 },
                 actions = {
-                    if (isAdmin && poll?.state == PollState.OPEN) {
-                        TextButton(onClick = { viewModel.closePoll() }) {
-                            Text("Cerrar votación")
+                    if (isAdmin && poll != null) {
+                        if (poll?.state == PollState.OPEN) {
+                            TextButton(onClick = { viewModel.closePoll() }) {
+                                Text("Cerrar")
+                            }
+                        }
+                        TextButton(onClick = { showDeleteDialog = true }) {
+                            Text("Eliminar", color = MaterialTheme.colorScheme.error)
                         }
                     }
                 },
@@ -196,6 +202,23 @@ fun PollScreen(
             onSelectWinner = { candidateId ->
                 viewModel.selectWinner(candidateId)
                 showWinnerDialog = false
+            },
+        )
+    }
+
+    if (showDeleteDialog) {
+        AlertDialog(
+            onDismissRequest = { showDeleteDialog = false },
+            title = { Text("Eliminar encuesta") },
+            text = { Text("¿Eliminar esta encuesta y todos sus candidatos? Esta acción no se puede deshacer.") },
+            confirmButton = {
+                TextButton(onClick = {
+                    viewModel.deletePoll()
+                    showDeleteDialog = false
+                }) { Text("Eliminar", color = MaterialTheme.colorScheme.error) }
+            },
+            dismissButton = {
+                TextButton(onClick = { showDeleteDialog = false }) { Text("Cancelar") }
             },
         )
     }

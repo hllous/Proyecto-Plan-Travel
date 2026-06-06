@@ -748,12 +748,14 @@ private fun Level1BrowseContent(viewModel: DestinationViewModel, navController: 
             imageUrl = destinationPhotoUrls[destinationCardKey(destination)].orEmpty(),
             currentMember = currentMember,
             tripDestination = tripDestination,
+            hasActivePoll = activePoll != null,
             onDismiss = { selectedDestination = null },
             onSetDestination = {
                 viewModel.setTripDestination(destination)
                 selectedDestination = null
             },
             onNavigateToPoll = { navController.navigate("poll_detail") },
+            onAddToPoll = { viewModel.addDestinationToPoll(destination) },
         )
     }
 }
@@ -914,9 +916,11 @@ private fun CityBottomSheet(
     imageUrl: String,
     currentMember: GroupMember?,
     tripDestination: TripDestinationState,
+    hasActivePoll: Boolean,
     onDismiss: () -> Unit,
     onSetDestination: () -> Unit,
     onNavigateToPoll: () -> Unit,
+    onAddToPoll: () -> Unit,
 ) {
     val sheetState = rememberModalBottomSheetState()
     var showPollPromptDialog by remember { mutableStateOf(false) }
@@ -1002,6 +1006,21 @@ private fun CityBottomSheet(
                                 color = MaterialTheme.colorScheme.onSurfaceVariant,
                             )
                         }
+                    }
+                }
+                if (hasActivePoll && currentMember != null) {
+                    Spacer(modifier = Modifier.height(8.dp))
+                    OutlinedButton(
+                        onClick = { onAddToPoll(); onDismiss() },
+                        modifier = Modifier.fillMaxWidth(),
+                    ) {
+                        Icon(
+                            Icons.Default.HowToVote,
+                            contentDescription = null,
+                            modifier = Modifier.size(18.dp),
+                        )
+                        Spacer(modifier = Modifier.width(8.dp))
+                        Text("Añadir a encuesta")
                     }
                 }
             }
