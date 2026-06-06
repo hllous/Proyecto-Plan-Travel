@@ -11,6 +11,7 @@ import com.hllous.plantravel.domain.model.DestinationDraft
 import com.hllous.plantravel.domain.model.GroupMember
 import com.hllous.plantravel.domain.model.PlaceResult
 import com.hllous.plantravel.domain.model.Poll
+import com.hllous.plantravel.domain.model.PollState
 import com.hllous.plantravel.domain.model.RankedRecommendations
 import com.hllous.plantravel.domain.model.StoredDestination
 import com.hllous.plantravel.domain.places.PlaceRecommendationRanker
@@ -117,7 +118,9 @@ class DestinationViewModel @Inject constructor(
     val activePoll: StateFlow<Poll?> = selectedGroupHolder.selectedGroupId
         .flatMapLatest { groupId ->
             if (groupId == null) flowOf(null)
-            else repository.observeActivePoll(groupId).catch { emit(null) }
+            else repository.observeActivePoll(groupId)
+                .map { poll -> poll?.takeIf { it.state == PollState.OPEN } }
+                .catch { emit(null) }
         }
         .stateIn(viewModelScope, SharingStarted.WhileSubscribed(5000), null)
 

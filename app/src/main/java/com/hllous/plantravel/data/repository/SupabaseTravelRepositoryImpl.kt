@@ -25,6 +25,7 @@ import io.github.jan.supabase.SupabaseClient
 import io.github.jan.supabase.auth.auth
 import io.github.jan.supabase.postgrest.from
 import io.github.jan.supabase.postgrest.query.Columns
+import io.github.jan.supabase.postgrest.query.Order
 import io.github.jan.supabase.realtime.PostgresAction
 import io.github.jan.supabase.realtime.channel
 import io.github.jan.supabase.realtime.broadcastFlow
@@ -410,7 +411,11 @@ class SupabaseTravelRepositoryImpl @Inject constructor(
 
     private suspend fun fetchActivePoll(groupId: String): Poll? =
         supabase.from("group_polls")
-            .select { filter { eq("group_id", groupId) } }
+            .select {
+                filter { eq("group_id", groupId) }
+                order("created_at", Order.DESCENDING)
+                limit(1)
+            }
             .decodeList<PollDto>()
             .firstOrNull()?.toDomain()
 

@@ -179,13 +179,11 @@ private fun Level2Content(
             )
         },
         floatingActionButton = {
-            if (activePoll == null) {
-                ExtendedFloatingActionButton(
-                    onClick = { navController.navigate("poll_detail") },
-                    icon = { Icon(Icons.Default.HowToVote, contentDescription = null) },
-                    text = { Text("Crear encuesta") },
-                )
-            }
+            ExtendedFloatingActionButton(
+                onClick = { navController.navigate("poll_detail") },
+                icon = { Icon(Icons.Default.HowToVote, contentDescription = null) },
+                text = { Text(if (activePoll != null) "Ver encuesta" else "Crear encuesta") },
+            )
         },
     ) { innerPadding ->
         Column(
