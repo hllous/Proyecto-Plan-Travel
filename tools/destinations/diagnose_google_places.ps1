@@ -11,7 +11,8 @@ if (-not $GooglePlacesApiKey) {
     if (Test-Path $LocalPropertiesPath) {
         Get-Content $LocalPropertiesPath | Where-Object { $_ -match "=" } | ForEach-Object {
             $k, $v = $_ -split "=", 2
-            if ($k.Trim() -eq "GOOGLE_PLACES_API_KEY") { $GooglePlacesApiKey = $v.Trim() }
+            if ($k.Trim() -eq "MAPS_PLATFORM_API_KEY") { $GooglePlacesApiKey = $v.Trim() }
+        elseif ($k.Trim() -eq "GOOGLE_PLACES_API_KEY" -and -not $GooglePlacesApiKey) { $GooglePlacesApiKey = $v.Trim() }
         }
     }
 }
@@ -81,7 +82,7 @@ function Summarize-Response($resp, [string]$label) {
         $ptype   = if ($p.PSObject.Properties["primaryType"]) { $p.primaryType } else { "(none)" }
         $types   = if ($p.PSObject.Properties["types"]) { ($p.types -join ", ") } else { "(none)" }
         $photos  = if ($p.PSObject.Properties["photos"]) { @($p.photos).Count } else { 0 }
-        $isLoc   = ($localityTypes | Where-Object { $ptype -eq $_ -or $types -like "*$_*" }).Count -gt 0
+        $isLoc   = @($localityTypes | Where-Object { $ptype -eq $_ -or $types -like "*$_*" }).Count -gt 0
         $locMark = if ($isLoc) { "[LOCALITY ✓]" } else { "[NON-LOCALITY ✗]" }
         $photoMark = if ($photos -gt 0) { "[PHOTO ✓ x$photos]" } else { "[NO PHOTO ✗]" }
         Write-Host "      • $name | $addr" -ForegroundColor White
@@ -130,8 +131,8 @@ foreach ($row in $summary) {
     Write-Host ("{0,-30} {1,-18} {2,6} {3,8} {4,-15}" -f $row.Destination, $row.Province, $row.WithFilter, $row.WithoutFilter, $row.FilterBlocking) -ForegroundColor $color
 }
 
-$filterBlockingCount = ($summary | Where-Object { $_.FilterBlocking }).Count
-$totalNoPhotos       = ($summary | Where-Object { $_.WithoutFilter -eq 0 }).Count
+$filterBlockingCount = @($summary | Where-Object { $_.FilterBlocking }).Count
+$totalNoPhotos       = @($summary | Where-Object { $_.WithoutFilter -eq 0 }).Count
 Write-Host ""
 Write-Host "includedType=locality is BLOCKING results for $filterBlockingCount / $($summary.Count) destinations." -ForegroundColor $(if ($filterBlockingCount -gt 0) { "Yellow" } else { "Green" })
 Write-Host "Destinations with 0 results even WITHOUT filter: $totalNoPhotos / $($summary.Count)" -ForegroundColor $(if ($totalNoPhotos -gt 0) { "Red" } else { "Green" })

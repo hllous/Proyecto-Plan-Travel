@@ -29,7 +29,8 @@ android {
                 ?.substringAfter("=") ?: ""
         buildConfigField("String", "SUPABASE_URL", "\"${localProp("SUPABASE_URL")}\"")
         buildConfigField("String", "SUPABASE_PUBLISHABLE_KEY", "\"${localProp("SUPABASE_PUBLISHABLE_KEY")}\"")
-        buildConfigField("String", "GOOGLE_PLACES_API_KEY", "\"${localProp("GOOGLE_PLACES_API_KEY")}\"")
+        val placesApiKey = localProp("MAPS_PLATFORM_API_KEY").ifEmpty { localProp("GOOGLE_PLACES_API_KEY") }
+        buildConfigField("String", "GOOGLE_PLACES_API_KEY", "\"$placesApiKey\"")
     }
 
     buildTypes {

@@ -3,7 +3,6 @@ param(
     [string]$OutputSqlPath = "",
     [int]$DelayMs = 150,
     [switch]$OnlyMissing = $true,
-    [switch]$EmitRegionFallbacks = $true,
     [string]$SupabaseCliPath = "supabase",
     [string]$GooglePlacesApiKey
 )
@@ -22,13 +21,16 @@ if (Test-Path $LocalPropertiesPath) {
 }
 
 if (-not $GooglePlacesApiKey) {
-    $GooglePlacesApiKey = $propsByKey["GOOGLE_PLACES_API_KEY"]
+    $GooglePlacesApiKey = $propsByKey["MAPS_PLATFORM_API_KEY"]
+    if (-not $GooglePlacesApiKey) {
+        $GooglePlacesApiKey = $propsByKey["GOOGLE_PLACES_API_KEY"]
+    }
 }
 
 # ── SQL output path ───────────────────────────────────────────────────────────
 if (-not $OutputSqlPath) {
     $ts = Get-Date -Format "yyyyMMddHHmmss"
-    $OutputSqlPath = "supabase/migrations/${ts}_destination_photos.sql"
+    $OutputSqlPath = "supabase/migrations/${ts}_destination_photos_backfill.sql"
 }
 
 # ── Helpers ───────────────────────────────────────────────────────────────────
@@ -44,7 +46,42 @@ function Normalize-Text([string]$s) {
     return $sb.ToString().ToLowerInvariant().Trim()
 }
 
-function Get-WikiThumbnail([string]$Title) {
+function Measure-Haversine([double]$Lat1, [double]$Lon1, [double]$Lat2, [double]$Lon2) {
+    $r = 6371.0
+    $dLat = [Math]::PI / 180 * ($Lat2 - $Lat1)
+    $dLon = [Math]::PI / 180 * ($Lon2 - $Lon1)
+    $a = [Math]::Sin($dLat / 2) * [Math]::Sin($dLat / 2) +
+         [Math]::Cos([Math]::PI / 180 * $Lat1) * [Math]::Cos([Math]::PI / 180 * $Lat2) *
+         [Math]::Sin($dLon / 2) * [Math]::Sin($dLon / 2)
+    return $r * 2 * [Math]::Atan2([Math]::Sqrt($a), [Math]::Sqrt(1 - $a))
+}
+
+# Returns $true if the Wikipedia article JSON is geographically relevant to the destination.
+# Accepts if: article coordinates are within 500 km, OR description/extract mentions Argentina
+# or the destination's province (when no coordinates are present).
+function Test-WikiArticleRelevant($ArticleJson, [double]$DestLat, [double]$DestLng, [string]$Province) {
+    $coordsProp = $ArticleJson.PSObject.Properties["coordinates"]
+    if ($coordsProp -and $coordsProp.Value) {
+        $latProp = $coordsProp.Value.PSObject.Properties["lat"]
+        $lonProp = $coordsProp.Value.PSObject.Properties["lon"]
+        if ($latProp -and $lonProp) {
+            $dist = Measure-Haversine $DestLat $DestLng ([double]$latProp.Value) ([double]$lonProp.Value)
+            return $dist -le 500.0
+        }
+    }
+    # No coordinates: require article text to mention Argentina or province.
+    $descProp    = $ArticleJson.PSObject.Properties["description"]
+    $extractProp = $ArticleJson.PSObject.Properties["extract"]
+    $descVal    = if ($descProp)    { $descProp.Value }    else { "" }
+    $extractVal = if ($extractProp) { $extractProp.Value } else { "" }
+    $text = "$descVal $extractVal".ToLower()
+    $provNorm = (Normalize-Text $Province).ToLower()
+    return $text -like "*argentina*" -or $text -like "*$provNorm*"
+}
+
+# Fetches the Wikipedia summary for $Title, validates geographic relevance, and
+# returns the thumbnail URL — or $null if invalid, SVG, or disambiguation.
+function Get-WikiThumbnail([string]$Title, [double]$DestLat, [double]$DestLng, [string]$Province) {
     $encoded = [Uri]::EscapeDataString($Title)
     try {
         $r = Invoke-RestMethod `
@@ -52,12 +89,23 @@ function Get-WikiThumbnail([string]$Title) {
             -Headers @{ "User-Agent" = "PlanTravelApp/1.0 (batch-enrichment)" } `
             -TimeoutSec 8 `
             -ErrorAction Stop
-        if ($r.type -eq "disambiguation") { return $null }
-        return $r.thumbnail.source
     } catch { return $null }
+
+    if ($r.type -eq "disambiguation") { return $null }
+
+    if (-not (Test-WikiArticleRelevant $r $DestLat $DestLng $Province)) { return $null }
+
+    $thumbProp = $r.PSObject.Properties["thumbnail"]
+    $url = if ($thumbProp -and $thumbProp.Value) { $thumbProp.Value.source } else { $null }
+    if ([string]::IsNullOrWhiteSpace($url)) { return $null }
+
+    # SVG thumbnails are location maps, flags, or diagrams — not destination photos.
+    if ($url -like "*.svg*") { return $null }
+
+    return $url
 }
 
-function Get-WikiThumbnailByGeosearch([double]$Lat, [double]$Lng, [string]$DestName) {
+function Get-WikiThumbnailByGeosearch([double]$Lat, [double]$Lng, [string]$DestName, [string]$Province) {
     $coordStr = "$Lat|$Lng"
     try {
         $r = Invoke-RestMethod `
@@ -72,17 +120,18 @@ function Get-WikiThumbnailByGeosearch([double]$Lat, [double]$Lng, [string]$DestN
 
     $destNorm = Normalize-Text $DestName
     $startsWithMatch = $null
-    $containsMatch   = $null
-    $firstTitle      = $results[0].title
 
     foreach ($item in $results) {
         $norm = Normalize-Text $item.title
-        if (-not $startsWithMatch -and $norm.StartsWith($destNorm)) { $startsWithMatch = $item.title }
-        if (-not $containsMatch   -and $norm.Contains($destNorm))   { $containsMatch   = $item.title }
+        if (-not $startsWithMatch -and $norm.StartsWith($destNorm)) {
+            $startsWithMatch = $item.title
+        }
     }
 
-    $best = if ($startsWithMatch) { $startsWithMatch } elseif ($containsMatch) { $containsMatch } else { $firstTitle }
-    return Get-WikiThumbnail $best
+    # Only use a geosearch hit if it starts with the destination name.
+    # containsMatch / firstTitle may be unrelated POIs (stations, museums) near the town.
+    if (-not $startsWithMatch) { return $null }
+    return Get-WikiThumbnail $startsWithMatch $Lat $Lng $Province
 }
 
 function Invoke-SupabaseQueryRows([string]$Sql) {
@@ -120,10 +169,9 @@ function Get-GoogleDestinationPhoto([string]$Name, [string]$Province) {
     if ([string]::IsNullOrWhiteSpace($GooglePlacesApiKey)) { return $null }
 
     $body = @{
-        textQuery = "$Name, $Province, Argentina"
+        textQuery    = "$Name, $Province, Argentina"
         languageCode = "es"
-        regionCode = "AR"
-        includedType = "locality"
+        regionCode   = "AR"
     } | ConvertTo-Json -Depth 5
 
     try {
@@ -132,18 +180,26 @@ function Get-GoogleDestinationPhoto([string]$Name, [string]$Province) {
             -Method Post `
             -ContentType "application/json" `
             -Headers @{
-                "X-Goog-Api-Key" = $GooglePlacesApiKey
-                "X-Goog-FieldMask" = "places.id,places.displayName,places.photos,places.formattedAddress"
+                "X-Goog-Api-Key"   = $GooglePlacesApiKey
+                "X-Goog-FieldMask" = "places.id,places.displayName,places.photos,places.formattedAddress,places.primaryType,places.types"
             } `
             -Body $body `
             -TimeoutSec 10 `
             -ErrorAction Stop
     } catch { return $null }
 
+    $localityTypes = @("locality", "postal_town", "administrative_area_level_3", "sublocality")
     $placesProp = $response.PSObject.Properties["places"]
     $places = if ($placesProp) { @($placesProp.Value) } else { @() }
 
     foreach ($place in $places) {
+        # Filter to locality-like types client-side (no server-side includedType restriction).
+        $allTypes = @()
+        if ($place.PSObject.Properties["primaryType"]) { $allTypes += $place.primaryType }
+        if ($place.PSObject.Properties["types"]) { $allTypes += @($place.types) }
+        $isLocality = @($allTypes | Where-Object { $localityTypes -contains $_ }).Count -gt 0
+        if (-not $isLocality) { continue }
+
         $photosProp = $place.PSObject.Properties["photos"]
         $photoName = if ($photosProp) {
             @($photosProp.Value) | Select-Object -First 1 -ExpandProperty name
@@ -163,22 +219,22 @@ function Resolve-Photo([string]$Name, [string]$Province, [double]$Lat, [double]$
     if ($googlePhotoName) {
         return @{
             source = "google"
-            url = "https://places.googleapis.com/v1/$googlePhotoName/media?maxWidthPx=800&key=$GooglePlacesApiKey"
-            title = $null
+            url    = "https://places.googleapis.com/v1/$googlePhotoName/media?maxWidthPx=800&key=$GooglePlacesApiKey"
+            title  = $null
         }
     }
 
-    $wikiUrl = Get-WikiThumbnail $Name
+    $wikiUrl = Get-WikiThumbnail $Name $Lat $Lng $Province
     if ($wikiUrl) {
         return @{ source = "wikipedia"; url = $wikiUrl; title = $Name }
     }
 
-    $wikiUrl = Get-WikiThumbnail "$Name ($Province)"
+    $wikiUrl = Get-WikiThumbnail "$Name ($Province)" $Lat $Lng $Province
     if ($wikiUrl) {
         return @{ source = "wikipedia"; url = $wikiUrl; title = $Name }
     }
 
-    $wikiUrl = Get-WikiThumbnailByGeosearch -Lat $Lat -Lng $Lng -DestName $Name
+    $wikiUrl = Get-WikiThumbnailByGeosearch -Lat $Lat -Lng $Lng -DestName $Name -Province $Province
     if ($wikiUrl) {
         return @{ source = "wikipedia"; url = $wikiUrl; title = $Name }
     }
@@ -187,18 +243,6 @@ function Resolve-Photo([string]$Name, [string]$Province, [double]$Lat, [double]$
 }
 
 function Escape-Sql([string]$s) { return $s.Replace("'", "''") }
-
-function Get-RegionFallbackToken([string]$Region) {
-    switch ($Region) {
-        "Patagonia" { return "fallback://region/patagonia" }
-        "Cuyo" { return "fallback://region/cuyo" }
-        "Noroeste" { return "fallback://region/noroeste" }
-        "Litoral" { return "fallback://region/litoral" }
-        "Buenos Aires" { return "fallback://region/buenos_aires" }
-        "Córdoba" { return "fallback://region/cordoba" }
-        default { return "fallback://region/argentina" }
-    }
-}
 
 # ── Fetch destinations from linked Supabase DB ────────────────────────────────
 
@@ -225,7 +269,6 @@ $sqlLines.Add("-- Destination photo enrichment for $($destinations.Count) destin
 $sqlLines.Add("")
 
 $found   = 0
-$fallback = 0
 $missing = 0
 $index   = 0
 
@@ -237,8 +280,8 @@ foreach ($dest in $destinations) {
 
     if ($resolved) {
         $found++
-        $safeId = Escape-Sql $dest.id
-        $safeUrl = Escape-Sql $resolved.url
+        $safeId   = Escape-Sql $dest.id
+        $safeUrl  = Escape-Sql $resolved.url
         $safeName = Escape-Sql $dest.name
         if ($resolved.source -eq "google") {
             $sqlLines.Add("UPDATE public.destinations SET google_photo_url = '$safeUrl', display_photo_url = '$safeUrl', updated_at = now() WHERE id = '$safeId';")
@@ -246,12 +289,6 @@ foreach ($dest in $destinations) {
             $sqlLines.Add("UPDATE public.destinations SET wikipedia_photo_url = '$safeUrl', display_photo_url = '$safeUrl', wikipedia_title = '$safeName', updated_at = now() WHERE id = '$safeId';")
         }
         Write-Host " OK $($resolved.source): $($resolved.url.Substring(0, [Math]::Min(60, $resolved.url.Length)))"
-    } elseif ($EmitRegionFallbacks) {
-        $fallback++
-        $safeId = Escape-Sql $dest.id
-        $fallbackUrl = Escape-Sql (Get-RegionFallbackToken $dest.region)
-        $sqlLines.Add("UPDATE public.destinations SET display_photo_url = '$fallbackUrl', updated_at = now() WHERE id = '$safeId';")
-        Write-Host " OK fallback: $fallbackUrl"
     } else {
         $missing++
         Write-Host " -- no photo found"
@@ -263,7 +300,7 @@ foreach ($dest in $destinations) {
 # ── Write SQL file ────────────────────────────────────────────────────────────
 
 $sqlLines.Add("")
-$sqlLines.Add("-- Results: $found remote photos found, $fallback region fallbacks assigned, $missing destinations still missing")
+$sqlLines.Add("-- Results: $found photos found, $missing destinations with no photo found")
 
 $dir = Split-Path -Parent $OutputSqlPath
 if ($dir) { New-Item -ItemType Directory -Force -Path $dir | Out-Null }
@@ -273,4 +310,4 @@ if ($dir) { New-Item -ItemType Directory -Force -Path $dir | Out-Null }
 Write-Host ""
 Write-Host "Done. $found / $($destinations.Count) destinations got photos."
 Write-Host "SQL written to: $OutputSqlPath"
-Write-Host "Apply with: supabase db push or via Supabase MCP apply_migration"
+Write-Host "Apply with: supabase db push or apply via Supabase MCP apply_migration"
