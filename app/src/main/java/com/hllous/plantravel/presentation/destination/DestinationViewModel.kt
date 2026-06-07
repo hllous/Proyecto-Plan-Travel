@@ -88,18 +88,20 @@ class DestinationViewModel @Inject constructor(
         fetchWikipediaPhotoUrl(destination)
     }
 
-    val tripDestination: StateFlow<TripDestinationState> = _reloadTrigger
-        .flatMapLatest { repository.observeGroups() }
-        .map { groups ->
-            val group = groups.firstOrNull()
-            val placeId = group?.tripDestinationPlaceId
-            val name = group?.tripDestinationName
-            val lat = group?.tripDestinationLat
-            val lng = group?.tripDestinationLng
-            if (placeId != null && name != null && lat != null && lng != null) {
-                TripDestinationState.Set(placeId = placeId, name = name, lat = lat, lng = lng)
-            } else {
-                TripDestinationState.None
+    val tripDestination: StateFlow<TripDestinationState> = selectedGroupHolder.selectedGroupId
+        .flatMapLatest { groupId ->
+            if (groupId == null) flowOf(TripDestinationState.None)
+            else repository.observeGroups().map { groups ->
+                val group = groups.firstOrNull { it.id == groupId }
+                val placeId = group?.tripDestinationPlaceId
+                val name = group?.tripDestinationName
+                val lat = group?.tripDestinationLat
+                val lng = group?.tripDestinationLng
+                if (placeId != null && name != null && lat != null && lng != null) {
+                    TripDestinationState.Set(placeId = placeId, name = name, lat = lat, lng = lng)
+                } else {
+                    TripDestinationState.None
+                }
             }
         }
         .catch { emit(TripDestinationState.None) }
@@ -467,7 +469,7 @@ class DestinationViewModel @Inject constructor(
     fun addPoiToPoll(place: PlaceResult, onNavigate: () -> Unit) {
         val pollId = activePoll.value?.id ?: return
         viewModelScope.launch {
-            runCatching {
+            val result = runCatching {
                 repository.addPollCandidate(
                     pollId = pollId,
                     placeId = place.placeId,
@@ -477,7 +479,7 @@ class DestinationViewModel @Inject constructor(
                     lng = place.lng,
                 )
             }
-            onNavigate()
+            if (result.isSuccess) onNavigate()
         }
     }
 
@@ -488,7 +490,7 @@ class DestinationViewModel @Inject constructor(
                 repository.createPoll(groupId, PollType.ACTIVITY, null)
             }.getOrNull()
             if (pollId != null) {
-                runCatching {
+                val result = runCatching {
                     repository.addPollCandidate(
                         pollId = pollId,
                         placeId = place.placeId,
@@ -498,8 +500,8 @@ class DestinationViewModel @Inject constructor(
                         lng = place.lng,
                     )
                 }
+                if (result.isSuccess) onNavigate()
             }
-            onNavigate()
         }
     }
 
@@ -510,7 +512,7 @@ class DestinationViewModel @Inject constructor(
                 repository.createPoll(groupId, PollType.DESTINATION, null)
             }.getOrNull()
             if (pollId != null) {
-                runCatching {
+                val result = runCatching {
                     repository.addPollCandidate(
                         pollId = pollId,
                         placeId = destination.googlePlaceId ?: destination.sourceId,
@@ -520,8 +522,8 @@ class DestinationViewModel @Inject constructor(
                         lng = destination.lng,
                     )
                 }
+                if (result.isSuccess) onNavigate()
             }
-            onNavigate()
         }
     }
 

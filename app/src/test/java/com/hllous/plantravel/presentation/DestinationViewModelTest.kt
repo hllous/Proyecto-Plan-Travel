@@ -19,6 +19,7 @@ import kotlinx.coroutines.launch
 import kotlinx.coroutines.test.advanceUntilIdle
 import kotlinx.coroutines.test.runTest
 import org.junit.Assert.assertEquals
+import org.junit.Assert.assertFalse
 import org.junit.Assert.assertNull
 import org.junit.Assert.assertTrue
 import org.junit.Rule
@@ -515,7 +516,8 @@ class DestinationViewModelTest {
             tripDestinationLng = -68.3030,
         )
         val repo = FakeTravelRepository(initialGroups = listOf(group))
-        val vm = viewModel(repo = repo)
+        val holder = SelectedGroupHolder().also { it.selectedGroupId.value = "group-1" }
+        val vm = viewModel(repo = repo, holder = holder)
         backgroundScope.launch { vm.tripDestination.collect {} }
         advanceUntilIdle()
 
@@ -540,7 +542,8 @@ class DestinationViewModelTest {
             tripDestinationLng = -71.3103,
         )
         val repo = FakeTravelRepository(initialGroups = listOf(group))
-        val vm = viewModel(repo = repo, places = places)
+        val holder = SelectedGroupHolder().also { it.selectedGroupId.value = "group-1" }
+        val vm = viewModel(repo = repo, places = places, holder = holder)
         backgroundScope.launch { vm.tripDestination.collect {} }
         backgroundScope.launch { vm.poisByCategory.collect {} }
         advanceUntilIdle()
@@ -582,7 +585,8 @@ class DestinationViewModelTest {
             tripDestinationLng = -71.3103,
         )
         val repo = FakeTravelRepository(initialGroups = listOf(group))
-        val vm = viewModel(repo = repo, places = places)
+        val holder = SelectedGroupHolder().also { it.selectedGroupId.value = "group-1" }
+        val vm = viewModel(repo = repo, places = places, holder = holder)
         backgroundScope.launch { vm.tripDestination.collect {} }
         backgroundScope.launch { vm.poisByCategory.collect {} }
         advanceUntilIdle()
@@ -591,5 +595,148 @@ class DestinationViewModelTest {
         advanceUntilIdle()
 
         assertTrue(vm.poisByCategory.value is UiState.Error)
+    }
+
+    // ── Bug 4: createPollWithPoi / createPollWithDestination ──────────────────
+
+    @Test
+    fun createPollWithPoiDoesNotNavigateWhenPollCreationFails() = runTest {
+        val repo = FakeTravelRepository().also { it.createPollThrows = true }
+        val holder = SelectedGroupHolder().also { it.selectedGroupId.value = "group-1" }
+        val vm = viewModel(repo = repo, holder = holder)
+        backgroundScope.launch { vm.activePoll.collect {} }
+        advanceUntilIdle()
+
+        var navigateCalled = false
+        vm.createPollWithPoi(fakePlace) { navigateCalled = true }
+        advanceUntilIdle()
+
+        assertFalse(navigateCalled)
+    }
+
+    @Test
+    fun createPollWithDestinationDoesNotNavigateWhenPollCreationFails() = runTest {
+        val dest = storedDestination("d1", "Bariloche", "Patagonia", "Río Negro")
+        val repo = FakeTravelRepository().also { it.createPollThrows = true }
+        val holder = SelectedGroupHolder().also { it.selectedGroupId.value = "group-1" }
+        val vm = viewModel(repo = repo, holder = holder)
+        backgroundScope.launch { vm.activePoll.collect {} }
+        advanceUntilIdle()
+
+        var navigateCalled = false
+        vm.createPollWithDestination(dest) { navigateCalled = true }
+        advanceUntilIdle()
+
+        assertFalse(navigateCalled)
+    }
+
+    // ── Fix A: onNavigate gated on addPollCandidate success ──────────────────
+
+    @Test
+    fun addPoiToPollDoesNotNavigateWhenCandidateInsertFails() = runTest {
+        val repo = FakeTravelRepository().also { it.addPollCandidateThrows = true }
+        val holder = SelectedGroupHolder().also { it.selectedGroupId.value = "group-1" }
+        val vm = viewModel(repo = repo, holder = holder)
+        backgroundScope.launch { vm.activePoll.collect {} }
+        repo.simulatePollUpdate("group-1", com.hllous.plantravel.domain.model.Poll(
+            id = "poll-1", groupId = "group-1",
+            type = com.hllous.plantravel.domain.model.PollType.DESTINATION,
+            state = com.hllous.plantravel.domain.model.PollState.OPEN,
+        ))
+        advanceUntilIdle()
+
+        var navigateCalled = false
+        vm.addPoiToPoll(fakePlace) { navigateCalled = true }
+        advanceUntilIdle()
+
+        assertFalse(navigateCalled)
+    }
+
+    @Test
+    fun createPollWithPoiDoesNotNavigateWhenCandidateInsertFails() = runTest {
+        val repo = FakeTravelRepository().also { it.addPollCandidateThrows = true }
+        val holder = SelectedGroupHolder().also { it.selectedGroupId.value = "group-1" }
+        val vm = viewModel(repo = repo, holder = holder)
+        backgroundScope.launch { vm.activePoll.collect {} }
+        advanceUntilIdle()
+
+        var navigateCalled = false
+        vm.createPollWithPoi(fakePlace) { navigateCalled = true }
+        advanceUntilIdle()
+
+        assertFalse(navigateCalled)
+    }
+
+    @Test
+    fun createPollWithDestinationDoesNotNavigateWhenCandidateInsertFails() = runTest {
+        val dest = storedDestination("d1", "Bariloche", "Patagonia", "Río Negro")
+        val repo = FakeTravelRepository().also { it.addPollCandidateThrows = true }
+        val holder = SelectedGroupHolder().also { it.selectedGroupId.value = "group-1" }
+        val vm = viewModel(repo = repo, holder = holder)
+        backgroundScope.launch { vm.activePoll.collect {} }
+        advanceUntilIdle()
+
+        var navigateCalled = false
+        vm.createPollWithDestination(dest) { navigateCalled = true }
+        advanceUntilIdle()
+
+        assertFalse(navigateCalled)
+    }
+
+    // ── Fix B: tripDestination reacts to group switches ───────────────────────
+
+    @Test
+    fun tripDestinationUpdatesWhenSelectedGroupChanges() = runTest {
+        val g1 = TravelGroup(
+            id = "group-1", name = "G1",
+            tripDestinationPlaceId = "place-bari", tripDestinationName = "Bariloche",
+            tripDestinationLat = -41.0, tripDestinationLng = -71.0,
+        )
+        val g2 = TravelGroup(
+            id = "group-2", name = "G2",
+            tripDestinationPlaceId = "place-ushu", tripDestinationName = "Ushuaia",
+            tripDestinationLat = -54.8, tripDestinationLng = -68.3,
+        )
+        val repo = FakeTravelRepository(initialGroups = listOf(g1, g2))
+        val holder = SelectedGroupHolder().also { it.selectedGroupId.value = "group-1" }
+        val vm = viewModel(repo = repo, holder = holder)
+        backgroundScope.launch { vm.tripDestination.collect {} }
+        advanceUntilIdle()
+
+        assertEquals("Bariloche", (vm.tripDestination.value as TripDestinationState.Set).name)
+
+        holder.selectedGroupId.value = "group-2"
+        advanceUntilIdle()
+
+        val state = vm.tripDestination.value
+        assertTrue(state is TripDestinationState.Set)
+        assertEquals("Ushuaia", (state as TripDestinationState.Set).name)
+        assertEquals("place-ushu", state.placeId)
+    }
+
+    // ── Bug 3: tripDestination shows selected group, not first group ──────────
+
+    @Test
+    fun tripDestinationShowsSelectedGroupNotFirstGroup() = runTest {
+        val g1 = TravelGroup(
+            id = "group-1", name = "G1",
+            tripDestinationPlaceId = "place-bari", tripDestinationName = "Bariloche",
+            tripDestinationLat = -41.0, tripDestinationLng = -71.0,
+        )
+        val g2 = TravelGroup(
+            id = "group-2", name = "G2",
+            tripDestinationPlaceId = "place-ushu", tripDestinationName = "Ushuaia",
+            tripDestinationLat = -54.8, tripDestinationLng = -68.3,
+        )
+        val repo = FakeTravelRepository(initialGroups = listOf(g1, g2))
+        val holder = SelectedGroupHolder().also { it.selectedGroupId.value = "group-2" }
+        val vm = viewModel(repo = repo, holder = holder)
+        backgroundScope.launch { vm.tripDestination.collect {} }
+        advanceUntilIdle()
+
+        val state = vm.tripDestination.value
+        assertTrue(state is TripDestinationState.Set)
+        assertEquals("Ushuaia", (state as TripDestinationState.Set).name)
+        assertEquals("place-ushu", state.placeId)
     }
 }
