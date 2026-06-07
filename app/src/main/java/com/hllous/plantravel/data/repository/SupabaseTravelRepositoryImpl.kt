@@ -25,6 +25,7 @@ import io.github.jan.supabase.SupabaseClient
 import io.github.jan.supabase.auth.auth
 import io.github.jan.supabase.postgrest.from
 import io.github.jan.supabase.postgrest.query.Columns
+import io.github.jan.supabase.postgrest.query.Order
 import io.github.jan.supabase.realtime.PostgresAction
 import io.github.jan.supabase.realtime.channel
 import io.github.jan.supabase.realtime.broadcastFlow
@@ -285,6 +286,7 @@ class SupabaseTravelRepositoryImpl @Inject constructor(
         val state: String,
         @SerialName("expires_at") val expiresAt: String? = null,
         @SerialName("winner_place_id") val winnerPlaceId: String? = null,
+        @SerialName("created_at") val createdAt: String? = null,
     ) {
         fun toDomain() = Poll(
             id = id, groupId = groupId,
@@ -411,11 +413,18 @@ class SupabaseTravelRepositoryImpl @Inject constructor(
             .decodeList<ItineraryEventDto>()
             .map { it.toDomain() }
 
+    // Returns the most recent poll for the group (open or closed). Without ORDER BY, Postgres
+    // returns rows in heap order — after closing one poll and creating another, the stale closed
     private suspend fun fetchActivePoll(groupId: String): Poll? =
         supabase.from("group_polls")
-            .select { filter { eq("group_id", groupId) } }
+            .select {
+                filter { eq("group_id", groupId) }
+                order("created_at", Order.DESCENDING)
+                limit(1)
+            }
             .decodeList<PollDto>()
-            .firstOrNull()?.toDomain()
+            .firstOrNull()
+            ?.toDomain()
 
     private suspend fun fetchPollCandidatesWithVotes(pollId: String, currentMemberId: String?): List<PollCandidate> {
         val candidates = supabase.from("poll_candidates")
@@ -717,7 +726,7 @@ class SupabaseTravelRepositoryImpl @Inject constructor(
     override suspend fun createItineraryEvent(
         groupId: String, name: String, date: String, timeOfDay: String?, description: String?, placeId: String?
     ): String {
-        val memberId = supabase.auth.currentUserOrNull()?.id ?: error("Not authenticated")
+        val memberId = currentMemberIdForGroup(groupId) ?: error("Member not found for group $groupId")
         val id = UUID.randomUUID().toString()
         supabase.from("itinerary_events")
             .insert(InsertItineraryEventDto(
@@ -781,16 +790,21 @@ class SupabaseTravelRepositoryImpl @Inject constructor(
         return id
     }
 
-    // poll_candidates.added_by_member_id references group_members(id), NOT auth.users.id.
-    // Must resolve the group_member row id for the current user before any candidate insert.
-    private suspend fun currentMemberIdForPoll(pollId: String): String? {
+    // Resolves the group_members.id for the current auth user in a given group.
+    // Several tables (poll_candidates, poll_votes, itinerary_events) reference group_members(id),
+    // NOT auth.users.id. Always call this helper before inserting into those tables.
+    private suspend fun currentMemberIdForGroup(groupId: String): String? {
         val userId = supabase.auth.currentUserOrNull()?.id ?: return null
-        val groupId = supabase.from("group_polls")
-            .select { filter { eq("id", pollId) } }
-            .decodeList<PollDto>().firstOrNull()?.groupId ?: return null
         return supabase.from("group_members")
             .select(Columns.list("id")) { filter { eq("group_id", groupId); eq("user_id", userId) } }
             .decodeList<MemberIdDto>().firstOrNull()?.id
+    }
+
+    private suspend fun currentMemberIdForPoll(pollId: String): String? {
+        val groupId = supabase.from("group_polls")
+            .select { filter { eq("id", pollId) } }
+            .decodeList<PollDto>().firstOrNull()?.groupId ?: return null
+        return currentMemberIdForGroup(groupId)
     }
 
     override suspend fun addPollCandidate(pollId: String, placeId: String, name: String, photoUrl: String, lat: Double, lng: Double): String {
@@ -849,8 +863,8 @@ class SupabaseTravelRepositoryImpl @Inject constructor(
 
     override fun observePollCandidates(pollId: String): Flow<List<PollCandidate>> = channelFlow {
         // poll_votes.member_id references group_members(id), not auth.users.id.
-        // Resolve once so all fetches in this session use the correct id.
-        val currentMemberId = currentMemberIdForPoll(pollId)
+        // Resolved lazily: if null at startup (poll not yet committed), retry on each event.
+        var currentMemberId = currentMemberIdForPoll(pollId)
         send(fetchPollCandidatesWithVotes(pollId, currentMemberId))
 
         val pgChannel = supabase.channel("poll-candidates-$pollId-${UUID.randomUUID()}")
@@ -870,7 +884,10 @@ class SupabaseTravelRepositoryImpl @Inject constructor(
                 launch { runCatching { bcChannel.subscribe(blockUntilSubscribed = false) } }
             }
             merge(candidateChanges.map { Unit }, voteChanges.map { Unit }, broadcasts.map { Unit })
-                .collect { send(fetchPollCandidatesWithVotes(pollId, currentMemberId)) }
+                .collect {
+                    if (currentMemberId == null) currentMemberId = currentMemberIdForPoll(pollId)
+                    send(fetchPollCandidatesWithVotes(pollId, currentMemberId))
+                }
         } finally {
             supabase.realtime.removeChannel(pgChannel)
             supabase.realtime.removeChannel(bcChannel)
