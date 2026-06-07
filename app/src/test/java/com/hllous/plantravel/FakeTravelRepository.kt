@@ -54,6 +54,8 @@ class FakeTravelRepository(
     val customObserveMembers: ((String) -> Flow<List<GroupMember>>)? = null,
     val customObserveInvites: ((String) -> Flow<List<InviteToken>>)? = null,
     val customObserveExpenseGroups: ((String) -> Flow<List<ExpenseGroup>>)? = null,
+    val customObserveActivePoll: ((String) -> Flow<Poll?>)? = null,
+    val customObservePollCandidates: ((String) -> Flow<List<PollCandidate>>)? = null,
 ) : TravelRepository {
 
     private val _groups = MutableStateFlow(initialGroups)
@@ -285,6 +287,9 @@ class FakeTravelRepository(
     var setTripDestinationThrows: Boolean = false
     var createPollThrows: Boolean = false
     var addPollCandidateThrows: Boolean = false
+    var addPollCandidateCallCount = 0
+    var lastAddedPollCandidatePollId: String? = null
+    var lastAddedPollCandidatePlaceId: String? = null
 
     override suspend fun setTripDestination(groupId: String, placeId: String, name: String, lat: Double, lng: Double) {
         if (setTripDestinationThrows) throw RuntimeException("network error")
@@ -337,7 +342,7 @@ class FakeTravelRepository(
     }
 
     override fun observeActivePoll(groupId: String): Flow<Poll?> =
-        _activePollByGroup.map { it[groupId] }
+        customObserveActivePoll?.invoke(groupId) ?: _activePollByGroup.map { it[groupId] }
 
     override suspend fun createPoll(groupId: String, type: PollType, expiresAt: String?): String {
         if (createPollThrows) throw RuntimeException("network error")
@@ -350,6 +355,9 @@ class FakeTravelRepository(
 
     override suspend fun addPollCandidate(pollId: String, placeId: String, name: String, photoUrl: String, lat: Double, lng: Double): String {
         if (addPollCandidateThrows) throw RuntimeException("network error")
+        addPollCandidateCallCount++
+        lastAddedPollCandidatePollId = pollId
+        lastAddedPollCandidatePlaceId = placeId
         val candidate = PollCandidate(
             id = "fake-candidate-${System.currentTimeMillis()}",
             pollId = pollId,
@@ -395,7 +403,7 @@ class FakeTravelRepository(
     }
 
     override fun observePollCandidates(pollId: String): Flow<List<PollCandidate>> =
-        _candidatesByPoll.map { it[pollId] ?: emptyList() }
+        customObservePollCandidates?.invoke(pollId) ?: _candidatesByPoll.map { it[pollId] ?: emptyList() }
 
     fun simulateItineraryEventPush(groupId: String, events: List<ItineraryEvent>) {
         _itineraryEvents.value = _itineraryEvents.value.toMutableMap().also { it[groupId] = events }

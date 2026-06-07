@@ -14,6 +14,7 @@ import com.hllous.plantravel.presentation.destination.DestinationViewModel
 import com.hllous.plantravel.presentation.destination.TripDestinationState
 import com.hllous.plantravel.presentation.group.SelectedGroupHolder
 import kotlinx.coroutines.ExperimentalCoroutinesApi
+import kotlinx.coroutines.flow.flow
 import kotlinx.coroutines.flow.collect
 import kotlinx.coroutines.launch
 import kotlinx.coroutines.test.advanceUntilIdle
@@ -653,7 +654,8 @@ class DestinationViewModelTest {
     }
 
     @Test
-    fun createPollWithPoiDoesNotNavigateWhenCandidateInsertFails() = runTest {
+    fun createPollWithPoiNavigatesEvenWhenCandidateInsertFails() = runTest {
+        // Navigation happens as soon as the poll is created; candidate insertion is best-effort.
         val repo = FakeTravelRepository().also { it.addPollCandidateThrows = true }
         val holder = SelectedGroupHolder().also { it.selectedGroupId.value = "group-1" }
         val vm = viewModel(repo = repo, holder = holder)
@@ -664,11 +666,12 @@ class DestinationViewModelTest {
         vm.createPollWithPoi(fakePlace) { navigateCalled = true }
         advanceUntilIdle()
 
-        assertFalse(navigateCalled)
+        assertTrue(navigateCalled)
     }
 
     @Test
-    fun createPollWithDestinationDoesNotNavigateWhenCandidateInsertFails() = runTest {
+    fun createPollWithDestinationNavigatesEvenWhenCandidateInsertFails() = runTest {
+        // Navigation happens as soon as the poll is created; candidate insertion is best-effort.
         val dest = storedDestination("d1", "Bariloche", "Patagonia", "Río Negro")
         val repo = FakeTravelRepository().also { it.addPollCandidateThrows = true }
         val holder = SelectedGroupHolder().also { it.selectedGroupId.value = "group-1" }
@@ -680,7 +683,7 @@ class DestinationViewModelTest {
         vm.createPollWithDestination(dest) { navigateCalled = true }
         advanceUntilIdle()
 
-        assertFalse(navigateCalled)
+        assertTrue(navigateCalled)
     }
 
     // ── Fix B: tripDestination reacts to group switches ───────────────────────
@@ -738,5 +741,177 @@ class DestinationViewModelTest {
         assertTrue(state is TripDestinationState.Set)
         assertEquals("Ushuaia", (state as TripDestinationState.Set).name)
         assertEquals("place-ushu", state.placeId)
+    }
+
+    @Test
+    fun setTripDestinationRefreshesStateWhenLocalWriteNeedsResubscribe() = runTest {
+        val before = TravelGroup(id = "group-1", name = "Viaje")
+        val after = TravelGroup(
+            id = "group-1",
+            name = "Viaje",
+            tripDestinationPlaceId = "place-99",
+            tripDestinationName = "Ushuaia",
+            tripDestinationLat = -54.8019,
+            tripDestinationLng = -68.3030,
+        )
+        var subscriptions = 0
+        val repo = FakeTravelRepository(
+            initialGroups = listOf(before),
+            customObserveGroups = {
+                flow {
+                    subscriptions++
+                    emit(if (subscriptions >= 2) listOf(after) else listOf(before))
+                }
+            },
+        )
+        val holder = SelectedGroupHolder().also { it.selectedGroupId.value = "group-1" }
+        val vm = viewModel(repo = repo, holder = holder)
+        backgroundScope.launch { vm.tripDestination.collect {} }
+        advanceUntilIdle()
+
+        vm.setTripDestination(storedDestination("d1", "Ushuaia", "Patagonia", "Tierra del Fuego"))
+        advanceUntilIdle()
+
+        val state = vm.tripDestination.value
+        assertTrue(state is TripDestinationState.Set)
+        assertEquals("Ushuaia", (state as TripDestinationState.Set).name)
+    }
+
+    @Test
+    fun createPollWithPoiRefreshesActivePollWhenLocalWriteNeedsResubscribe() = runTest {
+        val createdPoll = com.hllous.plantravel.domain.model.Poll(
+            id = "poll-1",
+            groupId = "group-1",
+            type = com.hllous.plantravel.domain.model.PollType.ACTIVITY,
+            state = com.hllous.plantravel.domain.model.PollState.OPEN,
+        )
+        var subscriptions = 0
+        val repo = FakeTravelRepository(
+            customObserveActivePoll = {
+                flow {
+                    subscriptions++
+                    emit(if (subscriptions >= 2) createdPoll else null)
+                }
+            },
+        )
+        val holder = SelectedGroupHolder().also { it.selectedGroupId.value = "group-1" }
+        val vm = viewModel(repo = repo, holder = holder)
+        backgroundScope.launch { vm.activePoll.collect {} }
+        advanceUntilIdle()
+
+        var navigateCalled = false
+        vm.createPollWithPoi(fakePlace) { navigateCalled = true }
+        advanceUntilIdle()
+
+        assertTrue(navigateCalled)
+        assertEquals(createdPoll.id, vm.activePoll.value?.id)
+    }
+
+    @Test
+    fun reloadGroupsRefreshesActivePollWhenPollWasCreatedOffScreen() = runTest {
+        val createdPoll = com.hllous.plantravel.domain.model.Poll(
+            id = "poll-1",
+            groupId = "group-1",
+            type = com.hllous.plantravel.domain.model.PollType.DESTINATION,
+            state = com.hllous.plantravel.domain.model.PollState.OPEN,
+        )
+        var subscriptions = 0
+        val repo = FakeTravelRepository(
+            customObserveActivePoll = {
+                flow {
+                    subscriptions++
+                    emit(if (subscriptions >= 2) createdPoll else null)
+                }
+            },
+        )
+        val holder = SelectedGroupHolder().also { it.selectedGroupId.value = "group-1" }
+        val vm = viewModel(repo = repo, holder = holder)
+        backgroundScope.launch { vm.activePoll.collect {} }
+        advanceUntilIdle()
+
+        assertNull(vm.activePoll.value)
+
+        vm.reloadGroups()
+        advanceUntilIdle()
+
+        assertEquals(createdPoll.id, vm.activePoll.value?.id)
+    }
+
+    @Test
+    fun addDestinationToPollUsesRepositoryFallbackWhenLocalActivePollStateIsStale() = runTest {
+        val createdPoll = com.hllous.plantravel.domain.model.Poll(
+            id = "poll-1",
+            groupId = "group-1",
+            type = com.hllous.plantravel.domain.model.PollType.DESTINATION,
+            state = com.hllous.plantravel.domain.model.PollState.OPEN,
+        )
+        var subscriptions = 0
+        val repo = FakeTravelRepository(
+            customObserveActivePoll = {
+                flow {
+                    subscriptions++
+                    emit(if (subscriptions >= 2) createdPoll else null)
+                }
+            },
+        )
+        val holder = SelectedGroupHolder().also { it.selectedGroupId.value = "group-1" }
+        val vm = viewModel(repo = repo, holder = holder)
+        backgroundScope.launch { vm.activePoll.collect {} }
+        advanceUntilIdle()
+
+        val destination = storedDestination("d1", "Bariloche", "Patagonia", "Río Negro")
+        vm.addDestinationToPoll(destination)
+        advanceUntilIdle()
+
+        assertEquals(1, repo.addPollCandidateCallCount)
+        assertEquals(createdPoll.id, repo.lastAddedPollCandidatePollId)
+    }
+
+    @Test
+    fun addDestinationToPollDoesNothingWhenOnlyActivityPollIsActive() = runTest {
+        val repo = FakeTravelRepository()
+        val holder = SelectedGroupHolder().also { it.selectedGroupId.value = "group-1" }
+        val vm = viewModel(repo = repo, holder = holder)
+        backgroundScope.launch { vm.activePoll.collect {} }
+        repo.simulatePollUpdate(
+            "group-1",
+            com.hllous.plantravel.domain.model.Poll(
+                id = "poll-1",
+                groupId = "group-1",
+                type = com.hllous.plantravel.domain.model.PollType.ACTIVITY,
+                state = com.hllous.plantravel.domain.model.PollState.OPEN,
+            ),
+        )
+        advanceUntilIdle()
+
+        vm.addDestinationToPoll(storedDestination("d1", "Bariloche", "Patagonia", "Río Negro"))
+        advanceUntilIdle()
+
+        assertEquals(0, repo.addPollCandidateCallCount)
+    }
+
+    @Test
+    fun addPoiToPollDoesNotNavigateWhenOnlyDestinationPollIsActive() = runTest {
+        val repo = FakeTravelRepository()
+        val holder = SelectedGroupHolder().also { it.selectedGroupId.value = "group-1" }
+        val vm = viewModel(repo = repo, holder = holder)
+        backgroundScope.launch { vm.activePoll.collect {} }
+        repo.simulatePollUpdate(
+            "group-1",
+            com.hllous.plantravel.domain.model.Poll(
+                id = "poll-1",
+                groupId = "group-1",
+                type = com.hllous.plantravel.domain.model.PollType.DESTINATION,
+                state = com.hllous.plantravel.domain.model.PollState.OPEN,
+            ),
+        )
+        advanceUntilIdle()
+
+        var navigateCalled = false
+        vm.addPoiToPoll(fakePlace) { navigateCalled = true }
+        advanceUntilIdle()
+
+        assertFalse(navigateCalled)
+        assertEquals(0, repo.addPollCandidateCallCount)
     }
 }

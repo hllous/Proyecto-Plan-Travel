@@ -173,6 +173,11 @@ class SupabaseTravelRepositoryImpl @Inject constructor(
     private data class DeletedIdDto(val id: String)
 
     @Serializable
+    private data class ExpenseItemGroupRefDto(
+        @SerialName("expense_group_id") val expenseGroupId: String? = null
+    )
+
+    @Serializable
     private data class ExpenseItemSumDto(
         @SerialName("total_price_cents") val totalPriceCents: Long
     )
@@ -554,8 +559,10 @@ class SupabaseTravelRepositoryImpl @Inject constructor(
 
         try {
             coroutineScope {
-                launch { pgChannel.subscribe(blockUntilSubscribed = true) }
-                launch { bcChannel.subscribe(blockUntilSubscribed = false) }
+                launch { runCatching { pgChannel.subscribe(blockUntilSubscribed = true) } }
+                // The broadcast observer is the fallback for local mutations when Postgres Changes
+                // do not echo back to the sender. Wait until it is attached before relying on it.
+                launch { runCatching { bcChannel.subscribe(blockUntilSubscribed = true) } }
             }
             merge(pgChanges.map { Unit }, broadcasts.map { Unit })
                 .collect { send(fetchMembers(groupId)) }
@@ -570,15 +577,19 @@ class SupabaseTravelRepositoryImpl @Inject constructor(
     }
 
     private suspend fun sendBroadcast(channelName: String, event: String) {
-        // Wrapped in runCatching: the channel may already be subscribed by an observer
-        // (DestinationViewModel, PollViewModel). The SDK throws when subscribe() is called on
-        // an already-subscribed channel, which would otherwise propagate up through createPoll
-        // and prevent reloadPoll() from running even when the DB insert succeeded.
-        runCatching {
-            val channel = supabase.channel(channelName)
-            channel.subscribe(blockUntilSubscribed = true)
-            channel.broadcast(event = event, message = buildJsonObject {})
-        }
+        // supabase.channel() in v3 always creates a NEW RealtimeChannelImpl — there is NO
+        // deduplication at the factory level. Calling subscribe() on the new object writes it
+        // into _subscriptions[topic], silently evicting the live observer channel that has
+        // broadcastFlow listeners attached. Subsequent server-side broadcasts are then routed to
+        // the new (listener-free) channel and the observer never fires.
+        //
+        // The fix: never call subscribe(). RealtimeChannelImpl.broadcast() already has a built-in
+        // fallback: when status != SUBSCRIBED it sends via HTTP REST (POST to /realtime/v1/api/broadcast).
+        // The REST path delivers to ALL WebSocket subscribers on the server side, including the
+        // sender's own observer (bypassing the "no self-broadcast" restriction), and leaves
+        // _subscriptions untouched.
+        val channel = supabase.channel(channelName)
+        runCatching { channel.broadcast(event = event, message = buildJsonObject {}) }
     }
 
     // ─── Group CRUD ──────────────────────────────────────────────────────────
@@ -712,8 +723,8 @@ class SupabaseTravelRepositoryImpl @Inject constructor(
 
         try {
             coroutineScope {
-                launch { pgChannel.subscribe(blockUntilSubscribed = true) }
-                launch { bcChannel.subscribe(blockUntilSubscribed = false) }
+                launch { runCatching { pgChannel.subscribe(blockUntilSubscribed = true) } }
+                launch { runCatching { bcChannel.subscribe(blockUntilSubscribed = true) } }
             }
             merge(pgChanges.map { Unit }, broadcasts.map { Unit })
                 .collect { send(fetchItineraryEvents(groupId)) }
@@ -741,18 +752,24 @@ class SupabaseTravelRepositoryImpl @Inject constructor(
     override suspend fun updateItineraryEvent(
         eventId: String, name: String, date: String, timeOfDay: String?, description: String?
     ) {
-        supabase.from("itinerary_events").update({
+        val groupId = supabase.from("itinerary_events").update({
             set("name", name)
             set("date", date)
             set<String?>("time_of_day", timeOfDay)
             set<String?>("description", description)
-        }) { filter { eq("id", eventId) } }
+        }) {
+            filter { eq("id", eventId) }
+            select(Columns.list("group_id"))
+        }.decodeList<ExpenseGroupRefDto>().firstOrNull()?.groupId ?: return
+        sendBroadcast("itinerary-events-broadcast-$groupId", "itinerary_event_changed")
     }
 
     override suspend fun deleteItineraryEvent(eventId: String) {
-        supabase.from("itinerary_events").delete {
+        val groupId = supabase.from("itinerary_events").delete {
             filter { eq("id", eventId) }
-        }
+            select(Columns.list("group_id"))
+        }.decodeList<ExpenseGroupRefDto>().firstOrNull()?.groupId ?: return
+        sendBroadcast("itinerary-events-broadcast-$groupId", "itinerary_event_changed")
     }
 
     override fun observeActivePoll(groupId: String): Flow<Poll?> = channelFlow {
@@ -771,7 +788,7 @@ class SupabaseTravelRepositoryImpl @Inject constructor(
                 // coroutineScope → channelFlow → PollViewModel's .catch { emit(null) },
                 // which would null-out the poll that was already emitted by fetchActivePoll above.
                 launch { runCatching { pgChannel.subscribe(blockUntilSubscribed = true) } }
-                launch { runCatching { bcChannel.subscribe(blockUntilSubscribed = false) } }
+                launch { runCatching { bcChannel.subscribe(blockUntilSubscribed = true) } }
             }
             merge(pgChanges.map { Unit }, broadcasts.map { Unit })
                 .collect { send(fetchActivePoll(groupId)) }
@@ -881,7 +898,7 @@ class SupabaseTravelRepositoryImpl @Inject constructor(
         try {
             coroutineScope {
                 launch { runCatching { pgChannel.subscribe(blockUntilSubscribed = true) } }
-                launch { runCatching { bcChannel.subscribe(blockUntilSubscribed = false) } }
+                launch { runCatching { bcChannel.subscribe(blockUntilSubscribed = true) } }
             }
             merge(candidateChanges.map { Unit }, voteChanges.map { Unit }, broadcasts.map { Unit })
                 .collect {
@@ -974,8 +991,8 @@ class SupabaseTravelRepositoryImpl @Inject constructor(
 
         try {
             coroutineScope {
-                launch { pgChannel.subscribe(blockUntilSubscribed = true) }
-                launch { bcChannel.subscribe(blockUntilSubscribed = false) }
+                launch { runCatching { pgChannel.subscribe(blockUntilSubscribed = true) } }
+                launch { runCatching { bcChannel.subscribe(blockUntilSubscribed = true) } }
             }
             merge(pgChanges.map { Unit }, broadcasts.map { Unit })
                 .collect { send(fetchExpenseGroups(groupId)) }
@@ -1000,23 +1017,29 @@ class SupabaseTravelRepositoryImpl @Inject constructor(
     }
 
     override suspend fun updateExpenseGroupName(expenseGroupId: String, name: String) {
+        val groupId = fetchExpenseGroupTravelGroupId(expenseGroupId)
         supabase.from("expense_groups").update({ set("name", name) }) {
             filter { eq("id", expenseGroupId) }
         }
+        sendBroadcast("expense-groups-broadcast-$groupId", "expense_group_changed")
     }
 
     override suspend fun deleteExpenseGroup(expenseGroupId: String) {
+        val groupId = fetchExpenseGroupTravelGroupId(expenseGroupId)
         val deleted = supabase.from("expense_groups").delete {
             filter { eq("id", expenseGroupId) }
             select(Columns.list("id"))
         }.decodeList<DeletedIdDto>()
         if (deleted.isEmpty()) throw Exception("No se pudo eliminar el grupo de gastos")
+        sendBroadcast("expense-groups-broadcast-$groupId", "expense_group_changed")
     }
 
     override suspend fun finalizeExpenseGroup(expenseGroupId: String) {
         supabase.from("expense_groups").update({ set("state", "finalized") }) {
             filter { eq("id", expenseGroupId) }
         }
+        val groupId = fetchExpenseGroupTravelGroupId(expenseGroupId)
+        sendBroadcast("expense-groups-broadcast-$groupId", "expense_group_changed")
     }
 
     override suspend fun setExpenseGroupPinned(expenseGroupId: String, pinned: Boolean) {
@@ -1029,12 +1052,16 @@ class SupabaseTravelRepositoryImpl @Inject constructor(
         }) {
             filter { eq("id", expenseGroupId) }
         }
+        val groupId = fetchExpenseGroupTravelGroupId(expenseGroupId)
+        sendBroadcast("expense-groups-broadcast-$groupId", "expense_group_changed")
     }
 
     override suspend fun setExpenseGroupPayer(expenseGroupId: String, memberId: String) {
         supabase.from("expense_groups").update({ set("paid_by_member_id", memberId) }) {
             filter { eq("id", expenseGroupId) }
         }
+        val groupId = fetchExpenseGroupTravelGroupId(expenseGroupId)
+        sendBroadcast("expense-groups-broadcast-$groupId", "expense_group_changed")
     }
 
     override fun observeExpenseItems(expenseGroupId: String): Flow<List<ExpenseItem>> = channelFlow {
@@ -1051,8 +1078,8 @@ class SupabaseTravelRepositoryImpl @Inject constructor(
 
         try {
             coroutineScope {
-                launch { pgChannel.subscribe(blockUntilSubscribed = true) }
-                launch { bcChannel.subscribe(blockUntilSubscribed = false) }
+                launch { runCatching { pgChannel.subscribe(blockUntilSubscribed = true) } }
+                launch { runCatching { bcChannel.subscribe(blockUntilSubscribed = true) } }
             }
             merge(pgChanges.map { Unit }, broadcasts.map { Unit })
                 .collect { send(fetchExpenseItems(expenseGroupId)) }
@@ -1077,8 +1104,8 @@ class SupabaseTravelRepositoryImpl @Inject constructor(
 
         try {
             coroutineScope {
-                launch { pgChannel.subscribe(blockUntilSubscribed = true) }
-                launch { bcChannel.subscribe(blockUntilSubscribed = false) }
+                launch { runCatching { pgChannel.subscribe(blockUntilSubscribed = true) } }
+                launch { runCatching { bcChannel.subscribe(blockUntilSubscribed = true) } }
             }
             merge(pgChanges.map { Unit }, broadcasts.map { Unit })
                 .collect { send(fetchAssignments(expenseGroupId)) }
@@ -1131,9 +1158,11 @@ class SupabaseTravelRepositoryImpl @Inject constructor(
     }
 
     override suspend fun deleteExpenseItem(itemId: String) {
-        supabase.from("expense_items").delete {
+        val expenseGroupId = supabase.from("expense_items").delete {
             filter { eq("id", itemId) }
-        }
+            select(Columns.list("expense_group_id"))
+        }.decodeList<ExpenseItemGroupRefDto>().firstOrNull()?.expenseGroupId ?: return
+        sendBroadcast("expense-items-broadcast-$expenseGroupId", "expense_item_changed")
     }
 
     override suspend fun calculateSettlement(expenseGroupId: String): SettlementResult {

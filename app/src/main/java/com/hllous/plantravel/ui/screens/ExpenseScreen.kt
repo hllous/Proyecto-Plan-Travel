@@ -27,6 +27,7 @@ import androidx.compose.foundation.lazy.LazyColumn
 import androidx.compose.foundation.lazy.LazyRow
 import androidx.compose.foundation.lazy.items
 import androidx.compose.foundation.combinedClickable
+import androidx.compose.foundation.text.KeyboardOptions
 import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.ui.draw.clip
@@ -62,6 +63,7 @@ import androidx.compose.material3.Icon
 import androidx.compose.material3.IconButton
 import androidx.compose.material3.LargeTopAppBar
 import androidx.compose.material3.MaterialTheme
+import androidx.compose.material3.ModalBottomSheet
 import androidx.compose.material3.OutlinedButton
 import androidx.compose.material3.OutlinedTextField
 import androidx.compose.material3.Scaffold
@@ -71,6 +73,7 @@ import androidx.compose.material3.Surface
 import androidx.compose.material3.Text
 import androidx.compose.material3.TextButton
 import androidx.compose.material3.TopAppBarDefaults
+import androidx.compose.material3.rememberModalBottomSheetState
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.collectAsState
@@ -89,6 +92,9 @@ import android.net.Uri
 import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.layout.onSizeChanged
 import androidx.compose.ui.platform.LocalDensity
+import androidx.compose.ui.text.TextRange
+import androidx.compose.ui.text.input.KeyboardType
+import androidx.compose.ui.text.input.TextFieldValue
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.style.TextAlign
 import androidx.compose.foundation.layout.offset
@@ -188,7 +194,7 @@ fun ExpenseScreen(viewModel: ExpenseViewModel, navController: NavHostController)
         var showFinalizeDialog by rememberSaveable { mutableStateOf(false) }
         var divideEqually by rememberSaveable { mutableStateOf(false) }
         var itemName by rememberSaveable { mutableStateOf("") }
-        var price by rememberSaveable { mutableStateOf("") }
+        var price by rememberSaveable(stateSaver = TextFieldValue.Saver) { mutableStateOf(TextFieldValue("")) }
         var quantity by rememberSaveable { mutableStateOf("") }
 
         LaunchedEffect(selectedExpenseGroupId, items, assignments) {
@@ -237,7 +243,8 @@ fun ExpenseScreen(viewModel: ExpenseViewModel, navController: NavHostController)
                 Column(
                     modifier = Modifier
                         .fillMaxSize()
-                        .padding(innerPadding),
+                        .padding(innerPadding)
+                        .imePadding(),
                 ) {
                     ExpenseHeroCard(
                         group = selectedGroup,
@@ -257,27 +264,6 @@ fun ExpenseScreen(viewModel: ExpenseViewModel, navController: NavHostController)
                                 ErrorCard(
                                     message = (expenseItemsUiState as UiState.Error).message,
                                     onRetry = { viewModel.reloadExpenseItems() },
-                                )
-                            }
-                        }
-
-                        if (addItemExpanded && !isFinalized) {
-                            item {
-                                AddExpenseItemPanel(
-                                    itemName = itemName,
-                                    price = price,
-                                    quantity = quantity,
-                                    onItemNameChange = { itemName = it },
-                                    onPriceChange = { price = it },
-                                    onQuantityChange = { quantity = it },
-                                    onDismiss = { addItemExpanded = false },
-                                    onConfirm = {
-                                        if (itemName.isNotBlank() && price.isNotBlank() && quantity.isNotBlank()) {
-                                            viewModel.addExpenseItem(itemName, price, quantity)
-                                            itemName = ""; price = ""; quantity = ""
-                                            addItemExpanded = false
-                                        }
-                                    },
                                 )
                             }
                         }
@@ -422,12 +408,33 @@ fun ExpenseScreen(viewModel: ExpenseViewModel, navController: NavHostController)
                     onMarkDebtorConfirmed = { from, to -> viewModel.markDebtorConfirmed(from, to) },
                     onMarkCreditorConfirmed = { from, to -> viewModel.markCreditorConfirmed(from, to) },
                 )
+                }
             }
-        }
 
-        if (showFinalizeDialog) {
-            AlertDialog(
-                onDismissRequest = { showFinalizeDialog = false },
+            if (addItemExpanded && !isFinalized) {
+                AddExpenseItemSheet(
+                    itemName = itemName,
+                    price = price,
+                    quantity = quantity,
+                    onItemNameChange = { itemName = it },
+                    onPriceChange = { price = formatPriceInput(it) },
+                    onQuantityChange = { quantity = it },
+                    onDismiss = { addItemExpanded = false },
+                    onConfirm = {
+                        if (itemName.isNotBlank() && price.text.isNotBlank() && quantity.isNotBlank()) {
+                            viewModel.addExpenseItem(itemName, price.text, quantity)
+                            itemName = ""
+                            price = TextFieldValue("")
+                            quantity = ""
+                            addItemExpanded = false
+                        }
+                    },
+                )
+            }
+
+            if (showFinalizeDialog) {
+                AlertDialog(
+                    onDismissRequest = { showFinalizeDialog = false },
                 title = { Text("Finalizar grupo") },
                 text = { Text("¿Finalizar este grupo? No podrás agregar ni modificar gastos.") },
                 confirmButton = {
@@ -1095,6 +1102,15 @@ private fun formatDashboardCurrency(cents: Long): String {
         maximumFractionDigits = if (cents % 100L == 0L) 0 else 2
     }
     return formatter.format(cents / 100.0)
+}
+
+private fun formatPriceInput(value: TextFieldValue): TextFieldValue {
+    val digits = value.text.filter(Char::isDigit)
+    if (digits.isEmpty()) return TextFieldValue("")
+    val amount = digits.toLongOrNull() ?: return TextFieldValue("")
+    val formatted = NumberFormat.getIntegerInstance(Locale.forLanguageTag("es-AR")).format(amount)
+    val text = "$ $formatted"
+    return TextFieldValue(text = text, selection = TextRange(text.length))
 }
 
 private fun formatExpenseGroupDate(createdAtMillis: Long?): String {
@@ -1823,10 +1839,10 @@ private fun PeerToPerDebtRow(
 @Composable
 private fun AddExpenseItemPanel(
     itemName: String,
-    price: String,
+    price: TextFieldValue,
     quantity: String,
     onItemNameChange: (String) -> Unit,
-    onPriceChange: (String) -> Unit,
+    onPriceChange: (TextFieldValue) -> Unit,
     onQuantityChange: (String) -> Unit,
     onDismiss: () -> Unit,
     onConfirm: () -> Unit,
@@ -1865,6 +1881,7 @@ private fun AddExpenseItemPanel(
                     label = { Text("Precio unitario") },
                     singleLine = true,
                     modifier = Modifier.weight(1f),
+                    keyboardOptions = KeyboardOptions(keyboardType = KeyboardType.Number),
                     colors = travelTextFieldColors(),
                 )
                 OutlinedTextField(
@@ -1873,6 +1890,7 @@ private fun AddExpenseItemPanel(
                     label = { Text("Cantidad") },
                     singleLine = true,
                     modifier = Modifier.weight(1f),
+                    keyboardOptions = KeyboardOptions(keyboardType = KeyboardType.Number),
                     colors = travelTextFieldColors(),
                 )
             }
@@ -1883,6 +1901,44 @@ private fun AddExpenseItemPanel(
                 OutlinedButton(onClick = onDismiss, modifier = Modifier.weight(1f)) { Text("Cancelar") }
                 Button(onClick = onConfirm, modifier = Modifier.weight(1f)) { Text("Agregar") }
             }
+        }
+    }
+}
+
+@OptIn(ExperimentalMaterial3Api::class)
+@Composable
+private fun AddExpenseItemSheet(
+    itemName: String,
+    price: TextFieldValue,
+    quantity: String,
+    onItemNameChange: (String) -> Unit,
+    onPriceChange: (TextFieldValue) -> Unit,
+    onQuantityChange: (String) -> Unit,
+    onDismiss: () -> Unit,
+    onConfirm: () -> Unit,
+) {
+    val sheetState = rememberModalBottomSheetState(skipPartiallyExpanded = true)
+
+    ModalBottomSheet(
+        onDismissRequest = onDismiss,
+        sheetState = sheetState,
+    ) {
+        Box(
+            modifier = Modifier
+                .fillMaxWidth()
+                .imePadding()
+                .padding(horizontal = 16.dp, vertical = 8.dp),
+        ) {
+            AddExpenseItemPanel(
+                itemName = itemName,
+                price = price,
+                quantity = quantity,
+                onItemNameChange = onItemNameChange,
+                onPriceChange = onPriceChange,
+                onQuantityChange = onQuantityChange,
+                onDismiss = onDismiss,
+                onConfirm = onConfirm,
+            )
         }
     }
 }

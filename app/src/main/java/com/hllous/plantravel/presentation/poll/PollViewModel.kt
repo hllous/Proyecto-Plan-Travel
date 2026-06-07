@@ -19,6 +19,7 @@ import kotlinx.coroutines.flow.SharingStarted
 import kotlinx.coroutines.flow.StateFlow
 import kotlinx.coroutines.flow.asStateFlow
 import kotlinx.coroutines.flow.catch
+import kotlinx.coroutines.flow.combine
 import kotlinx.coroutines.flow.flatMapLatest
 import kotlinx.coroutines.flow.flowOf
 import kotlinx.coroutines.flow.map
@@ -41,6 +42,7 @@ class PollViewModel @Inject constructor(
 ) : ViewModel() {
 
     private val _reloadTrigger = MutableStateFlow(0)
+    private val _candidateReloadTrigger = MutableStateFlow(0)
     private val _errorMessage = MutableStateFlow<String?>(null)
     val errorMessage: StateFlow<String?> = _errorMessage.asStateFlow()
 
@@ -52,7 +54,10 @@ class PollViewModel @Inject constructor(
         }
         .stateIn(viewModelScope, SharingStarted.WhileSubscribed(5000), null)
 
-    val candidates: StateFlow<UiState<List<PollCandidateUiModel>>> = poll
+    val candidates: StateFlow<UiState<List<PollCandidateUiModel>>> = combine(
+        poll,
+        _candidateReloadTrigger,
+    ) { activePoll, _ -> activePoll }
         .flatMapLatest { activePoll ->
             if (activePoll == null) return@flatMapLatest flowOf(UiState.Success(emptyList()))
             repository.observePollCandidates(activePoll.id)
@@ -94,7 +99,7 @@ class PollViewModel @Inject constructor(
         viewModelScope.launch {
             runCatching {
                 repository.addPollCandidate(pollId, place.placeId, place.name, place.photoUrl, place.lat, place.lng)
-            }
+            }.onSuccess { reloadCandidates() }
         }
     }
 
@@ -103,6 +108,7 @@ class PollViewModel @Inject constructor(
         val pollId = poll.value?.id ?: return
         viewModelScope.launch {
             runCatching { repository.toggleVote(candidateId, memberId, pollId) }
+                .onSuccess { reloadCandidates() }
         }
     }
 
@@ -152,5 +158,9 @@ class PollViewModel @Inject constructor(
 
     fun reloadPoll() {
         _reloadTrigger.value++
+    }
+
+    private fun reloadCandidates() {
+        _candidateReloadTrigger.value++
     }
 }

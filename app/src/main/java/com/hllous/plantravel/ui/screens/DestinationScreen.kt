@@ -29,7 +29,9 @@ import androidx.compose.foundation.lazy.grid.GridCells
 import androidx.compose.foundation.lazy.grid.LazyVerticalGrid
 import androidx.compose.foundation.lazy.grid.items
 import androidx.compose.foundation.lazy.items
+import androidx.compose.foundation.rememberScrollState
 import androidx.compose.foundation.shape.RoundedCornerShape
+import androidx.compose.foundation.verticalScroll
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.filled.Close
 import androidx.compose.material.icons.filled.Hotel
@@ -61,6 +63,8 @@ import androidx.compose.material3.OutlinedButton
 import androidx.compose.material3.OutlinedTextField
 import androidx.compose.material3.Scaffold
 import androidx.compose.material3.ScrollableTabRow
+import androidx.compose.material3.SnackbarHost
+import androidx.compose.material3.SnackbarHostState
 import androidx.compose.material3.SuggestionChip
 import androidx.compose.material3.SuggestionChipDefaults
 import androidx.compose.material3.Surface
@@ -96,6 +100,7 @@ import com.hllous.plantravel.data.destination.DestinationFallbackImage
 import com.hllous.plantravel.domain.model.GroupMember
 import com.hllous.plantravel.domain.model.MemberRole
 import com.hllous.plantravel.domain.model.PlaceResult
+import com.hllous.plantravel.domain.model.PollType
 import com.hllous.plantravel.domain.model.RankedRecommendations
 import com.hllous.plantravel.domain.model.StoredDestination
 import com.hllous.plantravel.presentation.UiState
@@ -118,6 +123,10 @@ fun DestinationScreen(
     viewModel: DestinationViewModel,
     navController: NavHostController,
 ) {
+    LaunchedEffect(Unit) {
+        viewModel.reloadGroups()
+    }
+
     val tripDestination by viewModel.tripDestination.collectAsState()
     var overrideToLevel1 by rememberSaveable { mutableStateOf(false) }
 
@@ -257,7 +266,7 @@ private fun Level2Content(
     selectedPoi?.let { poi ->
         PoiBottomSheet(
             place = poi,
-            hasActivePoll = activePoll != null,
+            activePollType = activePoll?.type,
             onDismiss = { selectedPoi = null },
             onAddToItinerary = {
                 val draft = ItineraryEventDraft(
@@ -280,6 +289,10 @@ private fun Level2Content(
                     navController.navigate("poll_detail")
                     selectedPoi = null
                 }
+            },
+            onViewPoll = {
+                navController.navigate("poll_detail")
+                selectedPoi = null
             },
         )
     }
@@ -391,11 +404,12 @@ private fun PoiGridCard(
 @Composable
 private fun PoiBottomSheet(
     place: PlaceResult,
-    hasActivePoll: Boolean,
+    activePollType: PollType?,
     onDismiss: () -> Unit,
     onAddToItinerary: () -> Unit,
     onAddToPoll: () -> Unit,
     onCreatePoll: () -> Unit,
+    onViewPoll: () -> Unit,
 ) {
     val context = LocalContext.current
     val sheetState = rememberModalBottomSheetState()
@@ -485,19 +499,36 @@ private fun PoiBottomSheet(
 
                 Spacer(modifier = Modifier.height(8.dp))
 
-                if (hasActivePoll) {
-                    OutlinedButton(
-                        onClick = onAddToPoll,
-                        modifier = Modifier.fillMaxWidth(),
-                    ) {
-                        Text("Añadir a encuesta")
+                when (activePollType) {
+                    PollType.ACTIVITY -> {
+                        OutlinedButton(
+                            onClick = onAddToPoll,
+                            modifier = Modifier.fillMaxWidth(),
+                        ) {
+                            Text("Añadir a encuesta")
+                        }
                     }
-                } else {
-                    OutlinedButton(
-                        onClick = onCreatePoll,
-                        modifier = Modifier.fillMaxWidth(),
-                    ) {
-                        Text("Crear encuesta primero")
+                    PollType.DESTINATION -> {
+                        OutlinedButton(
+                            onClick = onViewPoll,
+                            modifier = Modifier.fillMaxWidth(),
+                        ) {
+                            Text("Ver encuesta activa")
+                        }
+                        Spacer(modifier = Modifier.height(6.dp))
+                        Text(
+                            text = "La encuesta activa es de destino. Cerrala antes de votar actividades.",
+                            style = MaterialTheme.typography.bodySmall,
+                            color = MaterialTheme.colorScheme.onSurfaceVariant,
+                        )
+                    }
+                    null -> {
+                        OutlinedButton(
+                            onClick = onCreatePoll,
+                            modifier = Modifier.fillMaxWidth(),
+                        ) {
+                            Text("Crear encuesta primero")
+                        }
                     }
                 }
 
@@ -541,11 +572,20 @@ private fun Level1BrowseContent(viewModel: DestinationViewModel, navController: 
     var isSearchActive by rememberSaveable { mutableStateOf(false) }
     var pollBannerDismissed by rememberSaveable { mutableStateOf(false) }
     var selectedDestination by remember { mutableStateOf<StoredDestination?>(null) }
+    val snackbarHostState = remember { SnackbarHostState() }
+    var pendingMessage by remember { mutableStateOf<String?>(null) }
 
     val showPollBanner = activePoll != null && !pollBannerDismissed
 
     LaunchedEffect(Unit) {
         viewModel.selectRegion(REGIONS[0])
+    }
+
+    LaunchedEffect(pendingMessage) {
+        pendingMessage?.let { message ->
+            snackbarHostState.showSnackbar(message)
+            pendingMessage = null
+        }
     }
 
     val displayedDestinations: List<StoredDestination> = when {
@@ -555,6 +595,7 @@ private fun Level1BrowseContent(viewModel: DestinationViewModel, navController: 
 
     Scaffold(
         contentWindowInsets = WindowInsets(0),
+        snackbarHost = { SnackbarHost(snackbarHostState) },
         topBar = {
             TopAppBar(
                 title = {
@@ -752,7 +793,7 @@ private fun Level1BrowseContent(viewModel: DestinationViewModel, navController: 
             imageUrl = destinationPhotoUrls[destinationCardKey(destination)].orEmpty(),
             currentMember = currentMember,
             tripDestination = tripDestination,
-            hasActivePoll = activePoll != null,
+            activePollType = activePoll?.type,
             onDismiss = { selectedDestination = null },
             onSetDestination = {
                 viewModel.setTripDestination(destination)
@@ -764,7 +805,19 @@ private fun Level1BrowseContent(viewModel: DestinationViewModel, navController: 
                     selectedDestination = null
                 }
             },
-            onAddToPoll = { viewModel.addDestinationToPoll(destination) },
+            onAddToPoll = {
+                viewModel.addDestinationToPoll(destination) { success ->
+                    pendingMessage = if (success) {
+                        "\"${destination.name}\" se anadio a la encuesta"
+                    } else {
+                        "No se pudo anadir el destino a la encuesta"
+                    }
+                }
+            },
+            onViewPoll = {
+                navController.navigate("poll_detail")
+                selectedDestination = null
+            },
         )
     }
 }
@@ -925,15 +978,17 @@ private fun CityBottomSheet(
     imageUrl: String,
     currentMember: GroupMember?,
     tripDestination: TripDestinationState,
-    hasActivePoll: Boolean,
+    activePollType: PollType?,
     onDismiss: () -> Unit,
     onSetDestination: () -> Unit,
     onCreatePollForDestination: () -> Unit,
     onAddToPoll: () -> Unit,
+    onViewPoll: () -> Unit,
 ) {
-    val sheetState = rememberModalBottomSheetState()
+    val sheetState = rememberModalBottomSheetState(skipPartiallyExpanded = true)
     var showPollPromptDialog by remember { mutableStateOf(false) }
     var showReplaceDialog by remember { mutableStateOf(false) }
+    val scrollState = rememberScrollState()
 
     ModalBottomSheet(
         onDismissRequest = onDismiss,
@@ -942,6 +997,7 @@ private fun CityBottomSheet(
         Column(
             modifier = Modifier
                 .fillMaxWidth()
+                .verticalScroll(scrollState)
                 .padding(bottom = 32.dp),
         ) {
             DestinationImage(
@@ -1017,19 +1073,48 @@ private fun CityBottomSheet(
                         }
                     }
                 }
-                if (hasActivePoll && currentMember != null) {
-                    Spacer(modifier = Modifier.height(8.dp))
-                    OutlinedButton(
-                        onClick = { onAddToPoll(); onDismiss() },
-                        modifier = Modifier.fillMaxWidth(),
-                    ) {
-                        Icon(
-                            Icons.Default.HowToVote,
-                            contentDescription = null,
-                            modifier = Modifier.size(18.dp),
-                        )
-                        Spacer(modifier = Modifier.width(8.dp))
-                        Text("Añadir a encuesta")
+                if (currentMember != null) {
+                    when (activePollType) {
+                        PollType.DESTINATION -> {
+                            Spacer(modifier = Modifier.height(8.dp))
+                            OutlinedButton(
+                                onClick = {
+                                    onAddToPoll()
+                                    onDismiss()
+                                },
+                                modifier = Modifier.fillMaxWidth(),
+                            ) {
+                                Icon(
+                                    Icons.Default.HowToVote,
+                                    contentDescription = null,
+                                    modifier = Modifier.size(18.dp),
+                                )
+                                Spacer(modifier = Modifier.width(8.dp))
+                                Text("Añadir a encuesta")
+                            }
+                        }
+                        PollType.ACTIVITY -> {
+                            Spacer(modifier = Modifier.height(8.dp))
+                            OutlinedButton(
+                                onClick = onViewPoll,
+                                modifier = Modifier.fillMaxWidth(),
+                            ) {
+                                Icon(
+                                    Icons.Default.HowToVote,
+                                    contentDescription = null,
+                                    modifier = Modifier.size(18.dp),
+                                )
+                                Spacer(modifier = Modifier.width(8.dp))
+                                Text("Ver encuesta activa")
+                            }
+                            Spacer(modifier = Modifier.height(6.dp))
+                            Text(
+                                text = "La encuesta activa es de actividad. Cerrala antes de votar destinos.",
+                                style = MaterialTheme.typography.bodySmall,
+                                color = MaterialTheme.colorScheme.onSurfaceVariant,
+                            )
+                        }
+                        null -> Unit
                     }
                 }
             }
@@ -1040,18 +1125,36 @@ private fun CityBottomSheet(
         AlertDialog(
             onDismissRequest = { showPollPromptDialog = false },
             icon = { Icon(Icons.Default.HowToVote, contentDescription = null) },
-            title = { Text("¿Crear una encuesta primero?") },
+            title = {
+                Text(
+                    if (activePollType == PollType.ACTIVITY) {
+                        "Ya hay una encuesta activa"
+                    } else {
+                        "¿Crear una encuesta primero?"
+                    },
+                )
+            },
             text = {
                 Text(
-                    "Podés crear una encuesta para que el grupo vote antes de elegir el destino, " +
-                        "o establecerlo directamente.",
+                    if (activePollType == PollType.ACTIVITY) {
+                        "La encuesta activa es de actividad. No podés crear otra encuesta de destino hasta cerrarla."
+                    } else {
+                        "Podés crear una encuesta para que el grupo vote antes de elegir el destino, " +
+                            "o establecerlo directamente."
+                    },
                 )
             },
             confirmButton = {
                 TextButton(onClick = {
                     showPollPromptDialog = false
-                    onCreatePollForDestination()
-                }) { Text("Crear encuesta") }
+                    if (activePollType == PollType.ACTIVITY) {
+                        onViewPoll()
+                    } else {
+                        onCreatePollForDestination()
+                    }
+                }) {
+                    Text(if (activePollType == PollType.ACTIVITY) "Ver encuesta" else "Crear encuesta")
+                }
             },
             dismissButton = {
                 Button(onClick = {

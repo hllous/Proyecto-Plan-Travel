@@ -540,7 +540,12 @@ class ExpenseViewModel @Inject constructor(
     }
 
     private fun parsePriceToCents(value: String): Long {
-        val normalized = value.replace(',', '.').trim()
+        val normalized = value
+            .replace("$", "")
+            .replace(" ", "")
+            .replace(".", "")
+            .replace(',', '.')
+            .trim()
         val parts = normalized.split('.')
         val integer = parts.getOrNull(0)?.toLongOrNull() ?: return 0
         val decimalPart = parts.getOrNull(1).orEmpty().padEnd(2, '0').take(2)

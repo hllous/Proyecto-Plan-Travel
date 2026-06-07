@@ -14,6 +14,7 @@ import com.hllous.plantravel.presentation.group.SelectedGroupHolder
 import com.hllous.plantravel.presentation.poll.PollViewModel
 import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.ExperimentalCoroutinesApi
+import kotlinx.coroutines.flow.flow
 import kotlinx.coroutines.launch
 import kotlinx.coroutines.test.UnconfinedTestDispatcher
 import org.junit.Assert.assertEquals
@@ -132,6 +133,42 @@ class PollViewModelTest {
         val uiCandidates = (vm.candidates.value as UiState.Success).data
         assertEquals(0, uiCandidates[0].voteCount)
         assertFalse(uiCandidates[0].votedByCurrentMember)
+        job1.cancel()
+        job2.cancel()
+    }
+
+    @Test
+    fun toggleVoteRefreshesCandidatesWhenLocalWriteNeedsResubscribe() {
+        val member = GroupMember(id = "m1", groupId = "group-1", userId = "user-1", name = "User", role = MemberRole.USER)
+        var subscriptions = 0
+        val initial = PollCandidate(
+            id = "cand-1", pollId = "poll-1", placeId = "place-1",
+            name = "Hotel", photoUrl = "", addedByMemberId = "m1",
+            voteCount = 0, votedByCurrentMember = false,
+        )
+        val updated = initial.copy(voteCount = 1, votedByCurrentMember = true)
+        val repo = FakeTravelRepository(
+            initialMembers = mapOf("group-1" to listOf(member)),
+            customObservePollCandidates = {
+                flow {
+                    subscriptions++
+                    emit(if (subscriptions >= 2) listOf(updated) else listOf(initial))
+                }
+            }
+        )
+        val holder = SelectedGroupHolder().also { it.selectedGroupId.value = "group-1" }
+        repo.simulatePollUpdate("group-1", openPoll)
+
+        val vm = viewModel(repo = repo, holder = holder)
+        val scope = CoroutineScope(UnconfinedTestDispatcher())
+        val job1 = scope.launch { vm.currentMember.collect {} }
+        val job2 = scope.launch { vm.candidates.collect {} }
+
+        vm.toggleVote("cand-1")
+
+        val uiCandidates = (vm.candidates.value as UiState.Success).data
+        assertEquals(1, uiCandidates[0].voteCount)
+        assertTrue(uiCandidates[0].votedByCurrentMember)
         job1.cancel()
         job2.cancel()
     }

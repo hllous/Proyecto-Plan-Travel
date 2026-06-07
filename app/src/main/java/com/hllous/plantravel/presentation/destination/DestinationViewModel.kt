@@ -32,8 +32,10 @@ import kotlinx.coroutines.flow.SharingStarted
 import kotlinx.coroutines.flow.StateFlow
 import kotlinx.coroutines.flow.asStateFlow
 import kotlinx.coroutines.flow.catch
+import kotlinx.coroutines.flow.combine
 import kotlinx.coroutines.flow.flatMapLatest
 import kotlinx.coroutines.flow.flowOf
+import kotlinx.coroutines.flow.first
 import kotlinx.coroutines.flow.map
 import kotlinx.coroutines.flow.stateIn
 import kotlinx.coroutines.flow.update
@@ -88,7 +90,10 @@ class DestinationViewModel @Inject constructor(
         fetchWikipediaPhotoUrl(destination)
     }
 
-    val tripDestination: StateFlow<TripDestinationState> = selectedGroupHolder.selectedGroupId
+    val tripDestination: StateFlow<TripDestinationState> = combine(
+        selectedGroupHolder.selectedGroupId,
+        _reloadTrigger,
+    ) { groupId, _ -> groupId }
         .flatMapLatest { groupId ->
             if (groupId == null) flowOf(TripDestinationState.None)
             else repository.observeGroups().map { groups ->
@@ -118,7 +123,10 @@ class DestinationViewModel @Inject constructor(
         .map { list -> list.firstOrNull { it.userId == sessionProvider.userId } }
         .stateIn(viewModelScope, SharingStarted.WhileSubscribed(5000), null)
 
-    val activePoll: StateFlow<Poll?> = selectedGroupHolder.selectedGroupId
+    val activePoll: StateFlow<Poll?> = combine(
+        selectedGroupHolder.selectedGroupId,
+        _reloadTrigger,
+    ) { groupId, _ -> groupId }
         .flatMapLatest { groupId ->
             if (groupId == null) flowOf(null)
             else repository.observeActivePoll(groupId)
@@ -450,10 +458,13 @@ class DestinationViewModel @Inject constructor(
         return wikipediaThumbnail(best, destination)
     }
 
-    fun addDestinationToPoll(destination: StoredDestination) {
-        val pollId = activePoll.value?.id ?: return
+    fun addDestinationToPoll(destination: StoredDestination, onResult: (Boolean) -> Unit = {}) {
         viewModelScope.launch {
-            runCatching {
+            val pollId = resolveActivePoll(expectedType = PollType.DESTINATION)?.id ?: run {
+                onResult(false)
+                return@launch
+            }
+            val result = runCatching {
                 repository.addPollCandidate(
                     pollId = pollId,
                     placeId = destination.googlePlaceId ?: destination.sourceId,
@@ -463,12 +474,13 @@ class DestinationViewModel @Inject constructor(
                     lng = destination.lng,
                 )
             }
+            onResult(result.isSuccess)
         }
     }
 
     fun addPoiToPoll(place: PlaceResult, onNavigate: () -> Unit) {
-        val pollId = activePoll.value?.id ?: return
         viewModelScope.launch {
+            val pollId = resolveActivePoll(expectedType = PollType.ACTIVITY)?.id ?: return@launch
             val result = runCatching {
                 repository.addPollCandidate(
                     pollId = pollId,
@@ -486,21 +498,24 @@ class DestinationViewModel @Inject constructor(
     fun createPollWithPoi(place: PlaceResult, onNavigate: () -> Unit) {
         val groupId = selectedGroupHolder.selectedGroupId.value ?: return
         viewModelScope.launch {
-            val pollId = activePoll.value?.id ?: runCatching {
-                repository.createPoll(groupId, PollType.ACTIVITY, null)
-            }.getOrNull()
-            if (pollId != null) {
-                val result = runCatching {
-                    repository.addPollCandidate(
-                        pollId = pollId,
-                        placeId = place.placeId,
-                        name = place.name,
-                        photoUrl = place.photoUrl,
-                        lat = place.lat,
-                        lng = place.lng,
-                    )
-                }
-                if (result.isSuccess) onNavigate()
+            val existingPoll = resolveActivePoll()
+            val pollId = when {
+                existingPoll == null -> runCatching {
+                    repository.createPoll(groupId, PollType.ACTIVITY, null)
+                }.onSuccess { reloadGroups() }.getOrNull()
+                existingPoll.type == PollType.ACTIVITY -> existingPoll.id
+                else -> null
+            } ?: return@launch
+            onNavigate()
+            runCatching {
+                repository.addPollCandidate(
+                    pollId = pollId,
+                    placeId = place.placeId,
+                    name = place.name,
+                    photoUrl = place.photoUrl,
+                    lat = place.lat,
+                    lng = place.lng,
+                )
             }
         }
     }
@@ -508,21 +523,24 @@ class DestinationViewModel @Inject constructor(
     fun createPollWithDestination(destination: StoredDestination, onNavigate: () -> Unit) {
         val groupId = selectedGroupHolder.selectedGroupId.value ?: return
         viewModelScope.launch {
-            val pollId = activePoll.value?.id ?: runCatching {
-                repository.createPoll(groupId, PollType.DESTINATION, null)
-            }.getOrNull()
-            if (pollId != null) {
-                val result = runCatching {
-                    repository.addPollCandidate(
-                        pollId = pollId,
-                        placeId = destination.googlePlaceId ?: destination.sourceId,
-                        name = destination.name,
-                        photoUrl = destination.displayPhotoUrl.orEmpty(),
-                        lat = destination.lat,
-                        lng = destination.lng,
-                    )
-                }
-                if (result.isSuccess) onNavigate()
+            val existingPoll = resolveActivePoll()
+            val pollId = when {
+                existingPoll == null -> runCatching {
+                    repository.createPoll(groupId, PollType.DESTINATION, null)
+                }.onSuccess { reloadGroups() }.getOrNull()
+                existingPoll.type == PollType.DESTINATION -> existingPoll.id
+                else -> null
+            } ?: return@launch
+            onNavigate()
+            runCatching {
+                repository.addPollCandidate(
+                    pollId = pollId,
+                    placeId = destination.googlePlaceId ?: destination.sourceId,
+                    name = destination.name,
+                    photoUrl = destination.displayPhotoUrl.orEmpty(),
+                    lat = destination.lat,
+                    lng = destination.lng,
+                )
             }
         }
     }
@@ -597,6 +615,18 @@ class DestinationViewModel @Inject constructor(
 
     fun reloadGroups() {
         _reloadTrigger.value++
+    }
+
+    private suspend fun resolveActivePoll(expectedType: PollType? = null): Poll? {
+        activePoll.value?.let { poll ->
+            if (expectedType == null || poll.type == expectedType) return poll
+        }
+        val groupId = selectedGroupHolder.selectedGroupId.value ?: return null
+        val resolvedPoll = repository.observeActivePoll(groupId)
+            .first()
+            ?.takeIf { it.state == PollState.OPEN }
+        if (resolvedPoll != null) reloadGroups()
+        return resolvedPoll?.takeIf { expectedType == null || it.type == expectedType }
     }
 
     private companion object {
