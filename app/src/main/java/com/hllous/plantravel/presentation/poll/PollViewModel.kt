@@ -85,7 +85,7 @@ class PollViewModel @Inject constructor(
         viewModelScope.launch {
             runCatching { repository.createPoll(groupId, type, expiresAt) }
                 .onFailure { _errorMessage.value = "Ya hay una encuesta activa" }
-                .onSuccess { reloadPoll() }
+            reloadPoll()
         }
     }
 

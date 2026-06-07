@@ -754,7 +754,12 @@ private fun Level1BrowseContent(viewModel: DestinationViewModel, navController: 
                 viewModel.setTripDestination(destination)
                 selectedDestination = null
             },
-            onNavigateToPoll = { navController.navigate("poll_detail") },
+            onCreatePollForDestination = {
+                viewModel.createPollWithDestination(destination) {
+                    navController.navigate("poll_detail")
+                    selectedDestination = null
+                }
+            },
             onAddToPoll = { viewModel.addDestinationToPoll(destination) },
         )
     }
@@ -919,7 +924,7 @@ private fun CityBottomSheet(
     hasActivePoll: Boolean,
     onDismiss: () -> Unit,
     onSetDestination: () -> Unit,
-    onNavigateToPoll: () -> Unit,
+    onCreatePollForDestination: () -> Unit,
     onAddToPoll: () -> Unit,
 ) {
     val sheetState = rememberModalBottomSheetState()
@@ -1041,7 +1046,7 @@ private fun CityBottomSheet(
             confirmButton = {
                 TextButton(onClick = {
                     showPollPromptDialog = false
-                    onNavigateToPoll()
+                    onCreatePollForDestination()
                 }) { Text("Crear encuesta") }
             },
             dismissButton = {

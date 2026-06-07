@@ -12,6 +12,7 @@ import com.hllous.plantravel.domain.model.GroupMember
 import com.hllous.plantravel.domain.model.PlaceResult
 import com.hllous.plantravel.domain.model.Poll
 import com.hllous.plantravel.domain.model.PollState
+import com.hllous.plantravel.domain.model.PollType
 import com.hllous.plantravel.domain.model.RankedRecommendations
 import com.hllous.plantravel.domain.model.StoredDestination
 import com.hllous.plantravel.domain.places.PlaceRecommendationRanker
@@ -460,6 +461,28 @@ class DestinationViewModel @Inject constructor(
                     lng = destination.lng,
                 )
             }
+        }
+    }
+
+    fun createPollWithDestination(destination: StoredDestination, onNavigate: () -> Unit) {
+        val groupId = selectedGroupHolder.selectedGroupId.value ?: return
+        viewModelScope.launch {
+            val pollId = activePoll.value?.id ?: runCatching {
+                repository.createPoll(groupId, PollType.DESTINATION, null)
+            }.getOrNull()
+            if (pollId != null) {
+                runCatching {
+                    repository.addPollCandidate(
+                        pollId = pollId,
+                        placeId = destination.googlePlaceId ?: destination.sourceId,
+                        name = destination.name,
+                        photoUrl = destination.displayPhotoUrl.orEmpty(),
+                        lat = destination.lat,
+                        lng = destination.lng,
+                    )
+                }
+            }
+            onNavigate()
         }
     }
 

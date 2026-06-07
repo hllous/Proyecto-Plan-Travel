@@ -558,12 +558,15 @@ class SupabaseTravelRepositoryImpl @Inject constructor(
     }
 
     private suspend fun sendBroadcast(channelName: String, event: String) {
-        // Do NOT remove the channel after broadcasting — it may be the same shared channel
-        // that observers (DestinationViewModel, PollViewModel) are listening on. Removing it
-        // here would destroy their subscriptions and break real-time updates.
-        val channel = supabase.channel(channelName)
-        channel.subscribe(blockUntilSubscribed = true)
-        channel.broadcast(event = event, message = buildJsonObject {})
+        // Wrapped in runCatching: the channel may already be subscribed by an observer
+        // (DestinationViewModel, PollViewModel). The SDK throws when subscribe() is called on
+        // an already-subscribed channel, which would otherwise propagate up through createPoll
+        // and prevent reloadPoll() from running even when the DB insert succeeded.
+        runCatching {
+            val channel = supabase.channel(channelName)
+            channel.subscribe(blockUntilSubscribed = true)
+            channel.broadcast(event = event, message = buildJsonObject {})
+        }
     }
 
     // ─── Group CRUD ──────────────────────────────────────────────────────────
