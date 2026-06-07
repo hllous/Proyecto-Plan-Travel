@@ -464,6 +464,45 @@ class DestinationViewModel @Inject constructor(
         }
     }
 
+    fun addPoiToPoll(place: PlaceResult, onNavigate: () -> Unit) {
+        val pollId = activePoll.value?.id ?: return
+        viewModelScope.launch {
+            runCatching {
+                repository.addPollCandidate(
+                    pollId = pollId,
+                    placeId = place.placeId,
+                    name = place.name,
+                    photoUrl = place.photoUrl,
+                    lat = place.lat,
+                    lng = place.lng,
+                )
+            }
+            onNavigate()
+        }
+    }
+
+    fun createPollWithPoi(place: PlaceResult, onNavigate: () -> Unit) {
+        val groupId = selectedGroupHolder.selectedGroupId.value ?: return
+        viewModelScope.launch {
+            val pollId = activePoll.value?.id ?: runCatching {
+                repository.createPoll(groupId, PollType.ACTIVITY, null)
+            }.getOrNull()
+            if (pollId != null) {
+                runCatching {
+                    repository.addPollCandidate(
+                        pollId = pollId,
+                        placeId = place.placeId,
+                        name = place.name,
+                        photoUrl = place.photoUrl,
+                        lat = place.lat,
+                        lng = place.lng,
+                    )
+                }
+            }
+            onNavigate()
+        }
+    }
+
     fun createPollWithDestination(destination: StoredDestination, onNavigate: () -> Unit) {
         val groupId = selectedGroupHolder.selectedGroupId.value ?: return
         viewModelScope.launch {

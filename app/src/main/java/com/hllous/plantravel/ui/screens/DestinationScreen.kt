@@ -270,12 +270,16 @@ private fun Level2Content(
                 selectedPoi = null
             },
             onAddToPoll = {
-                navController.navigate("poll_detail")
-                selectedPoi = null
+                viewModel.addPoiToPoll(poi) {
+                    navController.navigate("poll_detail")
+                    selectedPoi = null
+                }
             },
             onCreatePoll = {
-                navController.navigate("poll_detail")
-                selectedPoi = null
+                viewModel.createPollWithPoi(poi) {
+                    navController.navigate("poll_detail")
+                    selectedPoi = null
+                }
             },
         )
     }

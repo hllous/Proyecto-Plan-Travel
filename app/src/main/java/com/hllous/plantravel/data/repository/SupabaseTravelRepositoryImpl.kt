@@ -337,6 +337,9 @@ class SupabaseTravelRepositoryImpl @Inject constructor(
     )
 
     @Serializable
+    private data class MemberIdDto(val id: String)
+
+    @Serializable
     private data class StoredDestinationDto(
         val id: String,
         val source: String,
@@ -755,8 +758,11 @@ class SupabaseTravelRepositoryImpl @Inject constructor(
 
         try {
             coroutineScope {
-                launch { pgChannel.subscribe(blockUntilSubscribed = true) }
-                launch { bcChannel.subscribe(blockUntilSubscribed = false) }
+                // runCatching prevents a subscription failure from propagating through
+                // coroutineScope → channelFlow → PollViewModel's .catch { emit(null) },
+                // which would null-out the poll that was already emitted by fetchActivePoll above.
+                launch { runCatching { pgChannel.subscribe(blockUntilSubscribed = true) } }
+                launch { runCatching { bcChannel.subscribe(blockUntilSubscribed = false) } }
             }
             merge(pgChanges.map { Unit }, broadcasts.map { Unit })
                 .collect { send(fetchActivePoll(groupId)) }
@@ -775,8 +781,20 @@ class SupabaseTravelRepositoryImpl @Inject constructor(
         return id
     }
 
+    // poll_candidates.added_by_member_id references group_members(id), NOT auth.users.id.
+    // Must resolve the group_member row id for the current user before any candidate insert.
+    private suspend fun currentMemberIdForPoll(pollId: String): String? {
+        val userId = supabase.auth.currentUserOrNull()?.id ?: return null
+        val groupId = supabase.from("group_polls")
+            .select { filter { eq("id", pollId) } }
+            .decodeList<PollDto>().firstOrNull()?.groupId ?: return null
+        return supabase.from("group_members")
+            .select(Columns.list("id")) { filter { eq("group_id", groupId); eq("user_id", userId) } }
+            .decodeList<MemberIdDto>().firstOrNull()?.id
+    }
+
     override suspend fun addPollCandidate(pollId: String, placeId: String, name: String, photoUrl: String, lat: Double, lng: Double): String {
-        val memberId = supabase.auth.currentUserOrNull()?.id ?: error("Not authenticated")
+        val memberId = currentMemberIdForPoll(pollId) ?: error("Member not found for poll $pollId")
         val id = UUID.randomUUID().toString()
         supabase.from("poll_candidates")
             .insert(InsertPollCandidateDto(id = id, pollId = pollId, placeId = placeId,
@@ -830,7 +848,10 @@ class SupabaseTravelRepositoryImpl @Inject constructor(
     }
 
     override fun observePollCandidates(pollId: String): Flow<List<PollCandidate>> = channelFlow {
-        send(fetchPollCandidatesWithVotes(pollId, supabase.auth.currentUserOrNull()?.id))
+        // poll_votes.member_id references group_members(id), not auth.users.id.
+        // Resolve once so all fetches in this session use the correct id.
+        val currentMemberId = currentMemberIdForPoll(pollId)
+        send(fetchPollCandidatesWithVotes(pollId, currentMemberId))
 
         val pgChannel = supabase.channel("poll-candidates-$pollId-${UUID.randomUUID()}")
         val candidateChanges = pgChannel.postgresChangeFlow<PostgresAction>(schema = "public") {
@@ -845,14 +866,11 @@ class SupabaseTravelRepositoryImpl @Inject constructor(
 
         try {
             coroutineScope {
-                launch { pgChannel.subscribe(blockUntilSubscribed = true) }
-                launch { bcChannel.subscribe(blockUntilSubscribed = false) }
+                launch { runCatching { pgChannel.subscribe(blockUntilSubscribed = true) } }
+                launch { runCatching { bcChannel.subscribe(blockUntilSubscribed = false) } }
             }
             merge(candidateChanges.map { Unit }, voteChanges.map { Unit }, broadcasts.map { Unit })
-                .collect {
-                    val currentMemberId = supabase.auth.currentUserOrNull()?.id
-                    send(fetchPollCandidatesWithVotes(pollId, currentMemberId))
-                }
+                .collect { send(fetchPollCandidatesWithVotes(pollId, currentMemberId)) }
         } finally {
             supabase.realtime.removeChannel(pgChannel)
             supabase.realtime.removeChannel(bcChannel)
