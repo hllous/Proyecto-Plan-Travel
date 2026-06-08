@@ -88,7 +88,8 @@ class GooglePlacesApiClient @Inject constructor(
                 PlaceReview(
                     authorName = r.authorAttribution?.displayName ?: "",
                     rating = r.rating,
-                    text = r.text?.text ?: "",
+                    text = if (r.originalText?.languageCode == "es") r.originalText.text
+                           else r.text?.text ?: "",
                     relativeTime = r.relativeTime,
                 )
             },
@@ -106,11 +107,12 @@ class GooglePlacesApiClient @Inject constructor(
         val rating: Int = 0,
         @SerialName("relativePublishTimeDescription") val relativeTime: String = "",
         val text: ReviewText? = null,
+        val originalText: ReviewText? = null,
         val authorAttribution: AuthorAttribution? = null,
     )
 
     @Serializable
-    private data class ReviewText(val text: String = "")
+    private data class ReviewText(val text: String = "", val languageCode: String = "")
 
     @Serializable
     private data class AuthorAttribution(val displayName: String = "")
