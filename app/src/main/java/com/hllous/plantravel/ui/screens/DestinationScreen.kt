@@ -29,7 +29,10 @@ import androidx.compose.foundation.lazy.grid.GridCells
 import androidx.compose.foundation.lazy.grid.LazyVerticalGrid
 import androidx.compose.foundation.lazy.grid.items
 import androidx.compose.foundation.lazy.items
+import androidx.compose.foundation.pager.HorizontalPager
+import androidx.compose.foundation.pager.rememberPagerState
 import androidx.compose.foundation.rememberScrollState
+import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.foundation.verticalScroll
 import androidx.compose.material.icons.Icons
@@ -520,17 +523,43 @@ private fun PoiBottomSheet(
 
                 if (place.reviews.isNotEmpty()) {
                     Spacer(modifier = Modifier.height(20.dp))
-                    Text(
-                        text = "Reseñas",
-                        style = MaterialTheme.typography.titleMedium,
-                        fontWeight = FontWeight.SemiBold,
-                    )
-                    Spacer(modifier = Modifier.height(12.dp))
-                    place.reviews.forEachIndexed { index, review ->
-                        if (index > 0) {
-                            HorizontalDivider(modifier = Modifier.padding(vertical = 10.dp))
+                    val pagerState = rememberPagerState { place.reviews.size }
+                    Row(
+                        modifier = Modifier.fillMaxWidth(),
+                        horizontalArrangement = Arrangement.SpaceBetween,
+                        verticalAlignment = Alignment.CenterVertically,
+                    ) {
+                        Text(
+                            text = "Reseñas",
+                            style = MaterialTheme.typography.titleMedium,
+                            fontWeight = FontWeight.SemiBold,
+                        )
+                        if (place.reviews.size > 1) {
+                            Row(horizontalArrangement = Arrangement.spacedBy(4.dp)) {
+                                repeat(place.reviews.size) { i ->
+                                    Box(
+                                        modifier = Modifier
+                                            .size(if (i == pagerState.currentPage) 7.dp else 5.dp)
+                                            .clip(CircleShape)
+                                            .background(
+                                                if (i == pagerState.currentPage)
+                                                    MaterialTheme.colorScheme.primary
+                                                else
+                                                    MaterialTheme.colorScheme.outlineVariant
+                                            )
+                                    )
+                                }
+                            }
                         }
-                        Column {
+                    }
+                    Spacer(modifier = Modifier.height(12.dp))
+                    HorizontalPager(
+                        state = pagerState,
+                        modifier = Modifier.fillMaxWidth(),
+                        beyondViewportPageCount = 0,
+                    ) { page ->
+                        val review = place.reviews[page]
+                        Column(modifier = Modifier.fillMaxWidth()) {
                             Row(
                                 modifier = Modifier.fillMaxWidth(),
                                 horizontalArrangement = Arrangement.SpaceBetween,
