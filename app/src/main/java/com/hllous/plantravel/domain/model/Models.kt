@@ -63,6 +63,13 @@ data class DestinationDraft(
     val isActive: Boolean = true,
 )
 
+data class PlaceReview(
+    val authorName: String,
+    val rating: Int,
+    val text: String,
+    val relativeTime: String,
+)
+
 data class PlaceResult(
     val placeId: String,
     val name: String,
@@ -75,6 +82,7 @@ data class PlaceResult(
     val primaryType: String? = null,
     val types: List<String> = emptyList(),
     val photoReference: String = "",
+    val reviews: List<PlaceReview> = emptyList(),
 )
 
 data class RankedRecommendations(

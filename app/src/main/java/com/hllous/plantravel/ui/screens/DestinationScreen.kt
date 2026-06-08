@@ -442,7 +442,7 @@ private fun PoiBottomSheet(
     onViewPoll: () -> Unit,
 ) {
     val context = LocalContext.current
-    val sheetState = rememberModalBottomSheetState()
+    val sheetState = rememberModalBottomSheetState(skipPartiallyExpanded = true)
 
     ModalBottomSheet(
         onDismissRequest = onDismiss,
@@ -515,6 +515,65 @@ private fun PoiBottomSheet(
                             maxLines = 2,
                             overflow = TextOverflow.Ellipsis,
                         )
+                    }
+                }
+
+                if (place.reviews.isNotEmpty()) {
+                    Spacer(modifier = Modifier.height(20.dp))
+                    Text(
+                        text = "Reseñas",
+                        style = MaterialTheme.typography.titleMedium,
+                        fontWeight = FontWeight.SemiBold,
+                    )
+                    Spacer(modifier = Modifier.height(12.dp))
+                    place.reviews.forEachIndexed { index, review ->
+                        if (index > 0) {
+                            HorizontalDivider(modifier = Modifier.padding(vertical = 10.dp))
+                        }
+                        Column {
+                            Row(
+                                modifier = Modifier.fillMaxWidth(),
+                                horizontalArrangement = Arrangement.SpaceBetween,
+                                verticalAlignment = Alignment.CenterVertically,
+                            ) {
+                                Text(
+                                    text = review.authorName,
+                                    style = MaterialTheme.typography.bodyMedium,
+                                    fontWeight = FontWeight.Medium,
+                                    modifier = Modifier.weight(1f),
+                                    maxLines = 1,
+                                    overflow = TextOverflow.Ellipsis,
+                                )
+                                Spacer(modifier = Modifier.width(8.dp))
+                                Text(
+                                    text = review.relativeTime,
+                                    style = MaterialTheme.typography.bodySmall,
+                                    color = MaterialTheme.colorScheme.onSurfaceVariant,
+                                )
+                            }
+                            Spacer(modifier = Modifier.height(2.dp))
+                            Row(verticalAlignment = Alignment.CenterVertically) {
+                                repeat(5) { i ->
+                                    Icon(
+                                        Icons.Default.Star,
+                                        contentDescription = null,
+                                        tint = if (i < review.rating) MaterialTheme.colorScheme.primary
+                                               else MaterialTheme.colorScheme.outlineVariant,
+                                        modifier = Modifier.size(13.dp),
+                                    )
+                                }
+                            }
+                            if (review.text.isNotBlank()) {
+                                Spacer(modifier = Modifier.height(4.dp))
+                                Text(
+                                    text = review.text,
+                                    style = MaterialTheme.typography.bodySmall,
+                                    color = MaterialTheme.colorScheme.onSurfaceVariant,
+                                    maxLines = 3,
+                                    overflow = TextOverflow.Ellipsis,
+                                )
+                            }
+                        }
                     }
                 }
 

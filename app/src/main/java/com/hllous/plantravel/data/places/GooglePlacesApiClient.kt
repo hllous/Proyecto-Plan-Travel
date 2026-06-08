@@ -1,6 +1,7 @@
 package com.hllous.plantravel.data.places
 
 import com.hllous.plantravel.domain.model.PlaceResult
+import com.hllous.plantravel.domain.model.PlaceReview
 import com.hllous.plantravel.domain.places.PlacesApiClient
 import io.ktor.client.HttpClient
 import io.ktor.client.call.body
@@ -19,7 +20,7 @@ import javax.inject.Named
 import javax.inject.Singleton
 
 private const val BASE_URL = "https://places.googleapis.com/v1/places"
-private const val FIELD_MASK = "places.id,places.displayName,places.rating,places.userRatingCount,places.photos,places.formattedAddress,places.location,places.primaryType,places.types"
+private const val FIELD_MASK = "places.id,places.displayName,places.rating,places.userRatingCount,places.photos,places.formattedAddress,places.location,places.primaryType,places.types,places.reviews"
 private const val PHOTO_WIDTH = 800
 
 @Singleton
@@ -69,6 +70,7 @@ class GooglePlacesApiClient @Inject constructor(
         val location: LatLng = LatLng(0.0, 0.0),
         @SerialName("primaryType") val primaryType: String? = null,
         val types: List<String> = emptyList(),
+        val reviews: List<ReviewDto> = emptyList(),
     ) {
         fun toPlaceResult(photoUrl: String, photoReference: String) = PlaceResult(
             placeId = id,
@@ -82,6 +84,14 @@ class GooglePlacesApiClient @Inject constructor(
             primaryType = primaryType,
             types = types,
             photoReference = photoReference,
+            reviews = reviews.take(3).map { r ->
+                PlaceReview(
+                    authorName = r.authorAttribution?.displayName ?: "",
+                    rating = r.rating,
+                    text = r.text?.text ?: "",
+                    relativeTime = r.relativeTime,
+                )
+            },
         )
     }
 
@@ -90,6 +100,20 @@ class GooglePlacesApiClient @Inject constructor(
 
     @Serializable
     private data class PhotoDto(val name: String = "")
+
+    @Serializable
+    private data class ReviewDto(
+        val rating: Int = 0,
+        @SerialName("relativePublishTimeDescription") val relativeTime: String = "",
+        val text: ReviewText? = null,
+        val authorAttribution: AuthorAttribution? = null,
+    )
+
+    @Serializable
+    private data class ReviewText(val text: String = "")
+
+    @Serializable
+    private data class AuthorAttribution(val displayName: String = "")
 
     // ─── Helpers ──────────────────────────────────────────────────────────────
 
