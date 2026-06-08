@@ -21,6 +21,7 @@ import androidx.compose.foundation.selection.selectableGroup
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.automirrored.filled.ArrowBack
+import androidx.compose.material.icons.filled.EmojiEvents
 import androidx.compose.material.icons.filled.HowToVote
 import androidx.compose.material.icons.filled.ThumbUp
 import androidx.compose.material.icons.outlined.ThumbUp
@@ -90,6 +91,7 @@ fun PollScreen(
     navController: NavHostController,
 ) {
     val poll by viewModel.poll.collectAsState()
+    val allPolls by viewModel.allPolls.collectAsState()
     val candidatesState by viewModel.candidates.collectAsState()
     val currentMember by viewModel.currentMember.collectAsState()
     val errorMessage by viewModel.errorMessage.collectAsState()
@@ -117,6 +119,8 @@ fun PollScreen(
     }
 
     val isAdmin = currentMember?.role == MemberRole.ADMIN
+    val closedPolls = allPolls.filter { it.state == PollState.CLOSED }
+    val hasActivePoll = poll?.state == PollState.OPEN
 
     Scaffold(
         contentWindowInsets = WindowInsets(0),
@@ -159,13 +163,22 @@ fun PollScreen(
                 .padding(innerPadding),
         ) {
             when {
-                poll == null && candidatesState is UiState.Loading -> {
+                allPolls.isEmpty() && candidatesState is UiState.Loading -> {
                     CircularProgressIndicator(modifier = Modifier.align(Alignment.Center))
                 }
 
-                poll == null -> {
+                allPolls.isEmpty() -> {
                     PollEmptyState(
                         modifier = Modifier.align(Alignment.Center),
+                        onCreatePoll = { showCreationSheet = true },
+                    )
+                }
+
+                !hasActivePoll -> {
+                    NoActivePollContent(
+                        closedPolls = closedPolls,
+                        isAdmin = isAdmin,
+                        modifier = Modifier.fillMaxSize(),
                         onCreatePoll = { showCreationSheet = true },
                     )
                 }
@@ -176,6 +189,7 @@ fun PollScreen(
                         poll = currentPoll,
                         candidatesState = candidatesState,
                         isAdmin = isAdmin,
+                        closedPolls = closedPolls,
                         onToggleVote = { candidateId -> viewModel.toggleVote(candidateId) },
                         onSelectWinner = { showWinnerDialog = true },
                     )
@@ -259,10 +273,12 @@ private fun PollContent(
     poll: Poll,
     candidatesState: UiState<List<PollCandidateUiModel>>,
     isAdmin: Boolean,
+    closedPolls: List<Poll>,
     onToggleVote: (String) -> Unit,
     onSelectWinner: () -> Unit,
 ) {
     val isClosed = poll.state == PollState.CLOSED
+    var historialExpanded by rememberSaveable { mutableStateOf(false) }
 
     LazyColumn(
         modifier = Modifier.fillMaxSize(),
@@ -356,6 +372,106 @@ private fun PollContent(
                 }
             }
         }
+
+        if (closedPolls.isNotEmpty()) {
+            item {
+                TextButton(
+                    onClick = { historialExpanded = !historialExpanded },
+                    modifier = Modifier
+                        .fillMaxWidth()
+                        .padding(horizontal = 16.dp, vertical = 4.dp),
+                ) {
+                    Text(
+                        if (historialExpanded) "Ocultar historial" else "Ver historial (${closedPolls.size})",
+                        style = MaterialTheme.typography.labelLarge,
+                    )
+                }
+            }
+            if (historialExpanded) {
+                items(closedPolls, key = { "history-${it.id}" }) { closedPoll ->
+                    PollHistoryRow(poll = closedPoll)
+                }
+            }
+        }
+    }
+}
+
+@Composable
+private fun NoActivePollContent(
+    closedPolls: List<Poll>,
+    isAdmin: Boolean,
+    modifier: Modifier = Modifier,
+    onCreatePoll: () -> Unit,
+) {
+    LazyColumn(
+        modifier = modifier,
+        contentPadding = PaddingValues(bottom = 24.dp),
+    ) {
+        if (closedPolls.isNotEmpty()) {
+            item {
+                Text(
+                    text = "Historial",
+                    style = MaterialTheme.typography.titleMedium,
+                    fontFamily = FrauncesFamily,
+                    fontWeight = FontWeight.SemiBold,
+                    modifier = Modifier.padding(horizontal = 16.dp, vertical = 12.dp),
+                )
+            }
+            items(closedPolls, key = { it.id }) { poll ->
+                PollHistoryRow(poll = poll)
+            }
+            item { Spacer(modifier = Modifier.height(16.dp)) }
+        }
+        if (isAdmin) {
+            item {
+                Button(
+                    onClick = onCreatePoll,
+                    modifier = Modifier
+                        .fillMaxWidth()
+                        .padding(horizontal = 16.dp, vertical = 8.dp),
+                ) {
+                    Text("Crear nueva encuesta")
+                }
+            }
+        }
+    }
+}
+
+@Composable
+private fun PollHistoryRow(poll: Poll) {
+    Row(
+        modifier = Modifier
+            .fillMaxWidth()
+            .padding(horizontal = 16.dp, vertical = 4.dp),
+        verticalAlignment = Alignment.CenterVertically,
+        horizontalArrangement = Arrangement.spacedBy(8.dp),
+    ) {
+        SuggestionChip(
+            onClick = {},
+            label = {
+                Text(
+                    if (poll.type == PollType.DESTINATION) "Destino" else "Actividad",
+                    style = MaterialTheme.typography.labelSmall,
+                )
+            },
+        )
+        SuggestionChip(
+            onClick = {},
+            label = { Text("Cerrada", style = MaterialTheme.typography.labelSmall) },
+            colors = SuggestionChipDefaults.suggestionChipColors(
+                containerColor = MaterialTheme.colorScheme.surfaceVariant,
+            ),
+        )
+        if (poll.winnerPlaceId != null) {
+            SuggestionChip(
+                onClick = {},
+                label = { Text("Con ganador", style = MaterialTheme.typography.labelSmall) },
+                colors = SuggestionChipDefaults.suggestionChipColors(
+                    containerColor = MaterialTheme.colorScheme.primaryContainer,
+                    labelColor = MaterialTheme.colorScheme.onPrimaryContainer,
+                ),
+            )
+        }
     }
 }
 
@@ -395,12 +511,21 @@ private fun PollCandidateCard(
 
             Column(modifier = Modifier.padding(12.dp)) {
                 if (isWinner) {
-                    Text(
-                        text = "Ganador",
-                        style = MaterialTheme.typography.labelSmall,
-                        color = MaterialTheme.colorScheme.primary,
-                        fontWeight = FontWeight.Bold,
-                    )
+                    Row(verticalAlignment = Alignment.CenterVertically) {
+                        Icon(
+                            Icons.Default.EmojiEvents,
+                            contentDescription = null,
+                            tint = MaterialTheme.colorScheme.primary,
+                            modifier = Modifier.size(16.dp),
+                        )
+                        Spacer(modifier = Modifier.width(4.dp))
+                        Text(
+                            text = "Ganador",
+                            style = MaterialTheme.typography.labelSmall,
+                            color = MaterialTheme.colorScheme.primary,
+                            fontWeight = FontWeight.Bold,
+                        )
+                    }
                     Spacer(modifier = Modifier.height(2.dp))
                 }
                 Text(

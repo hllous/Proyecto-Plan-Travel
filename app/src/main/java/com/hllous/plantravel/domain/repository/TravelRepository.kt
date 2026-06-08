@@ -53,11 +53,12 @@ interface TravelRepository {
     suspend fun setTripDestination(groupId: String, placeId: String, name: String, lat: Double, lng: Double)
 
     fun observeItineraryEvents(groupId: String): Flow<List<ItineraryEvent>>
-    suspend fun createItineraryEvent(groupId: String, name: String, date: String, timeOfDay: String?, description: String?, placeId: String?): String
-    suspend fun updateItineraryEvent(eventId: String, name: String, date: String, timeOfDay: String?, description: String?)
+    suspend fun createItineraryEvent(groupId: String, name: String, date: String, timeOfDay: String?, description: String?, placeId: String?, endDate: String? = null): String
+    suspend fun updateItineraryEvent(eventId: String, name: String, date: String, timeOfDay: String?, description: String?, endDate: String? = null)
     suspend fun deleteItineraryEvent(eventId: String)
 
     fun observeActivePoll(groupId: String): Flow<Poll?>
+    fun observeAllPolls(groupId: String): Flow<List<Poll>>
     suspend fun fetchActivePoll(groupId: String): Poll?
     suspend fun createPoll(groupId: String, type: PollType, expiresAt: String?): String
     suspend fun addPollCandidate(pollId: String, placeId: String, name: String, photoUrl: String, lat: Double = 0.0, lng: Double = 0.0): String
@@ -73,7 +74,7 @@ interface TravelRepository {
     suspend fun deleteExpenseGroup(expenseGroupId: String)
     suspend fun finalizeExpenseGroup(expenseGroupId: String)
     suspend fun setExpenseGroupPinned(expenseGroupId: String, pinned: Boolean)
-    suspend fun setExpenseGroupPayer(expenseGroupId: String, memberId: String)
+    suspend fun setExpenseGroupPayer(expenseGroupId: String, memberId: String?)
 
     fun observeExpenseItems(expenseGroupId: String): Flow<List<ExpenseItem>>
     fun observeAssignments(expenseGroupId: String): Flow<List<ItemAssignment>>

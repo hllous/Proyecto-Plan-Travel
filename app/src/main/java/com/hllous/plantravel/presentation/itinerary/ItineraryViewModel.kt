@@ -73,10 +73,11 @@ class ItineraryViewModel @Inject constructor(
         timeOfDay: String? = null,
         description: String? = null,
         placeId: String? = null,
+        endDate: String? = null,
     ) {
         val groupId = selectedGroupHolder.selectedGroupId.value ?: return
         viewModelScope.launch {
-            runCatching { repository.createItineraryEvent(groupId, name, date, timeOfDay, description, placeId) }
+            runCatching { repository.createItineraryEvent(groupId, name, date, timeOfDay, description, placeId, endDate) }
             reloadEvents()
         }
     }
@@ -87,9 +88,10 @@ class ItineraryViewModel @Inject constructor(
         date: String,
         timeOfDay: String? = null,
         description: String? = null,
+        endDate: String? = null,
     ) {
         viewModelScope.launch {
-            runCatching { repository.updateItineraryEvent(eventId, name, date, timeOfDay, description) }
+            runCatching { repository.updateItineraryEvent(eventId, name, date, timeOfDay, description, endDate) }
             reloadEvents()
         }
     }

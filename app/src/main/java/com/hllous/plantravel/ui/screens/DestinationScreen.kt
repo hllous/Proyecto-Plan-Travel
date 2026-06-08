@@ -33,6 +33,7 @@ import androidx.compose.foundation.rememberScrollState
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.foundation.verticalScroll
 import androidx.compose.material.icons.Icons
+import androidx.compose.material.icons.automirrored.filled.ArrowBack
 import androidx.compose.material.icons.filled.Close
 import androidx.compose.material.icons.filled.Hotel
 import androidx.compose.material.icons.filled.HowToVote
@@ -130,6 +131,10 @@ fun DestinationScreen(
     val tripDestination by viewModel.tripDestination.collectAsState()
     var overrideToLevel1 by rememberSaveable { mutableStateOf(false) }
 
+    LaunchedEffect(tripDestination) {
+        if (tripDestination is TripDestinationState.Set) overrideToLevel1 = false
+    }
+
     val destination = tripDestination as? TripDestinationState.Set
     if (destination != null && !overrideToLevel1) {
         Level2Content(
@@ -139,7 +144,11 @@ fun DestinationScreen(
             onChangeDestination = { overrideToLevel1 = true },
         )
     } else {
-        Level1BrowseContent(viewModel = viewModel, navController = navController)
+        Level1BrowseContent(
+            viewModel = viewModel,
+            navController = navController,
+            onBack = if (overrideToLevel1) { { overrideToLevel1 = false } } else null,
+        )
     }
 }
 
@@ -396,6 +405,27 @@ private fun PoiGridCard(
                         .padding(6.dp),
                 )
             }
+            if (place.rating > 0) {
+                Row(
+                    verticalAlignment = Alignment.CenterVertically,
+                    modifier = Modifier
+                        .align(Alignment.BottomEnd)
+                        .padding(8.dp),
+                ) {
+                    Icon(
+                        Icons.Default.Star,
+                        contentDescription = null,
+                        tint = Color(0xFFFFD700),
+                        modifier = Modifier.size(12.dp),
+                    )
+                    Spacer(modifier = Modifier.width(2.dp))
+                    Text(
+                        text = "%.1f".format(place.rating),
+                        style = MaterialTheme.typography.labelSmall,
+                        color = Color.White,
+                    )
+                }
+            }
         }
     }
 }
@@ -558,7 +588,11 @@ private fun PoiBottomSheet(
 
 @OptIn(ExperimentalMaterial3Api::class)
 @Composable
-private fun Level1BrowseContent(viewModel: DestinationViewModel, navController: NavHostController) {
+private fun Level1BrowseContent(
+    viewModel: DestinationViewModel,
+    navController: NavHostController,
+    onBack: (() -> Unit)? = null,
+) {
     val regionDestinations by viewModel.regionDestinations.collectAsState()
     val searchDestinations by viewModel.searchDestinations.collectAsState()
     val destinationPhotoUrls by viewModel.destinationPhotoUrls.collectAsState()
@@ -604,6 +638,13 @@ private fun Level1BrowseContent(viewModel: DestinationViewModel, navController: 
                         fontFamily = FrauncesFamily,
                         fontWeight = FontWeight.Medium,
                     )
+                },
+                navigationIcon = {
+                    if (onBack != null) {
+                        IconButton(onClick = onBack) {
+                            Icon(Icons.AutoMirrored.Filled.ArrowBack, contentDescription = "Volver")
+                        }
+                    }
                 },
                 actions = {
                     if (currentMember != null && currentMember?.role != MemberRole.ADMIN) {
@@ -988,6 +1029,7 @@ private fun CityBottomSheet(
     val sheetState = rememberModalBottomSheetState(skipPartiallyExpanded = true)
     var showPollPromptDialog by remember { mutableStateOf(false) }
     var showReplaceDialog by remember { mutableStateOf(false) }
+    var showAlreadySelectedDialog by remember { mutableStateOf(false) }
     val scrollState = rememberScrollState()
 
     ModalBottomSheet(
@@ -1047,7 +1089,13 @@ private fun CityBottomSheet(
                             onClick = {
                                 when (tripDestination) {
                                     is TripDestinationState.None -> showPollPromptDialog = true
-                                    is TripDestinationState.Set -> showReplaceDialog = true
+                                    is TripDestinationState.Set -> {
+                                        if (destination.name.trim() == tripDestination.name.trim()) {
+                                            showAlreadySelectedDialog = true
+                                        } else {
+                                            showReplaceDialog = true
+                                        }
+                                    }
                                 }
                             },
                             modifier = Modifier.fillMaxWidth(),
@@ -1161,6 +1209,17 @@ private fun CityBottomSheet(
                     showPollPromptDialog = false
                     onSetDestination()
                 }) { Text("Saltear y establecer") }
+            },
+        )
+    }
+
+    if (showAlreadySelectedDialog) {
+        AlertDialog(
+            onDismissRequest = { showAlreadySelectedDialog = false },
+            title = { Text("Destino ya seleccionado") },
+            text = { Text("\"${destination.name}\" ya es el destino actual del grupo.") },
+            confirmButton = {
+                TextButton(onClick = { showAlreadySelectedDialog = false }) { Text("Entendido") }
             },
         )
     }

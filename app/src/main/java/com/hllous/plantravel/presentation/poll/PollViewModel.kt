@@ -54,28 +54,6 @@ class PollViewModel @Inject constructor(
         }
         .stateIn(viewModelScope, SharingStarted.WhileSubscribed(5000), null)
 
-    val candidates: StateFlow<UiState<List<PollCandidateUiModel>>> = combine(
-        poll,
-        _candidateReloadTrigger,
-    ) { activePoll, _ -> activePoll }
-        .flatMapLatest { activePoll ->
-            if (activePoll == null) return@flatMapLatest flowOf(UiState.Success(emptyList()))
-            repository.observePollCandidates(activePoll.id)
-                .map<List<PollCandidate>, UiState<List<PollCandidateUiModel>>> { list ->
-                    val totalVotes = list.sumOf { it.voteCount }
-                    UiState.Success(list.map {
-                        PollCandidateUiModel(
-                            candidate = it,
-                            voteCount = it.voteCount,
-                            votedByCurrentMember = it.votedByCurrentMember,
-                            voteProgress = if (totalVotes == 0) 0f else it.voteCount.toFloat() / totalVotes,
-                        )
-                    })
-                }
-                .catch { emit(UiState.Error(it.message ?: "Error al cargar candidatos")) }
-        }
-        .stateIn(viewModelScope, SharingStarted.WhileSubscribed(5000), UiState.Loading)
-
     val currentMember: StateFlow<GroupMember?> = selectedGroupHolder.selectedGroupId
         .flatMapLatest { groupId ->
             if (groupId == null) flowOf(null)
@@ -84,6 +62,49 @@ class PollViewModel @Inject constructor(
                 .catch { emit(null) }
         }
         .stateIn(viewModelScope, SharingStarted.WhileSubscribed(5000), null)
+
+    // Denominator for the vote progress bar: fraction of members who voted, not share of total votes.
+    private val memberCount: StateFlow<Int> = selectedGroupHolder.selectedGroupId
+        .flatMapLatest { groupId ->
+            if (groupId == null) flowOf(0)
+            else repository.observeMembers(groupId)
+                .map { it.size }
+                .catch { emit(0) }
+        }
+        .stateIn(viewModelScope, SharingStarted.WhileSubscribed(5000), 0)
+
+    val allPolls: StateFlow<List<Poll>> = combine(
+        _reloadTrigger,
+        selectedGroupHolder.selectedGroupId,
+    ) { _, groupId -> groupId }
+        .flatMapLatest { groupId ->
+            if (groupId == null) flowOf(emptyList())
+            else repository.observeAllPolls(groupId).catch { emit(emptyList()) }
+        }
+        .stateIn(viewModelScope, SharingStarted.WhileSubscribed(5000), emptyList())
+
+    val candidates: StateFlow<UiState<List<PollCandidateUiModel>>> = combine(
+        poll,
+        _candidateReloadTrigger,
+        memberCount,
+    ) { activePoll, _, count -> activePoll to count }
+        .flatMapLatest { (activePoll, count) ->
+            if (activePoll == null) return@flatMapLatest flowOf(UiState.Success(emptyList()))
+            repository.observePollCandidates(activePoll.id)
+                .map<List<PollCandidate>, UiState<List<PollCandidateUiModel>>> { list ->
+                    val denominator = count.coerceAtLeast(1)
+                    UiState.Success(list.map {
+                        PollCandidateUiModel(
+                            candidate = it,
+                            voteCount = it.voteCount,
+                            votedByCurrentMember = it.votedByCurrentMember,
+                            voteProgress = it.voteCount.toFloat() / denominator,
+                        )
+                    })
+                }
+                .catch { emit(UiState.Error(it.message ?: "Error al cargar candidatos")) }
+        }
+        .stateIn(viewModelScope, SharingStarted.WhileSubscribed(5000), UiState.Loading)
 
     fun createPoll(type: PollType, expiresAt: String? = null) {
         val groupId = selectedGroupHolder.selectedGroupId.value ?: return
@@ -149,6 +170,7 @@ class PollViewModel @Inject constructor(
                     )
                 }
             }
+            reloadPoll()
         }
     }
 

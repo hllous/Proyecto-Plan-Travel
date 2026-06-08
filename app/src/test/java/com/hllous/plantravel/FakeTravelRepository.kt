@@ -56,6 +56,7 @@ class FakeTravelRepository(
     val customObserveInvites: ((String) -> Flow<List<InviteToken>>)? = null,
     val customObserveExpenseGroups: ((String) -> Flow<List<ExpenseGroup>>)? = null,
     val customObserveActivePoll: ((String) -> Flow<Poll?>)? = null,
+    val customObserveAllPolls: ((String) -> Flow<List<Poll>>)? = null,
     val customFetchActivePoll: (suspend (String) -> Poll?)? = null,
     val customObservePollCandidates: ((String) -> Flow<List<PollCandidate>>)? = null,
 ) : TravelRepository {
@@ -191,7 +192,7 @@ class FakeTravelRepository(
         }
     }
 
-    override suspend fun setExpenseGroupPayer(expenseGroupId: String, memberId: String) {
+    override suspend fun setExpenseGroupPayer(expenseGroupId: String, memberId: String?) {
         if (setExpenseGroupPayerThrows) throw RuntimeException("network error")
         setExpenseGroupPayerCallCount++
         _expenseGroupsByGroup.value = _expenseGroupsByGroup.value.mapValues { (_, groups) ->
@@ -317,7 +318,7 @@ class FakeTravelRepository(
     override fun observeItineraryEvents(groupId: String): Flow<List<ItineraryEvent>> =
         _itineraryEvents.map { it[groupId] ?: emptyList() }
 
-    override suspend fun createItineraryEvent(groupId: String, name: String, date: String, timeOfDay: String?, description: String?, placeId: String?): String {
+    override suspend fun createItineraryEvent(groupId: String, name: String, date: String, timeOfDay: String?, description: String?, placeId: String?, endDate: String?): String {
         val event = ItineraryEvent(
             id = "fake-event-${System.currentTimeMillis()}",
             groupId = groupId,
@@ -327,6 +328,7 @@ class FakeTravelRepository(
             description = description,
             placeId = placeId,
             createdByMemberId = "fake-member-id",
+            endDate = endDate,
         )
         val current = _itineraryEvents.value.toMutableMap()
         current[groupId] = (current[groupId] ?: emptyList()) + event
@@ -334,10 +336,10 @@ class FakeTravelRepository(
         return event.id
     }
 
-    override suspend fun updateItineraryEvent(eventId: String, name: String, date: String, timeOfDay: String?, description: String?) {
+    override suspend fun updateItineraryEvent(eventId: String, name: String, date: String, timeOfDay: String?, description: String?, endDate: String?) {
         _itineraryEvents.value = _itineraryEvents.value.mapValues { (_, events) ->
             events.map {
-                if (it.id == eventId) it.copy(name = name, date = date, timeOfDay = timeOfDay, description = description)
+                if (it.id == eventId) it.copy(name = name, date = date, timeOfDay = timeOfDay, description = description, endDate = endDate)
                 else it
             }
         }
@@ -351,6 +353,10 @@ class FakeTravelRepository(
 
     override fun observeActivePoll(groupId: String): Flow<Poll?> =
         customObserveActivePoll?.invoke(groupId) ?: _activePollByGroup.map { it[groupId] }
+
+    override fun observeAllPolls(groupId: String): Flow<List<Poll>> =
+        customObserveAllPolls?.invoke(groupId)
+            ?: _activePollByGroup.map { map -> listOfNotNull(map[groupId]) }
 
     override suspend fun fetchActivePoll(groupId: String): Poll? =
         customFetchActivePoll?.invoke(groupId) ?: _activePollByGroup.value[groupId]

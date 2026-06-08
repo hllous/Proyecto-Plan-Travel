@@ -133,7 +133,7 @@ class GooglePlacesApiClient @Inject constructor(
         "Alojamiento" -> listOf("lodging")
         "Gastronomía" -> listOf("restaurant", "bar", "cafe")
         "Actividades" -> listOf("tourist_attraction", "amusement_park", "museum")
-        "Naturaleza" -> listOf("park", "natural_feature")
+        "Naturaleza" -> listOf("national_park", "park", "hiking_area")
         else -> listOf("tourist_attraction")
     }
 }

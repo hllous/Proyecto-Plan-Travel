@@ -91,6 +91,7 @@ data class ItineraryEvent(
     val description: String? = null,
     val placeId: String? = null,
     val createdByMemberId: String,
+    val endDate: String? = null,
 )
 
 enum class PollType { DESTINATION, ACTIVITY }

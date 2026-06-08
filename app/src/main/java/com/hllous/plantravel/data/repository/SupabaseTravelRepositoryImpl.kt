@@ -274,8 +274,9 @@ class SupabaseTravelRepositoryImpl @Inject constructor(
         val description: String? = null,
         @SerialName("place_id") val placeId: String? = null,
         @SerialName("created_by_member_id") val createdByMemberId: String,
+        @SerialName("end_date") val endDate: String? = null,
     ) {
-        fun toDomain() = ItineraryEvent(id, groupId, name, date, timeOfDay, description, placeId, createdByMemberId)
+        fun toDomain() = ItineraryEvent(id, groupId, name, date, timeOfDay, description, placeId, createdByMemberId, endDate)
     }
 
     @Serializable
@@ -288,6 +289,7 @@ class SupabaseTravelRepositoryImpl @Inject constructor(
         val description: String? = null,
         @SerialName("place_id") val placeId: String? = null,
         @SerialName("created_by_member_id") val createdByMemberId: String,
+        @SerialName("end_date") val endDate: String? = null,
     )
 
     @Serializable
@@ -440,6 +442,15 @@ class SupabaseTravelRepositoryImpl @Inject constructor(
         supabase.from("itinerary_events")
             .select { filter { eq("group_id", groupId) } }
             .decodeList<ItineraryEventDto>()
+            .map { it.toDomain() }
+
+    private suspend fun fetchAllPolls(groupId: String): List<Poll> =
+        supabase.from("group_polls")
+            .select {
+                filter { eq("group_id", groupId) }
+                order("created_at", Order.DESCENDING)
+            }
+            .decodeList<PollDto>()
             .map { it.toDomain() }
 
     // Returns the most recent poll for the group (open or closed). Without ORDER BY, Postgres
@@ -800,7 +811,7 @@ class SupabaseTravelRepositoryImpl @Inject constructor(
     }
 
     override suspend fun createItineraryEvent(
-        groupId: String, name: String, date: String, timeOfDay: String?, description: String?, placeId: String?
+        groupId: String, name: String, date: String, timeOfDay: String?, description: String?, placeId: String?, endDate: String?
     ): String {
         val memberId = currentMemberIdForGroup(groupId) ?: error("Member not found for group $groupId")
         val id = UUID.randomUUID().toString()
@@ -808,20 +819,21 @@ class SupabaseTravelRepositoryImpl @Inject constructor(
             .insert(InsertItineraryEventDto(
                 id = id, groupId = groupId, name = name, date = date,
                 timeOfDay = timeOfDay, description = description, placeId = placeId,
-                createdByMemberId = memberId,
+                createdByMemberId = memberId, endDate = endDate,
             ))
         sendBroadcast("itinerary-events-broadcast-$groupId", "itinerary_event_changed")
         return id
     }
 
     override suspend fun updateItineraryEvent(
-        eventId: String, name: String, date: String, timeOfDay: String?, description: String?
+        eventId: String, name: String, date: String, timeOfDay: String?, description: String?, endDate: String?
     ) {
         val groupId = supabase.from("itinerary_events").update({
             set("name", name)
             set("date", date)
             set<String?>("time_of_day", timeOfDay)
             set<String?>("description", description)
+            set<String?>("end_date", endDate)
         }) {
             filter { eq("id", eventId) }
             select(Columns.list("group_id"))
@@ -852,6 +864,23 @@ class SupabaseTravelRepositoryImpl @Inject constructor(
             runCatching { pgChannel.subscribe(blockUntilSubscribed = true) }
             merge(pgChanges.map { Unit }, pollBroadcastFlow(groupId))
                 .collect { send(fetchActivePoll(groupId)) }
+        } finally {
+            supabase.realtime.removeChannel(pgChannel)
+        }
+    }
+
+    override fun observeAllPolls(groupId: String): Flow<List<Poll>> = channelFlow {
+        send(fetchAllPolls(groupId))
+
+        val pgChannel = supabase.channel("group-polls-all-$groupId-${UUID.randomUUID()}")
+        val pgChanges = pgChannel.postgresChangeFlow<PostgresAction>(schema = "public") {
+            table = "group_polls"
+        }
+
+        try {
+            runCatching { pgChannel.subscribe(blockUntilSubscribed = true) }
+            merge(pgChanges.map { Unit }, pollBroadcastFlow(groupId))
+                .collect { send(fetchAllPolls(groupId)) }
         } finally {
             supabase.realtime.removeChannel(pgChannel)
         }
@@ -1114,8 +1143,10 @@ class SupabaseTravelRepositoryImpl @Inject constructor(
         sendBroadcast("expense-groups-broadcast-$groupId", "expense_group_changed")
     }
 
-    override suspend fun setExpenseGroupPayer(expenseGroupId: String, memberId: String) {
-        supabase.from("expense_groups").update({ set("paid_by_member_id", memberId) }) {
+    override suspend fun setExpenseGroupPayer(expenseGroupId: String, memberId: String?) {
+        supabase.from("expense_groups").update({
+            set("paid_by_member_id", memberId)
+        }) {
             filter { eq("id", expenseGroupId) }
         }
         val groupId = fetchExpenseGroupTravelGroupId(expenseGroupId)

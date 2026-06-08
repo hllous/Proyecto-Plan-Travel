@@ -169,10 +169,10 @@ fun ItineraryScreen(
             editingEvent = editingEvent,
             initialDraft = if (editingEvent == null) initialDraft else null,
             onDismiss = { showSheet = false },
-            onSave = { name, date, timeOfDay, description ->
+            onSave = { name, date, timeOfDay, description, endDate ->
                 val event = editingEvent
                 if (event != null) {
-                    viewModel.updateEvent(event.id, name, date, timeOfDay, description)
+                    viewModel.updateEvent(event.id, name, date, timeOfDay, description, endDate)
                 } else {
                     val draft = if (initialDraft != null) initialDraft else null
                     viewModel.createEvent(
@@ -181,6 +181,7 @@ fun ItineraryScreen(
                         timeOfDay = timeOfDay,
                         description = description,
                         placeId = draft?.placeId,
+                        endDate = endDate,
                     )
                 }
                 showSheet = false
@@ -310,6 +311,14 @@ private fun EventCard(
                     maxLines = 1,
                     overflow = TextOverflow.Ellipsis,
                 )
+                if (event.endDate != null) {
+                    Spacer(modifier = Modifier.height(2.dp))
+                    Text(
+                        text = "${event.date} → ${event.endDate}",
+                        style = MaterialTheme.typography.bodySmall,
+                        color = MaterialTheme.colorScheme.secondary,
+                    )
+                }
                 if (!event.timeOfDay.isNullOrBlank()) {
                     Spacer(modifier = Modifier.height(2.dp))
                     Text(
@@ -356,7 +365,7 @@ private fun EventBottomSheet(
     editingEvent: ItineraryEvent?,
     initialDraft: ItineraryEventDraft?,
     onDismiss: () -> Unit,
-    onSave: (name: String, date: String, timeOfDay: String?, description: String?) -> Unit,
+    onSave: (name: String, date: String, timeOfDay: String?, description: String?, endDate: String?) -> Unit,
 ) {
     val isEditing = editingEvent != null
     val sheetState = rememberModalBottomSheetState(skipPartiallyExpanded = true)
@@ -369,10 +378,17 @@ private fun EventBottomSheet(
 
     // Date state — store as "yyyy-MM-dd" string, null means not yet chosen
     var selectedDate by rememberSaveable { mutableStateOf(editingEvent?.date) }
+    var selectedEndDate by rememberSaveable { mutableStateOf(editingEvent?.endDate) }
     var showDatePicker by rememberSaveable { mutableStateOf(false) }
+    var showEndDatePicker by rememberSaveable { mutableStateOf(false) }
 
     val datePickerState = rememberDatePickerState(
         initialSelectedDateMillis = selectedDate?.let {
+            runCatching { LocalDate.parse(it).atStartOfDay(ZoneOffset.UTC).toInstant().toEpochMilli() }.getOrNull()
+        },
+    )
+    val endDatePickerState = rememberDatePickerState(
+        initialSelectedDateMillis = selectedEndDate?.let {
             runCatching { LocalDate.parse(it).atStartOfDay(ZoneOffset.UTC).toInstant().toEpochMilli() }.getOrNull()
         },
     )
@@ -407,7 +423,7 @@ private fun EventBottomSheet(
                 modifier = Modifier.fillMaxWidth(),
             )
 
-            // Date picker trigger field
+            // Start date picker trigger field
             OutlinedTextField(
                 value = selectedDate?.let { date ->
                     runCatching {
@@ -425,6 +441,27 @@ private fun EventBottomSheet(
                     }
                 },
             )
+
+            // End date picker — only shown once a start date is chosen
+            if (selectedDate != null) {
+                OutlinedTextField(
+                    value = selectedEndDate?.let { date ->
+                        runCatching {
+                            LocalDate.parse(date).format(DateHeaderFormatter).replaceFirstChar { c -> c.uppercaseChar() }
+                        }.getOrElse { date }
+                    } ?: "",
+                    onValueChange = {},
+                    label = { Text("Fecha de salida (opcional)") },
+                    placeholder = { Text("Seleccioná fecha de salida") },
+                    readOnly = true,
+                    modifier = Modifier.fillMaxWidth(),
+                    trailingIcon = {
+                        IconButton(onClick = { showEndDatePicker = true }) {
+                            Icon(Icons.Default.CalendarMonth, contentDescription = "Seleccionar fecha de salida")
+                        }
+                    },
+                )
+            }
 
             OutlinedTextField(
                 value = timeOfDay,
@@ -463,6 +500,7 @@ private fun EventBottomSheet(
                             selectedDate!!,
                             timeOfDay.trim().ifBlank { null },
                             description.trim().ifBlank { null },
+                            selectedEndDate,
                         )
                     },
                     enabled = isValid,
@@ -485,6 +523,9 @@ private fun EventBottomSheet(
                                 .atZone(ZoneOffset.UTC)
                                 .toLocalDate()
                             selectedDate = localDate.format(StorageDateFormatter)
+                            // Reset end date if it's now before the new start date
+                            val parsedEnd = selectedEndDate?.let { runCatching { LocalDate.parse(it) }.getOrNull() }
+                            if (parsedEnd != null && parsedEnd < localDate) selectedEndDate = null
                         }
                         showDatePicker = false
                     },
@@ -499,6 +540,37 @@ private fun EventBottomSheet(
             },
         ) {
             DatePicker(state = datePickerState)
+        }
+    }
+
+    if (showEndDatePicker) {
+        DatePickerDialog(
+            onDismissRequest = { showEndDatePicker = false },
+            confirmButton = {
+                TextButton(
+                    onClick = {
+                        endDatePickerState.selectedDateMillis?.let { millis ->
+                            val localDate = Instant.ofEpochMilli(millis)
+                                .atZone(ZoneOffset.UTC)
+                                .toLocalDate()
+                            val startDate = selectedDate?.let { runCatching { LocalDate.parse(it) }.getOrNull() }
+                            if (startDate == null || localDate >= startDate) {
+                                selectedEndDate = localDate.format(StorageDateFormatter)
+                            }
+                        }
+                        showEndDatePicker = false
+                    },
+                ) {
+                    Text("Aceptar")
+                }
+            },
+            dismissButton = {
+                TextButton(onClick = { showEndDatePicker = false }) {
+                    Text("Cancelar")
+                }
+            },
+        ) {
+            DatePicker(state = endDatePickerState)
         }
     }
 }
