@@ -129,6 +129,44 @@ class MainViewModelTest {
     }
 
     @Test
+    fun invitesUpdateWhenRemoteInvitePushed() {
+        val holder = SelectedGroupHolder().also { it.selectedGroupId.value = "group-1" }
+        val repo = FakeTravelRepository()
+        val vm = viewModel(repo = repo, holder = holder)
+        val scope = CoroutineScope(UnconfinedTestDispatcher())
+        val job = scope.launch { vm.invites.collect { } }
+
+        assertTrue(vm.invites.value.isEmpty())
+
+        val remoteInvite = InviteToken(code = "REMOTE1", groupId = "group-1", link = "plantravel://invite/REMOTE1", expiresAtMillis = Long.MAX_VALUE)
+        repo.simulateRemoteInvitesPush("group-1", listOf(remoteInvite))
+
+        assertEquals(1, vm.invites.value.size)
+        assertEquals("REMOTE1", vm.invites.value.first().code)
+
+        job.cancel()
+    }
+
+    @Test
+    fun invitesClearWhenRemoteDeletePushed() {
+        val invite = InviteToken(code = "CODE1", groupId = "group-1", link = "plantravel://invite/CODE1", expiresAtMillis = Long.MAX_VALUE)
+        val holder = SelectedGroupHolder().also { it.selectedGroupId.value = "group-1" }
+        val repo = FakeTravelRepository()
+        repo.simulateRemoteInvitesPush("group-1", listOf(invite))
+        val vm = viewModel(repo = repo, holder = holder)
+        val scope = CoroutineScope(UnconfinedTestDispatcher())
+        val job = scope.launch { vm.invites.collect { } }
+
+        assertEquals(1, vm.invites.value.size)
+
+        repo.simulateRemoteInvitesPush("group-1", emptyList())
+
+        assertTrue(vm.invites.value.isEmpty())
+
+        job.cancel()
+    }
+
+    @Test
     fun generateInviteShowsCodeEvenWithoutRealtime() {
         val invite = InviteToken(code = "ABC123", groupId = "g1", link = "plantravel://invite/ABC123", expiresAtMillis = Long.MAX_VALUE)
         var subscriptionCount = 0

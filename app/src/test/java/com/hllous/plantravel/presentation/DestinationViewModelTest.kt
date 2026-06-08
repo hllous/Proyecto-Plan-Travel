@@ -15,6 +15,7 @@ import com.hllous.plantravel.presentation.destination.TripDestinationState
 import com.hllous.plantravel.presentation.group.SelectedGroupHolder
 import kotlinx.coroutines.ExperimentalCoroutinesApi
 import kotlinx.coroutines.flow.flow
+import kotlinx.coroutines.flow.flowOf
 import kotlinx.coroutines.flow.collect
 import kotlinx.coroutines.launch
 import kotlinx.coroutines.test.advanceUntilIdle
@@ -845,14 +846,10 @@ class DestinationViewModelTest {
             type = com.hllous.plantravel.domain.model.PollType.DESTINATION,
             state = com.hllous.plantravel.domain.model.PollState.OPEN,
         )
-        var subscriptions = 0
+        // observeActivePoll always returns null (stale local state); fetchActivePoll returns the real poll (fresh DB fetch)
         val repo = FakeTravelRepository(
-            customObserveActivePoll = {
-                flow {
-                    subscriptions++
-                    emit(if (subscriptions >= 2) createdPoll else null)
-                }
-            },
+            customObserveActivePoll = { flowOf(null) },
+            customFetchActivePoll = { createdPoll },
         )
         val holder = SelectedGroupHolder().also { it.selectedGroupId.value = "group-1" }
         val vm = viewModel(repo = repo, holder = holder)

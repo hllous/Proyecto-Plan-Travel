@@ -52,14 +52,17 @@ class FakeTravelRepository(
     initialDestinations: List<StoredDestination> = emptyList(),
     val customObserveGroups: (() -> Flow<List<TravelGroup>>)? = null,
     val customObserveMembers: ((String) -> Flow<List<GroupMember>>)? = null,
+    val availableGroupsForJoin: List<TravelGroup> = emptyList(),
     val customObserveInvites: ((String) -> Flow<List<InviteToken>>)? = null,
     val customObserveExpenseGroups: ((String) -> Flow<List<ExpenseGroup>>)? = null,
     val customObserveActivePoll: ((String) -> Flow<Poll?>)? = null,
+    val customFetchActivePoll: (suspend (String) -> Poll?)? = null,
     val customObservePollCandidates: ((String) -> Flow<List<PollCandidate>>)? = null,
 ) : TravelRepository {
 
     private val _groups = MutableStateFlow(initialGroups)
     private val _membersByGroup = MutableStateFlow(initialMembers)
+    private val _invitesByGroup = MutableStateFlow<Map<String, List<InviteToken>>>(emptyMap())
     private val _itemsByGroup = MutableStateFlow(initialExpenseItems)
     private val _expenseGroupsByGroup = MutableStateFlow(initialExpenseGroups)
     private val _assignmentsByGroup = MutableStateFlow<Map<String, List<ItemAssignment>>>(emptyMap())
@@ -86,7 +89,7 @@ class FakeTravelRepository(
     override fun observeMembers(groupId: String): Flow<List<GroupMember>> =
         customObserveMembers?.invoke(groupId) ?: _membersByGroup.map { it[groupId] ?: emptyList() }
     override fun observeInvites(groupId: String): Flow<List<InviteToken>> =
-        customObserveInvites?.invoke(groupId) ?: flowOf(emptyList())
+        customObserveInvites?.invoke(groupId) ?: _invitesByGroup.map { it[groupId] ?: emptyList() }
     override fun observeExpenseItems(expenseGroupId: String): Flow<List<ExpenseItem>> =
         _itemsByGroup.map { it[expenseGroupId] ?: emptyList() }
     override fun observeAssignments(expenseGroupId: String): Flow<List<ItemAssignment>> =
@@ -123,6 +126,11 @@ class FakeTravelRepository(
             val current = _membersByGroup.value.toMutableMap()
             current[groupId] = (current[groupId] ?: emptyList()) + newMember
             _membersByGroup.value = current
+            val joinedGroup = availableGroupsForJoin.firstOrNull { it.id == groupId }
+                ?: TravelGroup(id = groupId, name = "")
+            if (_groups.value.none { it.id == groupId }) {
+                _groups.value = _groups.value + joinedGroup
+            }
         }
         return consumeInviteResult
     }
@@ -344,6 +352,9 @@ class FakeTravelRepository(
     override fun observeActivePoll(groupId: String): Flow<Poll?> =
         customObserveActivePoll?.invoke(groupId) ?: _activePollByGroup.map { it[groupId] }
 
+    override suspend fun fetchActivePoll(groupId: String): Poll? =
+        customFetchActivePoll?.invoke(groupId) ?: _activePollByGroup.value[groupId]
+
     override suspend fun createPoll(groupId: String, type: PollType, expiresAt: String?): String {
         if (createPollThrows) throw RuntimeException("network error")
         val poll = Poll(id = "fake-poll-id", groupId = groupId, type = type, state = com.hllous.plantravel.domain.model.PollState.OPEN, expiresAt = expiresAt)
@@ -404,6 +415,20 @@ class FakeTravelRepository(
 
     override fun observePollCandidates(pollId: String): Flow<List<PollCandidate>> =
         customObservePollCandidates?.invoke(pollId) ?: _candidatesByPoll.map { it[pollId] ?: emptyList() }
+
+    fun simulateRemoteGroupsPush(groups: List<TravelGroup>) {
+        _groups.value = groups
+    }
+
+    fun simulateRemoteInvitesPush(groupId: String, invites: List<InviteToken>) {
+        _invitesByGroup.value = _invitesByGroup.value.toMutableMap().also { it[groupId] = invites }
+    }
+
+    fun simulateRemoteMemberJoin(groupId: String, member: GroupMember) {
+        val current = _membersByGroup.value.toMutableMap()
+        current[groupId] = (current[groupId] ?: emptyList()) + member
+        _membersByGroup.value = current
+    }
 
     fun simulateItineraryEventPush(groupId: String, events: List<ItineraryEvent>) {
         _itineraryEvents.value = _itineraryEvents.value.toMutableMap().also { it[groupId] = events }

@@ -143,6 +143,25 @@ class ExpenseViewModelRealtimeTest {
         scope.cancel()
     }
 
+    // ── Slice 4b: push still received after local delete item + channel-churn ──
+
+    @Test
+    fun expenseItemsStillUpdatedFromRemotePushAfterLocalDelete() {
+        val existing = ExpenseItem("item-1", "tg-1", "eg-1", "Taxi", 5000L, 1)
+        val repo = FakeTravelRepository(initialExpenseItems = mapOf("eg-1" to listOf(existing)))
+        val holder = SelectedGroupHolder().also { it.selectedGroupId.value = "tg-1" }
+        val vm = viewModel(repo = repo, holder = holder).also { it.selectExpenseGroup("eg-1") }
+        val scope = warmUp { vm.expenseItems.collect { } }
+
+        vm.deleteExpenseItem("item-1")
+
+        val remoteItem = ExpenseItem("remote-1", "tg-1", "eg-1", "Hotel", 20000L, 1)
+        repo.simulateRemoteExpenseItemPush("eg-1", listOf(remoteItem))
+
+        assertEquals(listOf(remoteItem), vm.expenseItems.value)
+        scope.cancel()
+    }
+
     // ── Slice 5: remote expense group push propagates ─────────────────────────
 
     @Test
@@ -153,6 +172,25 @@ class ExpenseViewModelRealtimeTest {
         val scope = warmUp { vm.expenseGroups.collect { } }
 
         val remoteGroup = ExpenseGroup("remote-eg-1", "tg-1", "Cena", ExpenseGroupState.Open, 5000L)
+        repo.simulateRemoteExpenseGroupPush("tg-1", listOf(remoteGroup))
+
+        assertEquals(listOf(remoteGroup), vm.expenseGroups.value)
+        scope.cancel()
+    }
+
+    // ── Slice 5b: push still received after local delete group + churn ──────────
+
+    @Test
+    fun expenseGroupsStillUpdatedFromRemotePushAfterLocalDelete() {
+        val existing = ExpenseGroup("eg-1", "tg-1", "Almuerzo", ExpenseGroupState.Open, 0L)
+        val repo = FakeTravelRepository(initialExpenseGroups = mapOf("tg-1" to listOf(existing)))
+        val holder = SelectedGroupHolder().also { it.selectedGroupId.value = "tg-1" }
+        val vm = viewModel(repo = repo, holder = holder)
+        val scope = warmUp { vm.expenseGroups.collect { } }
+
+        vm.deleteExpenseGroup("eg-1")
+
+        val remoteGroup = ExpenseGroup("remote-eg-2", "tg-1", "Cena", ExpenseGroupState.Open, 10000L)
         repo.simulateRemoteExpenseGroupPush("tg-1", listOf(remoteGroup))
 
         assertEquals(listOf(remoteGroup), vm.expenseGroups.value)

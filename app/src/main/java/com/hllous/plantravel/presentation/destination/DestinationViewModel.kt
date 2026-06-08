@@ -35,7 +35,6 @@ import kotlinx.coroutines.flow.catch
 import kotlinx.coroutines.flow.combine
 import kotlinx.coroutines.flow.flatMapLatest
 import kotlinx.coroutines.flow.flowOf
-import kotlinx.coroutines.flow.first
 import kotlinx.coroutines.flow.map
 import kotlinx.coroutines.flow.stateIn
 import kotlinx.coroutines.flow.update
@@ -622,8 +621,7 @@ class DestinationViewModel @Inject constructor(
             if (expectedType == null || poll.type == expectedType) return poll
         }
         val groupId = selectedGroupHolder.selectedGroupId.value ?: return null
-        val resolvedPoll = repository.observeActivePoll(groupId)
-            .first()
+        val resolvedPoll = repository.fetchActivePoll(groupId)
             ?.takeIf { it.state == PollState.OPEN }
         if (resolvedPoll != null) reloadGroups()
         return resolvedPoll?.takeIf { expectedType == null || it.type == expectedType }

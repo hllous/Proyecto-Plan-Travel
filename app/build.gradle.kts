@@ -75,7 +75,7 @@ dependencies {
     ksp("com.google.dagger:hilt-compiler:2.59.2")
     implementation("com.journeyapps:zxing-android-embedded:4.3.0")
     implementation("com.google.zxing:core:3.5.3")
-    implementation(platform("io.github.jan-tennert.supabase:bom:3.0.3"))
+    implementation(platform("io.github.jan-tennert.supabase:bom:3.6.0"))
     implementation("io.github.jan-tennert.supabase:auth-kt")
     implementation("io.github.jan-tennert.supabase:postgrest-kt")
     implementation("io.github.jan-tennert.supabase:realtime-kt")
