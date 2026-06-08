@@ -9,6 +9,9 @@ import io.ktor.client.request.post
 import io.ktor.client.request.setBody
 import io.ktor.http.ContentType
 import io.ktor.http.contentType
+import kotlinx.coroutines.async
+import kotlinx.coroutines.awaitAll
+import kotlinx.coroutines.coroutineScope
 import kotlinx.serialization.SerialName
 import kotlinx.serialization.Serializable
 import javax.inject.Inject
@@ -112,7 +115,18 @@ class GooglePlacesApiClient @Inject constructor(
     }
 
     override suspend fun searchPois(lat: Double, lng: Double, type: String): List<PlaceResult> {
-        val includedTypes = poiTypeToGoogleTypes(type)
+        val types = poiTypeToGoogleTypes(type)
+        return coroutineScope {
+            types
+                .map { singleType -> async { fetchNearby(lat, lng, listOf(singleType)) } }
+                .awaitAll()
+                .flatten()
+                .distinctBy { it.placeId }
+                .sortedByDescending { it.rating }
+        }
+    }
+
+    private suspend fun fetchNearby(lat: Double, lng: Double, includedTypes: List<String>): List<PlaceResult> {
         val response: PlacesResponse = httpClient.post("$BASE_URL:searchNearby") {
             header("X-Goog-Api-Key", apiKey)
             header("X-Goog-FieldMask", FIELD_MASK)
