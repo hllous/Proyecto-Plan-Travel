@@ -29,7 +29,7 @@ abstract class PlacesModule {
         @Singleton
         fun providePlacesHttpClient(): HttpClient = HttpClient(Android) {
             install(ContentNegotiation) {
-                json(Json { ignoreUnknownKeys = true })
+                json(Json { ignoreUnknownKeys = true; encodeDefaults = true })
             }
         }
 
