@@ -95,6 +95,7 @@ class SupabaseTravelRepositoryImpl @Inject constructor(
         @SerialName("trip_destination_name") val tripDestinationName: String? = null,
         @SerialName("trip_destination_lat") val tripDestinationLat: Double? = null,
         @SerialName("trip_destination_lng") val tripDestinationLng: Double? = null,
+        val status: String = "active",
     ) {
         fun toDomain() = TravelGroup(
             id = id,
@@ -104,6 +105,7 @@ class SupabaseTravelRepositoryImpl @Inject constructor(
             tripDestinationName = tripDestinationName,
             tripDestinationLat = tripDestinationLat,
             tripDestinationLng = tripDestinationLng,
+            isActive = status == "active",
         )
     }
 
@@ -637,6 +639,17 @@ class SupabaseTravelRepositoryImpl @Inject constructor(
         sendBroadcast("members-broadcast-$groupId", "member_joined")
     }
 
+    override suspend fun broadcastDisplayNameChanged() {
+        val userId = supabase.auth.currentUserOrNull()?.id ?: return
+        val groupIds = runCatching {
+            supabase.from("group_members")
+                .select(Columns.list("group_id")) { filter { eq("user_id", userId) } }
+                .decodeList<GroupMembershipDto>()
+                .map { it.groupId }
+        }.getOrDefault(emptyList())
+        groupIds.forEach { broadcastMemberJoined(it) }
+    }
+
     private suspend fun sendBroadcast(channelName: String, event: String) {
         // supabase.channel() in v3 always creates a NEW RealtimeChannelImpl — there is NO
         // deduplication at the factory level. Calling subscribe() on the new object writes it
@@ -783,6 +796,16 @@ class SupabaseTravelRepositoryImpl @Inject constructor(
             set("trip_destination_lat", lat)
             set("trip_destination_lng", lng)
         }) { filter { eq("id", groupId) } }
+        sendBroadcast("groups-broadcast-$groupId", "group_list_changed")
+    }
+
+    override suspend fun endTrip(groupId: String) {
+        supabase.from("travel_groups").update({ set("status", "closed") }) { filter { eq("id", groupId) } }
+        sendBroadcast("groups-broadcast-$groupId", "group_list_changed")
+    }
+
+    override suspend fun reactivateTrip(groupId: String) {
+        supabase.from("travel_groups").update({ set("status", "active") }) { filter { eq("id", groupId) } }
         sendBroadcast("groups-broadcast-$groupId", "group_list_changed")
     }
 

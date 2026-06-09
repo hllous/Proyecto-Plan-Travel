@@ -137,6 +137,7 @@ class FakeTravelRepository(
     }
 
     override suspend fun broadcastMemberJoined(groupId: String) = Unit
+    override suspend fun broadcastDisplayNameChanged() = Unit
 
     override fun observeExpenseGroups(groupId: String): Flow<List<ExpenseGroup>> =
         customObserveExpenseGroups?.invoke(groupId) ?: _expenseGroupsByGroup.map { it[groupId] ?: emptyList() }
@@ -313,6 +314,14 @@ class FakeTravelRepository(
             ) else it
         }
         _groups.value = current
+    }
+
+    override suspend fun endTrip(groupId: String) {
+        _groups.value = _groups.value.map { if (it.id == groupId) it.copy(isActive = false) else it }
+    }
+
+    override suspend fun reactivateTrip(groupId: String) {
+        _groups.value = _groups.value.map { if (it.id == groupId) it.copy(isActive = true) else it }
     }
 
     override fun observeItineraryEvents(groupId: String): Flow<List<ItineraryEvent>> =

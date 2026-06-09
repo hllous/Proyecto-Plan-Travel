@@ -14,6 +14,7 @@ data class TravelGroup(
     val tripDestinationName: String? = null,
     val tripDestinationLat: Double? = null,
     val tripDestinationLng: Double? = null,
+    val isActive: Boolean = true,
 )
 
 data class DestinationCity(

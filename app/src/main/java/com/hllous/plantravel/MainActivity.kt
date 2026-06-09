@@ -2,6 +2,8 @@ package com.hllous.plantravel
 
 import android.content.Intent
 import android.os.Bundle
+import android.util.Log
+import android.view.View
 import androidx.activity.ComponentActivity
 import androidx.activity.compose.setContent
 import androidx.activity.enableEdgeToEdge
@@ -107,18 +109,30 @@ class MainActivity : ComponentActivity() {
             var overlayOrigin by remember { mutableStateOf<Offset?>(null) }
             val revealProgress = remember { androidx.compose.animation.core.Animatable(1f) }
             var revealJob by remember { mutableStateOf<kotlinx.coroutines.Job?>(null) }
+            var isThemeTransitionInProgress by remember { mutableStateOf(false) }
             var rootSize by remember { mutableStateOf(IntSize.Zero) }
             val scope = rememberCoroutineScope()
 
             val handleThemeChange: (Boolean, Offset?) -> Unit = handleThemeChange@{ targetDark, origin ->
+                if (isThemeTransitionInProgress) return@handleThemeChange
                 if (targetDark == isDarkTheme && overlayBitmap == null) return@handleThemeChange
                 revealJob?.cancel()
-                overlayBitmap = view.drawToBitmap().asImageBitmap()
-                overlayOrigin = origin
-                isDarkTheme = targetDark
-                prefs.edit().putBoolean(THEME_PREF_KEY, targetDark).apply()
+                isThemeTransitionInProgress = true
                 revealJob = scope.launch {
+                    val snapshot = captureThemeOverlay(view)
+                    if (snapshot == null) {
+                        overlayBitmap = null
+                        overlayOrigin = null
+                        isDarkTheme = targetDark
+                        prefs.edit().putBoolean(THEME_PREF_KEY, targetDark).apply()
+                        isThemeTransitionInProgress = false
+                        return@launch
+                    }
                     revealProgress.snapTo(0f)
+                    overlayBitmap = snapshot
+                    overlayOrigin = origin
+                    isDarkTheme = targetDark
+                    prefs.edit().putBoolean(THEME_PREF_KEY, targetDark).apply()
                     revealProgress.animateTo(
                         1f,
                         animationSpec = androidx.compose.animation.core.tween(
@@ -128,6 +142,7 @@ class MainActivity : ComponentActivity() {
                     )
                     overlayBitmap = null
                     overlayOrigin = null
+                    isThemeTransitionInProgress = false
                 }
             }
 
@@ -191,6 +206,18 @@ class MainActivity : ComponentActivity() {
 
 private const val THEME_PREFS = "plan_travel_prefs"
 private const val THEME_PREF_KEY = "dark_theme"
+private const val TAG = "MainActivity"
+
+private fun captureThemeOverlay(view: View) =
+    runCatching { view.drawToBitmap().asImageBitmap() }
+        .onFailure { error ->
+            Log.w(
+                TAG,
+                "Theme transition snapshot failed; switching theme without reveal animation.",
+                error
+            )
+        }
+        .getOrNull()
 
 private fun maxRevealRadius(origin: Offset, size: Size): Float {
     val topLeft = hypot(origin.x, origin.y)
@@ -340,6 +367,8 @@ fun MainAppContent(
                     navController = navController,
                     displayName = displayName,
                     groupViewModel = groupViewModel,
+                    pollViewModel = hiltViewModel<PollViewModel>(),
+                    destinationViewModel = destinationViewModel,
                     isDarkTheme = isDarkTheme,
                     onThemeChange = onThemeChange,
                     onProfileClick = { navController.navigate("profile") },

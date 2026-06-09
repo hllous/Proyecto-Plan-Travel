@@ -9,7 +9,9 @@ import com.hllous.plantravel.domain.model.TravelGroup
 import com.hllous.plantravel.domain.usecase.CreateGroupUseCase
 import com.hllous.plantravel.domain.usecase.DeleteGroupUseCase
 import com.hllous.plantravel.domain.usecase.DeleteMemberUseCase
+import com.hllous.plantravel.domain.usecase.EndTripUseCase
 import com.hllous.plantravel.domain.usecase.LeaveGroupUseCase
+import com.hllous.plantravel.domain.usecase.ReactivateTripUseCase
 import com.hllous.plantravel.domain.usecase.UpdateGroupNameUseCase
 import com.hllous.plantravel.presentation.group.GroupViewModel
 import com.hllous.plantravel.presentation.group.SelectedGroupHolder
@@ -41,6 +43,8 @@ class GroupViewModelRealtimeTest {
         deleteGroupUseCase = DeleteGroupUseCase(repo),
         deleteMemberUseCase = DeleteMemberUseCase(repo),
         leaveGroupUseCase = LeaveGroupUseCase(repo),
+        endTripUseCase = EndTripUseCase(repo),
+        reactivateTripUseCase = ReactivateTripUseCase(repo),
     )
 
     private fun warmUp(block: suspend () -> Unit): CoroutineScope {

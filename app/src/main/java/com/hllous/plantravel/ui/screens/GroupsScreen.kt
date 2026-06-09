@@ -305,6 +305,7 @@ private fun GroupDetailContent(
     var showAdminSheet by rememberSaveable { mutableStateOf(false) }
     var showLeaveConfirm by rememberSaveable { mutableStateOf(false) }
     var showDeleteConfirm by rememberSaveable { mutableStateOf(false) }
+    var showEndTripConfirm by rememberSaveable { mutableStateOf(false) }
     var editableGroupName by rememberSaveable { mutableStateOf(group.name) }
     var showQr by rememberSaveable { mutableStateOf(false) }
 
@@ -339,6 +340,22 @@ private fun GroupDetailContent(
                 ) { Text("Abandonar") }
             },
             dismissButton = { TextButton(onClick = { showLeaveConfirm = false }) { Text("Cancelar") } }
+        )
+    }
+
+    // End trip confirmation
+    if (showEndTripConfirm) {
+        AlertDialog(
+            onDismissRequest = { showEndTripConfirm = false },
+            title = { Text("Finalizar viaje") },
+            text = { Text("El grupo quedará marcado como finalizado. Podrás reactivarlo en cualquier momento.") },
+            confirmButton = {
+                Button(
+                    onClick = { showEndTripConfirm = false; groupViewModel.endTrip() },
+                    colors = ButtonDefaults.buttonColors(containerColor = MaterialTheme.colorScheme.error)
+                ) { Text("Finalizar") }
+            },
+            dismissButton = { TextButton(onClick = { showEndTripConfirm = false }) { Text("Cancelar") } }
         )
     }
 
@@ -400,6 +417,23 @@ private fun GroupDetailContent(
                     modifier = Modifier.fillMaxWidth(),
                     enabled = editableGroupName.isNotBlank()
                 ) { Text("Guardar cambios") }
+                if (group.isActive) {
+                    OutlinedButton(
+                        onClick = { showAdminSheet = false; showEndTripConfirm = true },
+                        modifier = Modifier.fillMaxWidth(),
+                        colors = ButtonDefaults.outlinedButtonColors(contentColor = MaterialTheme.colorScheme.error),
+                        border = BorderStroke(1.dp, MaterialTheme.colorScheme.error)
+                    ) {
+                        Text("Finalizar viaje 🏁")
+                    }
+                } else {
+                    Button(
+                        onClick = { showAdminSheet = false; groupViewModel.reactivateTrip() },
+                        modifier = Modifier.fillMaxWidth()
+                    ) {
+                        Text("Reactivar viaje")
+                    }
+                }
                 OutlinedButton(
                     onClick = { showAdminSheet = false; showDeleteConfirm = true },
                     modifier = Modifier.fillMaxWidth(),
@@ -484,6 +518,20 @@ private fun GroupDetailContent(
                         modifier = Modifier.padding(horizontal = 12.dp, vertical = 4.dp)
                     )
                 }
+                if (!group.isActive) {
+                    Surface(
+                        shape = RoundedCornerShape(50),
+                        color = MaterialTheme.colorScheme.onPrimary.copy(alpha = 0.28f)
+                    ) {
+                        Text(
+                            text = "🏁 Viaje finalizado",
+                            style = MaterialTheme.typography.labelMedium,
+                            fontWeight = FontWeight.Bold,
+                            color = MaterialTheme.colorScheme.onPrimary,
+                            modifier = Modifier.padding(horizontal = 12.dp, vertical = 4.dp)
+                        )
+                    }
+                }
             }
         }
 
@@ -532,16 +580,18 @@ private fun GroupDetailContent(
                     }
                 }
 
-                // Invite section
-                SectionEyebrow("Invitar")
-                InviteSection(
-                    invites = invites,
-                    onGenerate = { mainViewModel.generateInvite() },
-                    onDelete = { code -> mainViewModel.deleteInvite(code) },
-                    context = context,
-                    showQr = showQr,
-                    onQrToggle = { showQr = !showQr }
-                )
+                // Invite section (hidden when trip is ended)
+                if (group.isActive) {
+                    SectionEyebrow("Invitar")
+                    InviteSection(
+                        invites = invites,
+                        onGenerate = { mainViewModel.generateInvite() },
+                        onDelete = { code -> mainViewModel.deleteInvite(code) },
+                        context = context,
+                        showQr = showQr,
+                        onQrToggle = { showQr = !showQr }
+                    )
+                }
             }
         }
     }

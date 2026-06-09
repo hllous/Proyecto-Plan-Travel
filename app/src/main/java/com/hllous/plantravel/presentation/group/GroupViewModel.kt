@@ -10,7 +10,9 @@ import com.hllous.plantravel.domain.repository.TravelRepository
 import com.hllous.plantravel.domain.usecase.CreateGroupUseCase
 import com.hllous.plantravel.domain.usecase.DeleteGroupUseCase
 import com.hllous.plantravel.domain.usecase.DeleteMemberUseCase
+import com.hllous.plantravel.domain.usecase.EndTripUseCase
 import com.hllous.plantravel.domain.usecase.LeaveGroupUseCase
+import com.hllous.plantravel.domain.usecase.ReactivateTripUseCase
 import com.hllous.plantravel.domain.usecase.UpdateGroupNameUseCase
 import com.hllous.plantravel.presentation.UiState
 import dagger.hilt.android.lifecycle.HiltViewModel
@@ -38,6 +40,8 @@ class GroupViewModel @Inject constructor(
     private val deleteGroupUseCase: DeleteGroupUseCase,
     private val deleteMemberUseCase: DeleteMemberUseCase,
     private val leaveGroupUseCase: LeaveGroupUseCase,
+    private val endTripUseCase: EndTripUseCase,
+    private val reactivateTripUseCase: ReactivateTripUseCase,
 ) : ViewModel() {
 
     private val _groupsRetryTrigger = MutableStateFlow(0)
@@ -196,6 +200,24 @@ class GroupViewModel @Inject constructor(
                     _message.value = "Integrante eliminado"
                 }
                 .onFailure { _message.value = "Error al eliminar integrante" }
+        }
+    }
+
+    fun endTrip() {
+        viewModelScope.launch {
+            val groupId = currentGroup.value?.id ?: return@launch
+            runCatching { endTripUseCase(groupId) }
+                .onSuccess { reloadGroups(); _message.value = "Viaje finalizado" }
+                .onFailure { _message.value = "Error al finalizar el viaje" }
+        }
+    }
+
+    fun reactivateTrip() {
+        viewModelScope.launch {
+            val groupId = currentGroup.value?.id ?: return@launch
+            runCatching { reactivateTripUseCase(groupId) }
+                .onSuccess { reloadGroups(); _message.value = "Viaje reactivado" }
+                .onFailure { _message.value = "Error al reactivar el viaje" }
         }
     }
 }

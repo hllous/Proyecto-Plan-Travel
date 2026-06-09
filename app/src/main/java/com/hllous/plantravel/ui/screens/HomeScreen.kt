@@ -19,6 +19,7 @@ import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.layout.statusBarsPadding
 import androidx.compose.foundation.layout.width
 import androidx.compose.foundation.lazy.LazyRow
+import androidx.compose.foundation.lazy.items
 import androidx.compose.foundation.rememberScrollState
 import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.foundation.shape.RoundedCornerShape
@@ -30,6 +31,8 @@ import androidx.compose.material.icons.filled.DarkMode
 import androidx.compose.material.icons.filled.LightMode
 import androidx.compose.material.icons.filled.Link
 import androidx.compose.material.icons.filled.QrCode
+import androidx.compose.material.icons.filled.Star
+import androidx.compose.material3.CircularProgressIndicator
 import androidx.compose.material3.ElevatedCard
 import androidx.compose.material3.Icon
 import androidx.compose.material3.IconButton
@@ -37,6 +40,7 @@ import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.Surface
 import androidx.compose.material3.Text
 import androidx.compose.runtime.Composable
+import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.collectAsState
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateOf
@@ -44,20 +48,33 @@ import androidx.compose.runtime.remember
 import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
+import androidx.compose.ui.draw.clip
 import androidx.compose.ui.geometry.Offset
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.graphics.vector.ImageVector
+import androidx.compose.ui.layout.ContentScale
 import androidx.compose.ui.layout.boundsInRoot
 import androidx.compose.ui.layout.onGloballyPositioned
+import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.text.font.FontStyle
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.style.TextAlign
+import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import androidx.navigation.NavHostController
+import coil3.compose.AsyncImage
+import coil3.request.ImageRequest
+import coil3.request.allowHardware
 import com.hllous.plantravel.domain.model.GroupMember
+import com.hllous.plantravel.domain.model.PollState
 import com.hllous.plantravel.domain.model.TravelGroup
+import com.hllous.plantravel.presentation.UiState
+import com.hllous.plantravel.presentation.destination.DestinationViewModel
+import com.hllous.plantravel.presentation.destination.HomeFeedItem
+import com.hllous.plantravel.presentation.destination.TripDestinationState
 import com.hllous.plantravel.presentation.group.GroupViewModel
+import com.hllous.plantravel.presentation.poll.PollViewModel
 import com.hllous.plantravel.ui.theme.FrauncesFamily
 import com.hllous.plantravel.ui.utils.greetingForHour
 import com.hllous.plantravel.ui.utils.memberColor
@@ -69,6 +86,8 @@ fun HomeScreen(
     navController: NavHostController,
     displayName: String,
     groupViewModel: GroupViewModel,
+    pollViewModel: PollViewModel,
+    destinationViewModel: DestinationViewModel,
     isDarkTheme: Boolean = false,
     onThemeChange: (Boolean, Offset?) -> Unit = { _, _ -> },
     onProfileClick: () -> Unit = {},
@@ -181,7 +200,12 @@ fun HomeScreen(
             color = MaterialTheme.colorScheme.background
         ) {
             if (currentGroup != null) {
-                HomeGroupContent(navController = navController)
+                HomeGroupContent(
+                    navController = navController,
+                    currentGroup = currentGroup!!,
+                    pollViewModel = pollViewModel,
+                    destinationViewModel = destinationViewModel,
+                )
             } else {
                 HomeNoGroupContent(navController = navController)
             }
@@ -288,7 +312,21 @@ private fun NoGroupHeaderBlock() {
 // ── Content sections ────────────────────────────────────────────────────────────
 
 @Composable
-private fun HomeGroupContent(navController: NavHostController) {
+private fun HomeGroupContent(
+    navController: NavHostController,
+    currentGroup: TravelGroup,
+    pollViewModel: PollViewModel,
+    destinationViewModel: DestinationViewModel,
+) {
+    val poll by pollViewModel.poll.collectAsState()
+    val candidates by pollViewModel.candidates.collectAsState()
+    val homeFeed by destinationViewModel.homeFeed.collectAsState()
+    val tripDestination by destinationViewModel.tripDestination.collectAsState()
+
+    LaunchedEffect(tripDestination) {
+        if (tripDestination is TripDestinationState.Set) destinationViewModel.loadHomeFeed()
+    }
+
     Column(
         Modifier
             .fillMaxSize()
@@ -297,6 +335,68 @@ private fun HomeGroupContent(navController: NavHostController) {
             .navigationBarsPadding(),
         verticalArrangement = Arrangement.spacedBy(20.dp)
     ) {
+        // ── Poll summary card ──────────────────────────────────────────────────
+        if (poll != null && poll!!.state == PollState.OPEN) {
+            val winningCandidate = (candidates as? UiState.Success)?.data
+                ?.maxByOrNull { it.voteCount }?.candidate
+            val voteSubtitle = if (winningCandidate != null) {
+                "${winningCandidate.voteCount} voto${if (winningCandidate.voteCount != 1) "s" else ""}"
+            } else {
+                "Sin votos aún"
+            }
+            ElevatedCard(
+                onClick = { navController.navigate("poll_detail") },
+                modifier = Modifier.fillMaxWidth(),
+                shape = RoundedCornerShape(16.dp)
+            ) {
+                Row(
+                    Modifier.padding(14.dp),
+                    verticalAlignment = Alignment.CenterVertically,
+                    horizontalArrangement = Arrangement.spacedBy(12.dp)
+                ) {
+                    Box(
+                        Modifier
+                            .size(44.dp)
+                            .background(
+                                MaterialTheme.colorScheme.primaryContainer,
+                                RoundedCornerShape(12.dp)
+                            ),
+                        contentAlignment = Alignment.Center
+                    ) {
+                        Text("🗳️", fontSize = 22.sp)
+                    }
+                    Column(Modifier.weight(1f), verticalArrangement = Arrangement.spacedBy(2.dp)) {
+                        Text(
+                            text = "Encuesta activa",
+                            style = MaterialTheme.typography.labelSmall,
+                            color = MaterialTheme.colorScheme.onSurfaceVariant
+                        )
+                        Text(
+                            text = winningCandidate?.name ?: "Sin candidatos",
+                            style = MaterialTheme.typography.titleSmall,
+                            fontFamily = FrauncesFamily,
+                            fontWeight = FontWeight.Bold,
+                            color = MaterialTheme.colorScheme.onSurface,
+                            maxLines = 1,
+                            overflow = TextOverflow.Ellipsis
+                        )
+                        Text(
+                            text = voteSubtitle,
+                            style = MaterialTheme.typography.bodySmall,
+                            color = MaterialTheme.colorScheme.onSurfaceVariant
+                        )
+                    }
+                    Icon(
+                        Icons.AutoMirrored.Filled.KeyboardArrowRight,
+                        contentDescription = null,
+                        tint = MaterialTheme.colorScheme.outline,
+                        modifier = Modifier.size(20.dp)
+                    )
+                }
+            }
+        }
+
+        // ── Quick actions ──────────────────────────────────────────────────────
         Column(verticalArrangement = Arrangement.spacedBy(10.dp)) {
             HomeSectionLabel("Acciones rápidas")
             Row(
@@ -330,46 +430,44 @@ private fun HomeGroupContent(navController: NavHostController) {
             }
         }
 
-        Column(verticalArrangement = Arrangement.spacedBy(10.dp)) {
-            HomeSectionLabel("Esta semana")
-            LazyRow(
-                horizontalArrangement = Arrangement.spacedBy(10.dp),
-                contentPadding = PaddingValues(horizontal = 1.dp)
-            ) {
-                item {
-                    HomeTileCard(
-                        emoji = "💸",
-                        tag = "Finanzas",
-                        title = "Gastos sin dividir",
-                        subtitle = "Ir a gastos",
-                        tagContainerColor = MaterialTheme.colorScheme.tertiaryContainer,
-                        tagContentColor = MaterialTheme.colorScheme.onTertiaryContainer,
-                        onClick = { navController.navigateSingleTopTo("gastos") }
-                    )
-                }
-                item {
-                    HomeTileCard(
-                        emoji = "🏞️",
-                        tag = "Destinos",
-                        title = "Explorá destinos",
-                        subtitle = "Ver recomendaciones",
-                        tagContainerColor = MaterialTheme.colorScheme.secondaryContainer,
-                        tagContentColor = MaterialTheme.colorScheme.onSecondaryContainer,
-                        onClick = { navController.navigateSingleTopTo("destinations") }
-                    )
-                }
-                item {
-                    HomeTileCard(
-                        emoji = "👥",
-                        tag = "Grupo",
-                        title = "Invitá personas",
-                        subtitle = "Ver código",
-                        tagContainerColor = MaterialTheme.colorScheme.primaryContainer,
-                        tagContentColor = MaterialTheme.colorScheme.onPrimaryContainer,
-                        onClick = { navController.navigateSingleTopTo("groups") }
-                    )
+        // ── Recommendations section ────────────────────────────────────────────
+        when (homeFeed) {
+            is UiState.Loading -> if (tripDestination is TripDestinationState.Set) {
+                Column(verticalArrangement = Arrangement.spacedBy(10.dp)) {
+                    HomeSectionLabel("Para tu viaje")
+                    Box(
+                        Modifier
+                            .fillMaxWidth()
+                            .height(160.dp),
+                        contentAlignment = Alignment.Center
+                    ) {
+                        CircularProgressIndicator(modifier = Modifier.size(28.dp))
+                    }
                 }
             }
+            is UiState.Success -> {
+                val places = (homeFeed as UiState.Success<List<HomeFeedItem>>).data
+                if (places.isNotEmpty()) {
+                    Column(verticalArrangement = Arrangement.spacedBy(10.dp)) {
+                        HomeSectionLabel("Para tu viaje")
+                        LazyRow(
+                            horizontalArrangement = Arrangement.spacedBy(10.dp),
+                            contentPadding = PaddingValues(horizontal = 1.dp)
+                        ) {
+                            items(places) { item ->
+                                HomeRecommendationCard(
+                                    item = item,
+                                    onClick = {
+                                        destinationViewModel.requestOpenPoi(item.place, item.category)
+                                        navController.navigateSingleTopTo("destinations")
+                                    }
+                                )
+                            }
+                        }
+                    }
+                }
+            }
+            else -> Unit
         }
     }
 }
@@ -518,6 +616,85 @@ private fun HomeTileCard(
                 style = MaterialTheme.typography.labelSmall,
                 color = MaterialTheme.colorScheme.onSurfaceVariant
             )
+        }
+    }
+}
+
+@Composable
+private fun HomeRecommendationCard(
+    item: HomeFeedItem,
+    onClick: () -> Unit,
+) {
+    val context = LocalContext.current
+
+    ElevatedCard(
+        onClick = onClick,
+        modifier = Modifier.width(150.dp),
+        shape = RoundedCornerShape(18.dp)
+    ) {
+        Column {
+            AsyncImage(
+                model = item.place.photoUrl.ifBlank { null }?.let { url ->
+                    ImageRequest.Builder(context)
+                        .data(url)
+                        .allowHardware(false)
+                        .build()
+                },
+                contentDescription = item.place.name,
+                modifier = Modifier
+                    .fillMaxWidth()
+                    .height(100.dp)
+                    .clip(RoundedCornerShape(topStart = 18.dp, topEnd = 18.dp)),
+                contentScale = ContentScale.Crop,
+            )
+            Column(
+                Modifier.padding(10.dp),
+                verticalArrangement = Arrangement.spacedBy(4.dp)
+            ) {
+                Surface(
+                    shape = RoundedCornerShape(100.dp),
+                    color = MaterialTheme.colorScheme.primaryContainer
+                ) {
+                    Text(
+                        text = item.category.uppercase(),
+                        modifier = Modifier.padding(horizontal = 7.dp, vertical = 2.dp),
+                        style = MaterialTheme.typography.labelSmall,
+                        fontWeight = FontWeight.ExtraBold,
+                        color = MaterialTheme.colorScheme.onPrimaryContainer,
+                        letterSpacing = 0.5.sp,
+                        fontSize = 9.sp
+                    )
+                }
+                Text(
+                    text = item.place.name,
+                    style = MaterialTheme.typography.bodySmall,
+                    fontFamily = FrauncesFamily,
+                    fontWeight = FontWeight.SemiBold,
+                    color = MaterialTheme.colorScheme.onSurface,
+                    maxLines = 2,
+                    overflow = TextOverflow.Ellipsis,
+                    lineHeight = 15.sp
+                )
+                if (item.place.rating > 0.0) {
+                    Row(
+                        verticalAlignment = Alignment.CenterVertically,
+                        horizontalArrangement = Arrangement.spacedBy(2.dp)
+                    ) {
+                        Icon(
+                            Icons.Default.Star,
+                            contentDescription = null,
+                            modifier = Modifier.size(11.dp),
+                            tint = MaterialTheme.colorScheme.primary
+                        )
+                        Text(
+                            text = "%.1f".format(item.place.rating),
+                            style = MaterialTheme.typography.labelSmall,
+                            color = MaterialTheme.colorScheme.onSurfaceVariant,
+                            fontSize = 10.sp
+                        )
+                    }
+                }
+            }
         }
     }
 }

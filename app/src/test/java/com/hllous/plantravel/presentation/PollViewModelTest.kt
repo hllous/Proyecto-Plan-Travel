@@ -226,12 +226,14 @@ class PollViewModelTest {
         assertEquals("Ya hay una encuesta activa", vm.errorMessage.value)
     }
 
-    // ── Cycle 1A: voteProgress is proportional to total votes ────────────────
+    // ── Cycle 1A: voteProgress uses member count as denominator ─────────────
 
     @Test
-    fun voteProgressIsProportionalToTotalVotes() {
-        val member = GroupMember(id = "m1", groupId = "group-1", userId = "user-1", name = "User", role = MemberRole.USER)
-        val repo = FakeTravelRepository(initialMembers = mapOf("group-1" to listOf(member)))
+    fun voteProgressIsProportionalToMemberCount() {
+        val members = (1..4).map { i ->
+            GroupMember(id = "m$i", groupId = "group-1", userId = "user-$i", name = "User$i", role = MemberRole.USER)
+        }
+        val repo = FakeTravelRepository(initialMembers = mapOf("group-1" to members))
         val holder = SelectedGroupHolder().also { it.selectedGroupId.value = "group-1" }
         repo.simulatePollUpdate("group-1", openPoll)
         val candidates = listOf(
@@ -244,6 +246,7 @@ class PollViewModelTest {
         val job = CoroutineScope(UnconfinedTestDispatcher()).launch { vm.candidates.collect {} }
 
         val uiCandidates = (vm.candidates.value as UiState.Success).data
+        // 4 members: candidate A has 3 votes → 3/4 = 0.75; candidate B has 1 vote → 1/4 = 0.25
         assertEquals(0.75f, uiCandidates[0].voteProgress, 0.001f)
         assertEquals(0.25f, uiCandidates[1].voteProgress, 0.001f)
         job.cancel()

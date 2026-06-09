@@ -65,6 +65,7 @@ import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
 import androidx.compose.ui.layout.ContentScale
+import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.semantics.Role
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.style.TextAlign
@@ -72,6 +73,8 @@ import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.dp
 import androidx.navigation.NavHostController
 import coil3.compose.AsyncImage
+import coil3.request.ImageRequest
+import coil3.request.allowHardware
 import com.hllous.plantravel.domain.model.MemberRole
 import com.hllous.plantravel.domain.model.Poll
 import com.hllous.plantravel.domain.model.PollState
@@ -483,6 +486,7 @@ private fun PollCandidateCard(
     onToggleVote: () -> Unit,
 ) {
     val candidate = uiModel.candidate
+    val context = LocalContext.current
 
     OutlinedCard(
         modifier = Modifier
@@ -500,7 +504,10 @@ private fun PollCandidateCard(
     ) {
         Column {
             AsyncImage(
-                model = candidate.photoUrl,
+                model = ImageRequest.Builder(context)
+                    .data(candidate.photoUrl)
+                    .allowHardware(false)
+                    .build(),
                 contentDescription = candidate.name,
                 contentScale = ContentScale.Crop,
                 modifier = Modifier

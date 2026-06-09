@@ -27,6 +27,9 @@ import androidx.compose.runtime.remember
 import androidx.compose.runtime.rememberCoroutineScope
 import androidx.compose.runtime.saveable.rememberSaveable
 import androidx.compose.runtime.setValue
+import androidx.lifecycle.Lifecycle
+import androidx.lifecycle.LifecycleEventObserver
+import androidx.lifecycle.compose.LocalLifecycleOwner
 import kotlinx.coroutines.launch
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
@@ -100,12 +103,13 @@ fun QrScannerScreen(viewModel: MainViewModel, onDone: () -> Unit, onBack: () -> 
 @Composable
 private fun QrCameraPreview(onQrDetected: (String) -> Unit) {
     val context = LocalContext.current
+    val lifecycleOwner = LocalLifecycleOwner.current
     val barcodeView = remember {
         CompoundBarcodeView(context).apply {
             barcodeView.decoderFactory = com.journeyapps.barcodescanner.DefaultDecoderFactory(listOf(BarcodeFormat.QR_CODE))
         }
     }
-    DisposableEffect(Unit) {
+    DisposableEffect(lifecycleOwner) {
         val callback = object : BarcodeCallback {
             override fun barcodeResult(result: BarcodeResult?) {
                 val text = result?.text ?: return
@@ -113,8 +117,19 @@ private fun QrCameraPreview(onQrDetected: (String) -> Unit) {
             }
         }
         barcodeView.decodeContinuous(callback)
-        barcodeView.resume()
+        val observer = LifecycleEventObserver { _, event ->
+            when (event) {
+                Lifecycle.Event.ON_RESUME -> barcodeView.resume()
+                Lifecycle.Event.ON_PAUSE -> barcodeView.pause()
+                else -> {}
+            }
+        }
+        lifecycleOwner.lifecycle.addObserver(observer)
+        if (lifecycleOwner.lifecycle.currentState.isAtLeast(Lifecycle.State.RESUMED)) {
+            barcodeView.resume()
+        }
         onDispose {
+            lifecycleOwner.lifecycle.removeObserver(observer)
             barcodeView.pause()
         }
     }

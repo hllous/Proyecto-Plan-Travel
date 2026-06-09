@@ -95,6 +95,14 @@ class AuthViewModel @Inject constructor(
         _pendingInviteCode.value = null
     }
 
+    fun refreshDisplayName() {
+        val userId = (_state.value as? AuthState.Authenticated)?.userId ?: return
+        viewModelScope.launch {
+            val name = authRepository.getDisplayName(userId) ?: return@launch
+            _state.value = AuthState.Authenticated(userId, name)
+        }
+    }
+
     fun clearError() {
         _state.value = AuthState.Unauthenticated
     }

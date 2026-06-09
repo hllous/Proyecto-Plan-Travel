@@ -38,6 +38,22 @@ class DeleteGroupUseCase @Inject constructor(
     }
 }
 
+class EndTripUseCase @Inject constructor(
+    private val repository: TravelRepository
+) {
+    suspend operator fun invoke(groupId: String) {
+        repository.endTrip(groupId)
+    }
+}
+
+class ReactivateTripUseCase @Inject constructor(
+    private val repository: TravelRepository
+) {
+    suspend operator fun invoke(groupId: String) {
+        repository.reactivateTrip(groupId)
+    }
+}
+
 class LeaveGroupUseCase @Inject constructor(
     private val repository: TravelRepository
 ) {
@@ -144,7 +160,7 @@ class SetExpenseGroupPinnedUseCase @Inject constructor(
 class SetExpenseGroupPayerUseCase @Inject constructor(
     private val repository: TravelRepository
 ) {
-    suspend operator fun invoke(expenseGroupId: String, memberId: String) {
+    suspend operator fun invoke(expenseGroupId: String, memberId: String?) {
         repository.setExpenseGroupPayer(expenseGroupId, memberId)
     }
 }

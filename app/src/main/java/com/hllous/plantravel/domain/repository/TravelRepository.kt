@@ -31,6 +31,7 @@ interface TravelRepository {
     suspend fun deleteInvite(code: String)
     suspend fun consumeInvite(code: String, userId: String, displayName: String): Result<String>
     suspend fun broadcastMemberJoined(groupId: String)
+    suspend fun broadcastDisplayNameChanged()
 
     suspend fun getMpAlias(userId: String): String?
     suspend fun updateMpAlias(alias: String)
@@ -51,6 +52,8 @@ interface TravelRepository {
     ): StoredDestination
 
     suspend fun setTripDestination(groupId: String, placeId: String, name: String, lat: Double, lng: Double)
+    suspend fun endTrip(groupId: String)
+    suspend fun reactivateTrip(groupId: String)
 
     fun observeItineraryEvents(groupId: String): Flow<List<ItineraryEvent>>
     suspend fun createItineraryEvent(groupId: String, name: String, date: String, timeOfDay: String?, description: String?, placeId: String?, endDate: String? = null): String

@@ -99,6 +99,8 @@ import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.dp
 import androidx.navigation.NavHostController
 import coil3.compose.AsyncImage
+import coil3.request.ImageRequest
+import coil3.request.allowHardware
 import com.hllous.plantravel.R
 import com.hllous.plantravel.data.destination.DestinationFallbackImage
 import com.hllous.plantravel.domain.model.GroupMember
@@ -168,12 +170,23 @@ private fun Level2Content(
     val poisByCategory by viewModel.poisByCategory.collectAsState()
     val activePoll by viewModel.activePoll.collectAsState()
     val currentMember by viewModel.currentMember.collectAsState()
+    val pendingPoi by viewModel.pendingPoi.collectAsState()
+    val pendingCategory by viewModel.pendingCategory.collectAsState()
 
     var selectedCategory by rememberSaveable { mutableStateOf(POI_CATEGORIES.first().label) }
     var selectedPoi by remember { mutableStateOf<PlaceResult?>(null) }
 
     LaunchedEffect(Unit) {
         viewModel.selectPoiCategory(selectedCategory)
+    }
+
+    LaunchedEffect(pendingPoi) {
+        val poi = pendingPoi ?: return@LaunchedEffect
+        val cat = pendingCategory
+        if (cat != null) selectedCategory = cat
+        viewModel.selectPoiCategory(cat ?: selectedCategory)
+        selectedPoi = poi
+        viewModel.clearPendingPoi()
     }
 
     Scaffold(
@@ -1347,6 +1360,8 @@ private fun DestinationImage(
     subtitle: String? = null,
     icon: ImageVector = Icons.Default.Image,
 ) {
+    val context = LocalContext.current
+
     val fallbackRegionSlug = DestinationFallbackImage.regionSlugFromToken(imageUrl)
     if (fallbackRegionSlug != null) {
         Image(
@@ -1369,7 +1384,10 @@ private fun DestinationImage(
     }
 
     AsyncImage(
-        model = imageUrl,
+        model = ImageRequest.Builder(context)
+            .data(imageUrl)
+            .allowHardware(false)
+            .build(),
         contentDescription = contentDescription,
         contentScale = ContentScale.Crop,
         modifier = modifier,

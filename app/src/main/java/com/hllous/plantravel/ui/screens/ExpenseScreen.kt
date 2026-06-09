@@ -539,7 +539,6 @@ private fun ExpenseGroupListScreen(
                     ExpenseOverviewCard(
                         totalCents = dashboardState.totalCents,
                         pendingGroupsCount = dashboardState.pendingGroupsCount,
-                        onDetailClick = { primaryGroup?.let { onSelectGroup(it.id) } },
                     )
                 }
 
@@ -771,7 +770,6 @@ private fun ExpenseAvatarCluster(members: List<GroupMember>) {
 private fun ExpenseOverviewCard(
     totalCents: Long,
     pendingGroupsCount: Int,
-    onDetailClick: () -> Unit,
 ) {
     Surface(
         modifier = Modifier.fillMaxWidth(),
@@ -825,19 +823,6 @@ private fun ExpenseOverviewCard(
                             style = MaterialTheme.typography.labelLarge,
                             fontWeight = FontWeight.Bold,
                             color = MaterialTheme.colorScheme.onPrimary,
-                        )
-                    }
-                    Surface(
-                        onClick = onDetailClick,
-                        shape = RoundedCornerShape(18.dp),
-                        color = MaterialTheme.colorScheme.background,
-                    ) {
-                        Text(
-                            text = "Ver detalle",
-                            modifier = Modifier.padding(horizontal = 18.dp, vertical = 10.dp),
-                            style = MaterialTheme.typography.labelLarge,
-                            fontWeight = FontWeight.SemiBold,
-                            color = MaterialTheme.colorScheme.primary,
                         )
                     }
                 }
@@ -1951,7 +1936,7 @@ private fun PayerSelectorCard(
     members: List<GroupMember>,
     isAdmin: Boolean,
     isFinalized: Boolean,
-    onPayerSelected: (memberId: String) -> Unit,
+    onPayerSelected: (memberId: String?) -> Unit,
 ) {
     var dropdownExpanded by remember { mutableStateOf(false) }
     val canChange = isAdmin && !isFinalized
@@ -2033,6 +2018,28 @@ private fun PayerSelectorCard(
                 expanded = dropdownExpanded,
                 onDismissRequest = { dropdownExpanded = false },
             ) {
+                if (paidByMemberId != null) {
+                    DropdownMenuItem(
+                        text = {
+                            Text(
+                                text = "Sin pagador",
+                                color = MaterialTheme.colorScheme.onSurfaceVariant,
+                            )
+                        },
+                        onClick = {
+                            onPayerSelected(null)
+                            dropdownExpanded = false
+                        },
+                        leadingIcon = {
+                            Icon(
+                                imageVector = Icons.Default.Close,
+                                contentDescription = null,
+                                modifier = Modifier.size(18.dp),
+                                tint = MaterialTheme.colorScheme.onSurfaceVariant,
+                            )
+                        },
+                    )
+                }
                 members.forEach { member ->
                     val isSelected = member.id == paidByMemberId
                     DropdownMenuItem(

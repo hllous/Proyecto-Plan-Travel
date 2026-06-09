@@ -232,7 +232,7 @@ class ExpenseViewModel @Inject constructor(
         }
     }
 
-    fun setPayer(memberId: String) {
+    fun setPayer(memberId: String?) {
         viewModelScope.launch {
             val expenseGroupId = _selectedExpenseGroupId.value ?: return@launch
             val result = runCatching { setExpenseGroupPayerUseCase(expenseGroupId, memberId) }
@@ -370,6 +370,7 @@ class ExpenseViewModel @Inject constructor(
                 return@launch
             }
             reloadExpenseItems()
+            reloadExpenseGroups()
             recalculateSettlementSilently(expenseGroupId)
         }
     }
@@ -399,6 +400,7 @@ class ExpenseViewModel @Inject constructor(
             when (outcome) {
                 AssignmentOutcome.Accepted -> {
                     reloadAssignments()
+                    reloadExpenseGroups()
                     val expenseGroupId = _selectedExpenseGroupId.value
                     if (expenseGroupId != null) recalculateSettlementSilently(expenseGroupId)
                 }
@@ -420,6 +422,7 @@ class ExpenseViewModel @Inject constructor(
                 return@launch
             }
             reloadExpenseItems()
+            reloadExpenseGroups()
             if (expenseGroupId != null) recalculateSettlementSilently(expenseGroupId)
         }
     }
