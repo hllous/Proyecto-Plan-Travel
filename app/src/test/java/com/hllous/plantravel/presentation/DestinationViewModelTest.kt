@@ -14,6 +14,7 @@ import com.hllous.plantravel.presentation.destination.DestinationViewModel
 import com.hllous.plantravel.presentation.destination.TripDestinationState
 import com.hllous.plantravel.presentation.group.SelectedGroupHolder
 import kotlinx.coroutines.ExperimentalCoroutinesApi
+import kotlinx.coroutines.channels.Channel
 import kotlinx.coroutines.flow.flow
 import kotlinx.coroutines.flow.flowOf
 import kotlinx.coroutines.flow.collect
@@ -597,6 +598,50 @@ class DestinationViewModelTest {
         advanceUntilIdle()
 
         assertTrue(vm.poisByCategory.value is UiState.Error)
+    }
+
+    @Test
+    fun loadHomeFeedStartsPoiRequestsInParallel() = runTest {
+        val group = TravelGroup(
+            id = "group-1", name = "Viaje",
+            tripDestinationPlaceId = "place-99",
+            tripDestinationName = "Bariloche",
+            tripDestinationLat = -41.1335,
+            tripDestinationLng = -71.3103,
+        )
+        val startedTypes = mutableListOf<String>()
+        var inFlight = 0
+        var maxInFlight = 0
+        val releaseSearches = Channel<Unit>(capacity = 4)
+        val places = FakePlacesApiClient(
+            poiResults = listOf(fakePlace),
+            beforeSearchPois = { type ->
+                startedTypes += type
+                inFlight++
+                maxInFlight = maxOf(maxInFlight, inFlight)
+                releaseSearches.receive()
+            },
+            afterSearchPois = {
+                inFlight--
+            },
+        )
+        val repo = FakeTravelRepository(initialGroups = listOf(group))
+        val holder = SelectedGroupHolder().also { it.selectedGroupId.value = "group-1" }
+        val vm = viewModel(repo = repo, places = places, holder = holder)
+        backgroundScope.launch { vm.tripDestination.collect {} }
+        advanceUntilIdle()
+        assertTrue(vm.tripDestination.value is TripDestinationState.Set)
+
+        vm.loadHomeFeed()
+        advanceUntilIdle()
+
+        assertEquals(4, startedTypes.distinct().size)
+        assertTrue(maxInFlight > 1)
+
+        repeat(4) { releaseSearches.trySend(Unit) }
+        advanceUntilIdle()
+
+        assertTrue(vm.homeFeed.value is UiState.Success)
     }
 
     // ── Bug 4: createPollWithPoi / createPollWithDestination ──────────────────

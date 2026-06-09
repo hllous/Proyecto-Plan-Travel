@@ -9,6 +9,10 @@ class SupabaseSessionProvider(private val supabase: SupabaseClient) : SessionPro
         get() = supabase.auth.currentUserOrNull()?.id
 
     override val displayName: String?
-        get() = supabase.auth.currentUserOrNull()?.userMetadata
-            ?.toString() // resolved from profile at login time via AuthViewModel
+        get() {
+            val metadata = supabase.auth.currentUserOrNull()?.userMetadata ?: return null
+            return metadata["display_name"]?.toString()?.trim('"')
+                ?: metadata["full_name"]?.toString()?.trim('"')
+                ?: metadata["name"]?.toString()?.trim('"')
+        }
 }

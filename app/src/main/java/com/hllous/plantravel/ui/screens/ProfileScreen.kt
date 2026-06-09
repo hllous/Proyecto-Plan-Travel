@@ -28,6 +28,7 @@ import androidx.compose.material.icons.filled.Person
 import androidx.compose.material.icons.filled.Phone
 import androidx.compose.material3.Button
 import androidx.compose.material3.ButtonDefaults
+import androidx.compose.material3.CircularProgressIndicator
 import androidx.compose.material3.ElevatedCard
 import androidx.compose.material3.Icon
 import androidx.compose.material3.IconButton
@@ -70,18 +71,30 @@ fun ProfileScreen(
 ) {
     val state by authViewModel.state.collectAsState()
     val userEmail by authViewModel.userEmail.collectAsState()
-    val displayName = (state as? AuthState.Authenticated)?.displayName ?: ""
-    val initials = displayInitials(displayName)
+    val authenticatedDisplayName = (state as? AuthState.Authenticated)?.displayName ?: ""
     val currentGroup by groupViewModel?.currentGroup?.collectAsState() ?: remember { mutableStateOf(null) }
     val members by groupViewModel?.members?.collectAsState() ?: remember { mutableStateOf(emptyList()) }
-    val savedAlias by profileViewModel.mpAlias.collectAsState()
+    val editorState by profileViewModel.editorState.collectAsState()
     val profileMessage by profileViewModel.message.collectAsState()
+    val profileUpdated by profileViewModel.profileUpdated.collectAsState()
     val snackbarHostState = remember { SnackbarHostState() }
+    val displayName = editorState.displayName.ifBlank { authenticatedDisplayName }
+    val initials = displayInitials(displayName)
+    var nameInput by rememberSaveable(editorState.displayName) { mutableStateOf(editorState.displayName) }
+    var phoneInput by rememberSaveable(editorState.phone) { mutableStateOf(editorState.phone) }
+    var aliasInput by rememberSaveable(editorState.mpAlias) { mutableStateOf(editorState.mpAlias) }
 
     LaunchedEffect(profileMessage) {
         val msg = profileMessage ?: return@LaunchedEffect
         snackbarHostState.showSnackbar(msg)
         profileViewModel.clearMessage()
+    }
+
+    LaunchedEffect(profileUpdated) {
+        if (profileUpdated) {
+            authViewModel.refreshDisplayName()
+            profileViewModel.clearProfileUpdated()
+        }
     }
 
     Box(Modifier.fillMaxSize()) {
@@ -179,7 +192,7 @@ fun ProfileScreen(
                         ProfileInfoRow(
                             icon = { Icon(Icons.Default.Phone, contentDescription = null, modifier = Modifier.size(20.dp)) },
                             label = "Teléfono",
-                            value = "Sin teléfono"
+                            value = editorState.phone.ifBlank { "Sin teléfono" }
                         )
                     }
                 }
@@ -240,14 +253,34 @@ fun ProfileScreen(
 
                 Spacer(Modifier.height(16.dp))
 
-                // MercadoPago alias card
-                var aliasInput by rememberSaveable(savedAlias) { mutableStateOf(savedAlias) }
+                // Unified profile edit form
                 ElevatedCard(modifier = Modifier.fillMaxWidth()) {
                     Column(modifier = Modifier.padding(16.dp)) {
                         Text(
-                            text = "MercadoPago",
+                            text = "Editar perfil",
                             style = MaterialTheme.typography.titleSmall,
                             fontWeight = FontWeight.SemiBold,
+                        )
+                        Spacer(Modifier.height(10.dp))
+                        OutlinedTextField(
+                            value = nameInput,
+                            onValueChange = { nameInput = it },
+                            label = { Text("Nombre") },
+                            singleLine = true,
+                            modifier = Modifier.fillMaxWidth(),
+                            colors = travelTextFieldColors(),
+                            enabled = !editorState.isLoading,
+                        )
+                        Spacer(Modifier.height(10.dp))
+                        OutlinedTextField(
+                            value = phoneInput,
+                            onValueChange = { phoneInput = it },
+                            label = { Text("Teléfono") },
+                            placeholder = { Text("+54 9 11 0000-0000") },
+                            singleLine = true,
+                            modifier = Modifier.fillMaxWidth(),
+                            colors = travelTextFieldColors(),
+                            enabled = !editorState.isLoading,
                         )
                         Spacer(Modifier.height(10.dp))
                         OutlinedTextField(
@@ -258,13 +291,33 @@ fun ProfileScreen(
                             singleLine = true,
                             modifier = Modifier.fillMaxWidth(),
                             colors = travelTextFieldColors(),
+                            enabled = !editorState.isLoading,
                         )
                         Spacer(Modifier.height(10.dp))
                         Button(
-                            onClick = { profileViewModel.updateMpAlias(aliasInput) },
+                            onClick = {
+                                profileViewModel.saveProfile(
+                                    displayName = nameInput,
+                                    phone = phoneInput,
+                                    mpAlias = aliasInput,
+                                )
+                            },
+                            enabled = !editorState.isLoading && (
+                                nameInput.trim() != editorState.displayName ||
+                                    phoneInput.trim() != editorState.phone ||
+                                    aliasInput.trim() != editorState.mpAlias
+                                ),
                             modifier = Modifier.fillMaxWidth(),
                         ) {
-                            Text("Guardar alias")
+                            if (editorState.isLoading) {
+                                CircularProgressIndicator(
+                                    modifier = Modifier.size(18.dp),
+                                    color = MaterialTheme.colorScheme.onPrimary,
+                                    strokeWidth = 2.dp,
+                                )
+                            } else {
+                                Text("Guardar cambios")
+                            }
                         }
                     }
                 }

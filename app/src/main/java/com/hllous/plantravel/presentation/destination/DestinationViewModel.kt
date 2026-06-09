@@ -27,6 +27,8 @@ import java.net.URLEncoder
 import javax.inject.Inject
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.ExperimentalCoroutinesApi
+import kotlinx.coroutines.async
+import kotlinx.coroutines.awaitAll
 import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.SharingStarted
 import kotlinx.coroutines.flow.StateFlow
@@ -51,6 +53,8 @@ sealed class TripDestinationState {
         val lng: Double,
     ) : TripDestinationState()
 }
+
+data class HomeFeedItem(val place: PlaceResult, val category: String)
 
 @HiltViewModel
 @OptIn(ExperimentalCoroutinesApi::class)
@@ -78,6 +82,15 @@ class DestinationViewModel @Inject constructor(
 
     private val _poisByCategory = MutableStateFlow<UiState<RankedRecommendations>>(UiState.Loading)
     val poisByCategory: StateFlow<UiState<RankedRecommendations>> = _poisByCategory.asStateFlow()
+
+    private val _homeFeed = MutableStateFlow<UiState<List<HomeFeedItem>>>(UiState.Loading)
+    val homeFeed: StateFlow<UiState<List<HomeFeedItem>>> = _homeFeed.asStateFlow()
+
+    private val _pendingPoi = MutableStateFlow<PlaceResult?>(null)
+    val pendingPoi: StateFlow<PlaceResult?> = _pendingPoi.asStateFlow()
+
+    private val _pendingCategory = MutableStateFlow<String?>(null)
+    val pendingCategory: StateFlow<String?> = _pendingCategory.asStateFlow()
 
     private val _reloadTrigger = MutableStateFlow(0)
 
@@ -599,6 +612,41 @@ class DestinationViewModel @Inject constructor(
 
     private fun StoredDestination.photoKey(): String =
         if (id.isNotBlank()) id else "$source:$sourceId"
+
+    fun loadHomeFeed() {
+        val dest = tripDestination.value as? TripDestinationState.Set ?: return
+        if (_homeFeed.value is UiState.Success) return
+        viewModelScope.launch {
+            _homeFeed.value = UiState.Loading
+            val categories = listOf("Alojamiento", "Gastronomía", "Actividades", "Naturaleza")
+            val seenPlaceIds = mutableSetOf<String>()
+            val result = mutableListOf<HomeFeedItem>()
+            val placesByCategory = categories.map { cat ->
+                async {
+                    cat to runCatching { placesApiClient.searchPois(dest.lat, dest.lng, cat) }
+                        .getOrDefault(emptyList())
+                }
+            }.awaitAll()
+            for ((cat, places) in placesByCategory) {
+                val ranked = ranker.rank(places)
+                (ranked.top + ranked.others)
+                    .filter { seenPlaceIds.add(it.placeId) }
+                    .take(2)
+                    .forEach { result.add(HomeFeedItem(it, cat)) }
+            }
+            _homeFeed.value = UiState.Success(result)
+        }
+    }
+
+    fun requestOpenPoi(place: PlaceResult, category: String) {
+        _pendingCategory.value = category
+        _pendingPoi.value = place
+    }
+
+    fun clearPendingPoi() {
+        _pendingPoi.value = null
+        _pendingCategory.value = null
+    }
 
     fun selectPoiCategory(category: String) {
         val dest = tripDestination.value as? TripDestinationState.Set ?: return

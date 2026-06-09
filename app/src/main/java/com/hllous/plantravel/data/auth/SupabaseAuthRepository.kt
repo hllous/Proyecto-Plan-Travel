@@ -1,6 +1,7 @@
 package com.hllous.plantravel.data.auth
 
 import com.hllous.plantravel.domain.auth.AuthRepository
+import com.hllous.plantravel.domain.auth.ProfileDetails
 import io.github.jan.supabase.SupabaseClient
 import io.github.jan.supabase.auth.auth
 import io.github.jan.supabase.auth.providers.Google
@@ -29,7 +30,8 @@ class SupabaseAuthRepository(private val supabase: SupabaseClient) : AuthReposit
     private data class ProfileDto(
         val id: String,
         @SerialName("display_name") val displayName: String,
-        val phone: String? = null
+        val phone: String? = null,
+        @SerialName("mp_alias") val mpAlias: String? = null,
     )
 
     @Serializable
@@ -80,6 +82,22 @@ class SupabaseAuthRepository(private val supabase: SupabaseClient) : AuthReposit
             ?.displayName
     }.getOrNull()
 
+    override suspend fun getProfileDetails(userId: String): ProfileDetails? = safeResult {
+        supabase.from("profiles")
+            .select(Columns.raw("id, display_name, phone, mp_alias")) {
+                filter { eq("id", userId) }
+                limit(1)
+            }
+            .decodeSingleOrNull<ProfileDto>()
+            ?.let { profile ->
+                ProfileDetails(
+                    displayName = profile.displayName,
+                    phone = profile.phone.orEmpty(),
+                    mpAlias = profile.mpAlias.orEmpty(),
+                )
+            }
+    }.getOrNull()
+
     override suspend fun createProfile(
         userId: String,
         displayName: String,
@@ -89,8 +107,27 @@ class SupabaseAuthRepository(private val supabase: SupabaseClient) : AuthReposit
             ProfileDto(
                 id = userId,
                 displayName = displayName,
-                phone = phone.ifBlank { null }
+                phone = phone.ifBlank { null },
+                mpAlias = null,
             )
         )
+    }
+
+    override suspend fun updateDisplayName(newName: String): Result<Unit> = safeResult {
+        val userId = supabase.auth.currentUserOrNull()?.id ?: error("No hay sesión activa")
+        supabase.from("profiles").update({ set("display_name", newName) }) {
+            filter { eq("id", userId) }
+        }
+    }
+
+    override suspend fun updateProfile(displayName: String, phone: String, mpAlias: String): Result<Unit> = safeResult {
+        val userId = supabase.auth.currentUserOrNull()?.id ?: error("No hay sesión activa")
+        supabase.from("profiles").update({
+            set("display_name", displayName)
+            set("phone", phone.ifBlank { null })
+            set("mp_alias", mpAlias.ifBlank { null })
+        }) {
+            filter { eq("id", userId) }
+        }
     }
 }

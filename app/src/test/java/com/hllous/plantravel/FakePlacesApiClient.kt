@@ -8,6 +8,8 @@ class FakePlacesApiClient(
     var poiResults: List<PlaceResult> = emptyList(),
     var searchDestinationsThrows: Boolean = false,
     var searchPoisThrows: Boolean = false,
+    var beforeSearchPois: suspend (String) -> Unit = {},
+    var afterSearchPois: suspend (String) -> Unit = {},
 ) : PlacesApiClient {
 
     var lastSearchedRegion: String? = null
@@ -23,10 +25,13 @@ class FakePlacesApiClient(
 
     override suspend fun searchPois(lat: Double, lng: Double, type: String): List<PlaceResult> {
         if (searchPoisThrows) throw RuntimeException("network error")
+        beforeSearchPois(type)
         lastSearchedLat = lat
         lastSearchedLng = lng
         lastSearchedType = type
-        return poiResults
+        val result = poiResults
+        afterSearchPois(type)
+        return result
     }
 
     override fun resolvePhotoUrl(resourceName: String): String =
