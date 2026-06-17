@@ -32,14 +32,17 @@ class SupabaseTravelRepositoryRealtimeContractTest {
     @Test
     fun observeGroupsHasBroadcastFallback() {
         val source = repositorySource()
-        val observeGroupsStart = source.indexOf("fun observeGroups()")
-        val nextFunStart = source.indexOf("\n    override", observeGroupsStart + 1)
-            .takeIf { it > observeGroupsStart } ?: source.length
-        val observeGroupsBody = source.substring(observeGroupsStart, nextFunStart)
+        // observeGroups() delegates to observeGroupsSharedFlow; implementation is in
+        // createObserveGroupsChannelFlow(). The broadcastFlow must live in that implementation.
+        val implStart = source.indexOf("fun createObserveGroupsChannelFlow()")
+        require(implStart >= 0) { "createObserveGroupsChannelFlow not found in repository source" }
+        val implEnd = source.indexOf("\n    override", implStart + 1)
+            .takeIf { it > implStart } ?: source.length
+        val implBody = source.substring(implStart, implEnd)
 
         assertTrue(
-            "observeGroups must contain a broadcastFlow to handle cross-user RLS gaps",
-            observeGroupsBody.contains("broadcastFlow")
+            "createObserveGroupsChannelFlow (backing observeGroups) must contain a broadcastFlow to handle cross-user RLS gaps",
+            implBody.contains("broadcastFlow")
         )
     }
 
@@ -219,6 +222,118 @@ class SupabaseTravelRepositoryRealtimeContractTest {
         assertTrue(
             "assignItemToMember must call sendBroadcast so other members' observeAssignments fires",
             fnBody(source, "fun assignItemToMember(").contains("sendBroadcast")
+        )
+    }
+
+    @Test
+    fun observeMembersDelegatesToSharedFlowCache() {
+        val source = repositorySource()
+        val start = source.indexOf("fun observeMembers(")
+        val end = source.indexOf("\n    override", start + 1).takeIf { it > start } ?: source.length
+        val body = source.substring(start, end)
+        // Check for "channelFlow {" — the builder expression — not just the substring which also
+        // appears in helper function names like createObserveMembersChannelFlow.
+        assertFalse(
+            "observeMembers must not create a new channelFlow per call — causes broadcast channel eviction",
+            body.contains("channelFlow {")
+        )
+        assertTrue(
+            "observeMembers must use a per-groupId SharedFlow cache (like pollBroadcastFlows)",
+            body.contains("observeMembersSharedFlows")
+        )
+    }
+
+    @Test
+    fun observeGroupsDelegatesToSharedFlowProperty() {
+        val source = repositorySource()
+        val start = source.indexOf("fun observeGroups()")
+        val end = source.indexOf("\n    override", start + 1).takeIf { it > start } ?: source.length
+        val body = source.substring(start, end)
+        // Check for "channelFlow {" — the builder expression — not just the substring which also
+        // appears in helper function names like createObserveGroupsChannelFlow.
+        assertFalse(
+            "observeGroups must not create a new channelFlow per call — causes broadcast channel eviction across ViewModels",
+            body.contains("channelFlow {")
+        )
+        assertTrue(
+            "observeGroups must delegate to a cached SharedFlow property",
+            body.contains("observeGroupsSharedFlow")
+        )
+    }
+
+    @Test
+    fun observeInvitesHasBroadcastFallback() {
+        val source = repositorySource()
+        val start = source.indexOf("fun observeInvites(")
+        val end = source.indexOf("\n    override", start + 1).takeIf { it > start } ?: source.length
+        val body = source.substring(start, end)
+        assertTrue(
+            "observeInvites must contain a broadcastFlow fallback (consistent with other observe* flows)",
+            body.contains("broadcastFlow")
+        )
+    }
+
+    @Test
+    fun generateInviteSendsBroadcast() {
+        val source = repositorySource()
+        assertTrue(
+            "generateInvite must call sendBroadcast so other admins' invite list updates",
+            fnBody(source, "fun generateInvite(").contains("sendBroadcast")
+        )
+    }
+
+    @Test
+    fun deleteInviteSendsBroadcast() {
+        val source = repositorySource()
+        assertTrue(
+            "deleteInvite must call sendBroadcast so other admins' invite list updates",
+            fnBody(source, "fun deleteInvite(").contains("sendBroadcast")
+        )
+    }
+
+    @Test
+    fun consumeInviteInvalidatesGroupsFlowForFreshPerGroupChannels() {
+        val source = repositorySource()
+        assertTrue(
+            "consumeInvite must increment _observeGroupsVersion to restart the groups observe flow " +
+                "so newly joined group gets a per-group broadcast channel",
+            fnBody(source, "fun consumeInvite(").contains("_observeGroupsVersion")
+        )
+    }
+
+    @Test
+    fun consumeInviteAlsoNotifiesGroupMembersViaGroupBroadcast() {
+        val source = repositorySource()
+        assertTrue(
+            "consumeInvite must send group_list_changed so existing members' observeGroups broadcast fallback fires",
+            fnBody(source, "fun consumeInvite(").contains("group_list_changed")
+        )
+    }
+
+    @Test
+    fun markDebtorConfirmedSendsBroadcast() {
+        val source = repositorySource()
+        assertTrue(
+            "markDebtorConfirmed must send a broadcast so the creditor's settlement view refreshes",
+            fnBody(source, "fun markDebtorConfirmed(").contains("sendBroadcast")
+        )
+    }
+
+    @Test
+    fun markCreditorConfirmedSendsBroadcast() {
+        val source = repositorySource()
+        assertTrue(
+            "markCreditorConfirmed must send a broadcast so the debtor's settlement view refreshes",
+            fnBody(source, "fun markCreditorConfirmed(").contains("sendBroadcast")
+        )
+    }
+
+    @Test
+    fun updateMpAliasSendsBroadcast() {
+        val source = repositorySource()
+        assertTrue(
+            "updateMpAlias must send a broadcast so other members' observeMembers fires and settlement view refreshes with the new alias",
+            fnBody(source, "fun updateMpAlias(").contains("sendBroadcast")
         )
     }
 

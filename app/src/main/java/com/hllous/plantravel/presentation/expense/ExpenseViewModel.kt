@@ -131,6 +131,11 @@ class ExpenseViewModel @Inject constructor(
                     recalculateDashboard(groups, member)
                 }
         }
+        // When another user confirms a payment, the broadcast triggers expenseGroups to re-emit.
+        // Re-fetch debt links so the confirmation status updates without restart.
+        viewModelScope.launch {
+            expenseGroups.collect { if (_peerToPerDebts.value.isNotEmpty()) refreshDebtLinks() }
+        }
     }
 
     fun reloadExpenseGroups() { _expenseGroupsRetryTrigger.value++ }

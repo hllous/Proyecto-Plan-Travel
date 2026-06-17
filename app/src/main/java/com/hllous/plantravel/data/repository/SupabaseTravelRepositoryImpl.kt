@@ -45,10 +45,13 @@ import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.SupervisorJob
 import kotlinx.coroutines.coroutineScope
+import kotlinx.coroutines.ExperimentalCoroutinesApi
 import kotlinx.coroutines.flow.Flow
+import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.SharedFlow
 import kotlinx.coroutines.flow.SharingStarted
 import kotlinx.coroutines.flow.channelFlow
+import kotlinx.coroutines.flow.flatMapLatest
 import kotlinx.coroutines.flow.flow
 import kotlinx.coroutines.flow.map
 import kotlinx.coroutines.flow.merge
@@ -421,6 +424,10 @@ class SupabaseTravelRepositoryImpl @Inject constructor(
     // ─── Fetch helpers ───────────────────────────────────────────────────────
 
     private val repositoryScope = CoroutineScope(SupervisorJob() + Dispatchers.IO)
+    // Incrementing this restarts observeGroupsSharedFlow via flatMapLatest, rebuilding
+    // per-group broadcast channels for any groups joined mid-session.
+    private val _observeGroupsVersion = MutableStateFlow(0)
+
     private val pollBroadcastFlows = ConcurrentHashMap<String, SharedFlow<Unit>>()
 
     private fun pollBroadcastFlow(groupId: String): SharedFlow<Unit> =
@@ -560,7 +567,35 @@ class SupabaseTravelRepositoryImpl @Inject constructor(
 
     // ─── Observe ─────────────────────────────────────────────────────────────
 
-    override fun observeGroups(): Flow<List<TravelGroup>> = channelFlow {
+    private fun createObserveMembersChannelFlow(groupId: String): Flow<List<GroupMember>> = channelFlow {
+        send(fetchMembers(groupId))
+
+        // Postgres Changes: detects local inserts/updates/deletes (same-user actions work reliably)
+        val pgChannel = supabase.channel("members-$groupId-${UUID.randomUUID()}")
+        val pgChanges = pgChannel.postgresChangeFlow<PostgresAction>(schema = "public") {
+            table = "group_members"
+        }
+
+        // Broadcast: fallback for cross-user inserts that Postgres Changes RLS may block
+        val bcChannel = supabase.channel("members-broadcast-$groupId")
+        val broadcasts = bcChannel.broadcastFlow<JsonObject>(event = "member_joined")
+
+        try {
+            coroutineScope {
+                launch { runCatching { pgChannel.subscribe(blockUntilSubscribed = true) } }
+                // The broadcast observer is the fallback for local mutations when Postgres Changes
+                // do not echo back to the sender. Wait until it is attached before relying on it.
+                launch { runCatching { bcChannel.subscribe(blockUntilSubscribed = true) } }
+            }
+            merge(pgChanges.map { Unit }, broadcasts.map { Unit })
+                .collect { send(fetchMembers(groupId)) }
+        } finally {
+            supabase.realtime.removeChannel(pgChannel)
+            supabase.realtime.removeChannel(bcChannel)
+        }
+    }
+
+    private fun createObserveGroupsChannelFlow(): Flow<List<TravelGroup>> = channelFlow {
         val userId = supabase.auth.currentUserOrNull()?.id ?: return@channelFlow
 
         val initialGroups = fetchGroupsForUser(userId)
@@ -607,33 +642,21 @@ class SupabaseTravelRepositoryImpl @Inject constructor(
         }
     }
 
-    override fun observeMembers(groupId: String): Flow<List<GroupMember>> = channelFlow {
-        send(fetchMembers(groupId))
+    @OptIn(ExperimentalCoroutinesApi::class)
+    private val observeGroupsSharedFlow: SharedFlow<List<TravelGroup>> =
+        _observeGroupsVersion
+            .flatMapLatest { createObserveGroupsChannelFlow() }
+            .shareIn(repositoryScope, SharingStarted.WhileSubscribed(5000), replay = 1)
 
-        // Postgres Changes: detects local inserts/updates/deletes (same-user actions work reliably)
-        val pgChannel = supabase.channel("members-$groupId-${UUID.randomUUID()}")
-        val pgChanges = pgChannel.postgresChangeFlow<PostgresAction>(schema = "public") {
-            table = "group_members"
+    override fun observeGroups(): Flow<List<TravelGroup>> = observeGroupsSharedFlow
+
+    private val observeMembersSharedFlows = ConcurrentHashMap<String, SharedFlow<List<GroupMember>>>()
+
+    override fun observeMembers(groupId: String): Flow<List<GroupMember>> =
+        observeMembersSharedFlows.getOrPut(groupId) {
+            createObserveMembersChannelFlow(groupId)
+                .shareIn(repositoryScope, SharingStarted.WhileSubscribed(5000), replay = 1)
         }
-
-        // Broadcast: fallback for cross-user inserts that Postgres Changes RLS may block
-        val bcChannel = supabase.channel("members-broadcast-$groupId")
-        val broadcasts = bcChannel.broadcastFlow<JsonObject>(event = "member_joined")
-
-        try {
-            coroutineScope {
-                launch { runCatching { pgChannel.subscribe(blockUntilSubscribed = true) } }
-                // The broadcast observer is the fallback for local mutations when Postgres Changes
-                // do not echo back to the sender. Wait until it is attached before relying on it.
-                launch { runCatching { bcChannel.subscribe(blockUntilSubscribed = true) } }
-            }
-            merge(pgChanges.map { Unit }, broadcasts.map { Unit })
-                .collect { send(fetchMembers(groupId)) }
-        } finally {
-            supabase.realtime.removeChannel(pgChannel)
-            supabase.realtime.removeChannel(bcChannel)
-        }
-    }
 
     override suspend fun broadcastMemberJoined(groupId: String) {
         sendBroadcast("members-broadcast-$groupId", "member_joined")
@@ -723,16 +746,25 @@ class SupabaseTravelRepositoryImpl @Inject constructor(
     override fun observeInvites(groupId: String): Flow<List<InviteToken>> = channelFlow {
         send(fetchInvites(groupId))
 
-        val channel = supabase.channel("invites-$groupId-${UUID.randomUUID()}")
-        val changes = channel.postgresChangeFlow<PostgresAction>(schema = "public") {
+        val pgChannel = supabase.channel("invites-$groupId-${UUID.randomUUID()}")
+        val changes = pgChannel.postgresChangeFlow<PostgresAction>(schema = "public") {
             table = "invite_tokens"
         }
-        channel.subscribe(blockUntilSubscribed = true)
+
+        // Broadcast fallback: RLS may block Postgres Changes for cross-user invite operations
+        val bcChannel = supabase.channel("invites-broadcast-$groupId")
+        val broadcasts = bcChannel.broadcastFlow<JsonObject>(event = "invite_changed")
 
         try {
-            changes.collect { send(fetchInvites(groupId)) }
+            coroutineScope {
+                launch { runCatching { pgChannel.subscribe(blockUntilSubscribed = true) } }
+                launch { runCatching { bcChannel.subscribe(blockUntilSubscribed = true) } }
+            }
+            merge(changes.map { Unit }, broadcasts.map { Unit })
+                .collect { send(fetchInvites(groupId)) }
         } finally {
-            supabase.realtime.removeChannel(channel)
+            supabase.realtime.removeChannel(pgChannel)
+            supabase.realtime.removeChannel(bcChannel)
         }
     }
 
@@ -745,13 +777,22 @@ class SupabaseTravelRepositoryImpl @Inject constructor(
                 select()
             }
             .decodeSingle<InviteTokenDto>()
+        sendBroadcast("invites-broadcast-$groupId", "invite_changed")
         return dto.toDomain()
     }
 
     override suspend fun deleteInvite(code: String) {
+        // Fetch the groupId before deleting so we can broadcast to the correct channel.
+        val groupId = runCatching {
+            supabase.from("invite_tokens")
+                .select(Columns.list("group_id")) { filter { eq("code", code) } }
+                .decodeList<GroupMembershipDto>()
+                .firstOrNull()?.groupId
+        }.getOrNull()
         supabase.from("invite_tokens").delete {
             filter { eq("code", code) }
         }
+        groupId?.let { sendBroadcast("invites-broadcast-$it", "invite_changed") }
     }
 
     override suspend fun consumeInvite(code: String, userId: String, displayName: String): Result<String> {
@@ -785,6 +826,12 @@ class SupabaseTravelRepositoryImpl @Inject constructor(
         // Trigger the joiner's own observeGroups broadcast fallback so their group list updates
         // without relying on the Postgres Change self-echo (which RLS may block).
         sendBroadcast("groups-broadcast-$userId", "groups_changed")
+        // Notify existing group members so their observeGroups broadcast fallback fires and
+        // memberCount / member list refresh without restart.
+        sendBroadcast("groups-broadcast-${token.groupId}", "group_list_changed")
+        // Restart observeGroupsSharedFlow so per-group broadcast channels are rebuilt to include
+        // the newly joined group (bcGroupEntries is a snapshot at flow-start time).
+        _observeGroupsVersion.value++
 
         return Result.success(token.groupId)
     }
@@ -1296,10 +1343,23 @@ class SupabaseTravelRepositoryImpl @Inject constructor(
             .decodeSingleOrNull<MpAliasDto>()
             ?.mpAlias
 
+    private suspend fun fetchGroupIdsForCurrentUser(): List<String> {
+        val userId = supabase.auth.currentUserOrNull()?.id ?: return emptyList()
+        return supabase.from("group_members")
+            .select(Columns.list("group_id")) { filter { eq("user_id", userId) } }
+            .decodeList<GroupMembershipDto>()
+            .map { it.groupId }
+    }
+
     override suspend fun updateMpAlias(alias: String) {
         val userId = supabase.auth.currentUserOrNull()?.id ?: return
         supabase.from("profiles").update({ set("mp_alias", alias.ifEmpty { null }) }) {
             filter { eq("id", userId) }
+        }
+        // Notify group members so their observeMembers fires and expense settlement view
+        // refreshes with the updated alias.
+        fetchGroupIdsForCurrentUser().forEach { groupId ->
+            sendBroadcast("members-broadcast-$groupId", "member_joined")
         }
     }
 
@@ -1355,6 +1415,7 @@ class SupabaseTravelRepositoryImpl @Inject constructor(
                 eq("expense_group_id", expenseGroupId)
             }
         }
+        sendBroadcast("expense-groups-broadcast-$expenseGroupId", "expense_group_changed")
     }
 
     override suspend fun markCreditorConfirmed(fromMemberId: String, toMemberId: String, expenseGroupId: String) {
@@ -1369,6 +1430,7 @@ class SupabaseTravelRepositoryImpl @Inject constructor(
                 eq("expense_group_id", expenseGroupId)
             }
         }
+        sendBroadcast("expense-groups-broadcast-$expenseGroupId", "expense_group_changed")
     }
 
     override suspend fun browseDestinations(region: String): List<StoredDestination> =
