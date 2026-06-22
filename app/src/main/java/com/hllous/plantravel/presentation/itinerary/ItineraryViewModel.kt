@@ -15,6 +15,7 @@ import kotlinx.coroutines.ExperimentalCoroutinesApi
 import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.SharingStarted
 import kotlinx.coroutines.flow.StateFlow
+import kotlinx.coroutines.flow.asStateFlow
 import kotlinx.coroutines.flow.catch
 import kotlinx.coroutines.flow.flatMapLatest
 import kotlinx.coroutines.flow.flowOf
@@ -44,6 +45,10 @@ class ItineraryViewModel @Inject constructor(
 ) : ViewModel() {
 
     private val _reloadTrigger = MutableStateFlow(0)
+    private val _isSubmitting = MutableStateFlow(false)
+    val isSubmitting: StateFlow<Boolean> = _isSubmitting.asStateFlow()
+    private val _message = MutableStateFlow<String?>(null)
+    val message: StateFlow<String?> = _message.asStateFlow()
 
     val events: StateFlow<UiState<List<ItineraryEventByDay>>> = _reloadTrigger
         .flatMapLatest {
@@ -77,8 +82,14 @@ class ItineraryViewModel @Inject constructor(
     ) {
         val groupId = selectedGroupHolder.selectedGroupId.value ?: return
         viewModelScope.launch {
-            runCatching { repository.createItineraryEvent(groupId, name, date, timeOfDay, description, placeId, endDate) }
-            reloadEvents()
+            _isSubmitting.value = true
+            try {
+                val result = runCatching { repository.createItineraryEvent(groupId, name, date, timeOfDay, description, placeId, endDate) }
+                _message.value = if (result.isSuccess) "Evento guardado" else "Error al guardar el evento"
+                reloadEvents()
+            } finally {
+                _isSubmitting.value = false
+            }
         }
     }
 
@@ -91,16 +102,32 @@ class ItineraryViewModel @Inject constructor(
         endDate: String? = null,
     ) {
         viewModelScope.launch {
-            runCatching { repository.updateItineraryEvent(eventId, name, date, timeOfDay, description, endDate) }
-            reloadEvents()
+            _isSubmitting.value = true
+            try {
+                val result = runCatching { repository.updateItineraryEvent(eventId, name, date, timeOfDay, description, endDate) }
+                _message.value = if (result.isSuccess) "Evento guardado" else "Error al guardar el evento"
+                reloadEvents()
+            } finally {
+                _isSubmitting.value = false
+            }
         }
     }
 
     fun deleteEvent(eventId: String) {
         viewModelScope.launch {
-            runCatching { repository.deleteItineraryEvent(eventId) }
-            reloadEvents()
+            _isSubmitting.value = true
+            try {
+                val result = runCatching { repository.deleteItineraryEvent(eventId) }
+                _message.value = if (result.isSuccess) "Evento eliminado" else "Error al eliminar el evento"
+                reloadEvents()
+            } finally {
+                _isSubmitting.value = false
+            }
         }
+    }
+
+    fun clearMessage() {
+        _message.value = null
     }
 
     fun buildEventFromPoi(place: PlaceResult): ItineraryEventDraft = ItineraryEventDraft(

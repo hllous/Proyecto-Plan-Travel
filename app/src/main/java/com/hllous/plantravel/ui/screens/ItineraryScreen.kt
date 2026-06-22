@@ -37,6 +37,8 @@ import androidx.compose.material3.ModalBottomSheet
 import androidx.compose.material3.OutlinedButton
 import androidx.compose.material3.OutlinedTextField
 import androidx.compose.material3.Scaffold
+import androidx.compose.material3.SnackbarHost
+import androidx.compose.material3.SnackbarHostState
 import androidx.compose.material3.Surface
 import androidx.compose.material3.Text
 import androidx.compose.material3.TextButton
@@ -81,10 +83,20 @@ fun ItineraryScreen(
     initialDraft: ItineraryEventDraft? = null,
 ) {
     val eventsState by viewModel.events.collectAsState()
+    val isSubmitting by viewModel.isSubmitting.collectAsState()
+    val message by viewModel.message.collectAsState()
 
+    val snackbarHostState = remember { SnackbarHostState() }
     var showSheet by rememberSaveable { mutableStateOf(false) }
     var editingEvent by remember { mutableStateOf<ItineraryEvent?>(null) }
     var pendingDeleteEvent by remember { mutableStateOf<ItineraryEvent?>(null) }
+
+    LaunchedEffect(message) {
+        message?.let {
+            snackbarHostState.showSnackbar(it)
+            viewModel.clearMessage()
+        }
+    }
 
     // If the screen was opened from a POI, open the creation sheet immediately.
     LaunchedEffect(initialDraft) {
@@ -93,6 +105,7 @@ fun ItineraryScreen(
 
     Scaffold(
         contentWindowInsets = WindowInsets(0),
+        snackbarHost = { SnackbarHost(snackbarHostState) },
         topBar = {
             TopAppBar(
                 title = {
@@ -115,11 +128,21 @@ fun ItineraryScreen(
         floatingActionButton = {
             FloatingActionButton(
                 onClick = {
-                    editingEvent = null
-                    showSheet = true
+                    if (!isSubmitting) {
+                        editingEvent = null
+                        showSheet = true
+                    }
                 },
             ) {
-                Icon(Icons.Default.Add, contentDescription = "Agregar evento")
+                if (isSubmitting) {
+                    CircularProgressIndicator(
+                        modifier = Modifier.size(24.dp),
+                        strokeWidth = 2.dp,
+                        color = MaterialTheme.colorScheme.onPrimaryContainer,
+                    )
+                } else {
+                    Icon(Icons.Default.Add, contentDescription = "Agregar evento")
+                }
             }
         },
     ) { innerPadding ->
@@ -201,6 +224,7 @@ fun ItineraryScreen(
                         viewModel.deleteEvent(event.id)
                         pendingDeleteEvent = null
                     },
+                    enabled = !isSubmitting,
                 ) {
                     Text("Eliminar")
                 }
