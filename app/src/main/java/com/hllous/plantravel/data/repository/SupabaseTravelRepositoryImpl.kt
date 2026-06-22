@@ -447,7 +447,7 @@ class SupabaseTravelRepositoryImpl @Inject constructor(
                     Log.d("RT", "[RT] removed: group-polls-broadcast-$groupId")
                     supabase.realtime.removeChannel(bcChannel)
                 }
-            }.shareIn(repositoryScope, SharingStarted.WhileSubscribed(5000), replay = 0)
+            }.shareIn(repositoryScope, SharingStarted.Eagerly, replay = 0)
         }
 
     private val settlementCalculator = ExpenseSettlementCalculator()

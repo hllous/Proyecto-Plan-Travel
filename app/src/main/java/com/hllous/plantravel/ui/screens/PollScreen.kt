@@ -98,6 +98,7 @@ fun PollScreen(
     val candidatesState by viewModel.candidates.collectAsState()
     val currentMember by viewModel.currentMember.collectAsState()
     val errorMessage by viewModel.errorMessage.collectAsState()
+    val isSubmitting by viewModel.isSubmitting.collectAsState()
 
     val snackbarHostState = remember { SnackbarHostState() }
     var showCreationSheet by rememberSaveable { mutableStateOf(false) }
@@ -148,11 +149,17 @@ fun PollScreen(
                 actions = {
                     if (isAdmin && poll != null) {
                         if (poll?.state == PollState.OPEN) {
-                            TextButton(onClick = { viewModel.closePoll() }) {
+                            TextButton(
+                                onClick = { viewModel.closePoll() },
+                                enabled = !isSubmitting,
+                            ) {
                                 Text("Cerrar")
                             }
                         }
-                        TextButton(onClick = { showDeleteDialog = true }) {
+                        TextButton(
+                            onClick = { showDeleteDialog = true },
+                            enabled = !isSubmitting,
+                        ) {
                             Text("Eliminar", color = MaterialTheme.colorScheme.error)
                         }
                     }
@@ -192,6 +199,7 @@ fun PollScreen(
                         poll = currentPoll,
                         candidatesState = candidatesState,
                         isAdmin = isAdmin,
+                        isSubmitting = isSubmitting,
                         closedPolls = closedPolls,
                         onToggleVote = { candidateId -> viewModel.toggleVote(candidateId) },
                         onSelectWinner = { showWinnerDialog = true },
@@ -276,6 +284,7 @@ private fun PollContent(
     poll: Poll,
     candidatesState: UiState<List<PollCandidateUiModel>>,
     isAdmin: Boolean,
+    isSubmitting: Boolean,
     closedPolls: List<Poll>,
     onToggleVote: (String) -> Unit,
     onSelectWinner: () -> Unit,
@@ -345,7 +354,7 @@ private fun PollContent(
                     PollCandidateCard(
                         uiModel = uiModel,
                         isWinner = uiModel.candidate.placeId == poll.winnerPlaceId,
-                        votingEnabled = !isClosed,
+                        votingEnabled = !isClosed && !isSubmitting,
                         onToggleVote = { onToggleVote(uiModel.candidate.id) },
                     )
                 }
@@ -367,6 +376,7 @@ private fun PollContent(
             item {
                 FilledTonalButton(
                     onClick = onSelectWinner,
+                    enabled = !isSubmitting,
                     modifier = Modifier
                         .fillMaxWidth()
                         .padding(horizontal = 16.dp, vertical = 8.dp),

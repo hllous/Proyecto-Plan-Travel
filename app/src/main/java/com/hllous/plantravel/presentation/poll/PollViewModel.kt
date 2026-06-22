@@ -45,6 +45,8 @@ class PollViewModel @Inject constructor(
     private val _candidateReloadTrigger = MutableStateFlow(0)
     private val _errorMessage = MutableStateFlow<String?>(null)
     val errorMessage: StateFlow<String?> = _errorMessage.asStateFlow()
+    private val _isSubmitting = MutableStateFlow(false)
+    val isSubmitting: StateFlow<Boolean> = _isSubmitting.asStateFlow()
 
     val poll: StateFlow<Poll?> = _reloadTrigger
         .flatMapLatest {
@@ -109,18 +111,28 @@ class PollViewModel @Inject constructor(
     fun createPoll(type: PollType, expiresAt: String? = null) {
         val groupId = selectedGroupHolder.selectedGroupId.value ?: return
         viewModelScope.launch {
-            runCatching { repository.createPoll(groupId, type, expiresAt) }
-                .onFailure { _errorMessage.value = "Ya hay una encuesta activa" }
-            reloadPoll()
+            _isSubmitting.value = true
+            try {
+                runCatching { repository.createPoll(groupId, type, expiresAt) }
+                    .onFailure { _errorMessage.value = "Ya hay una encuesta activa" }
+                reloadPoll()
+            } finally {
+                _isSubmitting.value = false
+            }
         }
     }
 
     fun addCandidate(place: PlaceResult) {
         val pollId = poll.value?.id ?: return
         viewModelScope.launch {
-            runCatching {
-                repository.addPollCandidate(pollId, place.placeId, place.name, place.photoUrl, place.lat, place.lng)
-            }.onSuccess { reloadCandidates() }
+            _isSubmitting.value = true
+            try {
+                runCatching {
+                    repository.addPollCandidate(pollId, place.placeId, place.name, place.photoUrl, place.lat, place.lng)
+                }.onSuccess { reloadCandidates() }
+            } finally {
+                _isSubmitting.value = false
+            }
         }
     }
 
@@ -128,26 +140,41 @@ class PollViewModel @Inject constructor(
         val memberId = currentMember.value?.id ?: return
         val pollId = poll.value?.id ?: return
         viewModelScope.launch {
-            runCatching { repository.toggleVote(candidateId, memberId, pollId) }
-                .onSuccess { reloadCandidates() }
+            _isSubmitting.value = true
+            try {
+                runCatching { repository.toggleVote(candidateId, memberId, pollId) }
+                    .onSuccess { reloadCandidates() }
+            } finally {
+                _isSubmitting.value = false
+            }
         }
     }
 
     fun closePoll() {
         val pollId = poll.value?.id ?: return
         viewModelScope.launch {
-            runCatching { repository.closePoll(pollId) }
-                .onFailure { _errorMessage.value = "Error al cerrar la encuesta" }
-            reloadPoll()
+            _isSubmitting.value = true
+            try {
+                runCatching { repository.closePoll(pollId) }
+                    .onFailure { _errorMessage.value = "Error al cerrar la encuesta" }
+                reloadPoll()
+            } finally {
+                _isSubmitting.value = false
+            }
         }
     }
 
     fun deletePoll() {
         val pollId = poll.value?.id ?: return
         viewModelScope.launch {
-            runCatching { repository.deletePoll(pollId) }
-                .onFailure { _errorMessage.value = "Error al eliminar la encuesta" }
-                .onSuccess { reloadPoll() }
+            _isSubmitting.value = true
+            try {
+                runCatching { repository.deletePoll(pollId) }
+                    .onFailure { _errorMessage.value = "Error al eliminar la encuesta" }
+                    .onSuccess { reloadPoll() }
+            } finally {
+                _isSubmitting.value = false
+            }
         }
     }
 
@@ -158,19 +185,24 @@ class PollViewModel @Inject constructor(
             ?.data?.firstOrNull { it.candidate.id == candidateId }
             ?.candidate ?: return
         viewModelScope.launch {
-            runCatching {
-                repository.setPollWinner(activePoll.id, winner.placeId)
-                if (activePoll.type == PollType.DESTINATION) {
-                    repository.setTripDestination(
-                        groupId = groupId,
-                        placeId = winner.placeId,
-                        name = winner.name,
-                        lat = winner.lat,
-                        lng = winner.lng,
-                    )
+            _isSubmitting.value = true
+            try {
+                runCatching {
+                    repository.setPollWinner(activePoll.id, winner.placeId)
+                    if (activePoll.type == PollType.DESTINATION) {
+                        repository.setTripDestination(
+                            groupId = groupId,
+                            placeId = winner.placeId,
+                            name = winner.name,
+                            lat = winner.lat,
+                            lng = winner.lng,
+                        )
+                    }
                 }
+                reloadPoll()
+            } finally {
+                _isSubmitting.value = false
             }
-            reloadPoll()
         }
     }
 
