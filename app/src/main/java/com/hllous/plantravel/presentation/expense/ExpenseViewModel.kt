@@ -108,6 +108,14 @@ class ExpenseViewModel @Inject constructor(
         .map { list -> list.firstOrNull { it.userId == sessionProvider.userId } }
         .stateIn(viewModelScope, SharingStarted.WhileSubscribed(5000), null)
 
+    // ── Peer-to-peer debts (declared here so init blocks below can reference them) ──
+
+    private val _peerToPerDebts = MutableStateFlow<List<PeerToPerDebt>>(emptyList())
+    val peerToPerDebts: StateFlow<List<PeerToPerDebt>> = _peerToPerDebts
+
+    private val _peerToPerDebtsWithLinks = MutableStateFlow<List<PeerToPerDebtUiModel>>(emptyList())
+    val peerToPerDebtsWithLinks: StateFlow<List<PeerToPerDebtUiModel>> = _peerToPerDebtsWithLinks
+
     // ── Expense Groups ────────────────────────────────────────────────────────
 
     private val _expenseGroupsRetryTrigger = MutableStateFlow(0)
@@ -318,14 +326,11 @@ class ExpenseViewModel @Inject constructor(
     private val _settlementWarnings = MutableStateFlow<List<SettlementWarning>>(emptyList())
     val settlementWarnings: StateFlow<List<SettlementWarning>> = _settlementWarnings
 
-    private val _peerToPerDebts = MutableStateFlow<List<PeerToPerDebt>>(emptyList())
-    val peerToPerDebts: StateFlow<List<PeerToPerDebt>> = _peerToPerDebts
-
-    private val _peerToPerDebtsWithLinks = MutableStateFlow<List<PeerToPerDebtUiModel>>(emptyList())
-    val peerToPerDebtsWithLinks: StateFlow<List<PeerToPerDebtUiModel>> = _peerToPerDebtsWithLinks
-
     private val _message = MutableStateFlow<String?>(null)
     val message: StateFlow<String?> = _message
+
+    private val _isSubmitting = MutableStateFlow(false)
+    val isSubmitting: StateFlow<Boolean> = _isSubmitting.asStateFlow()
 
     fun reloadExpenseItems() {
         _expenseRetryTrigger.value++
@@ -374,6 +379,7 @@ class ExpenseViewModel @Inject constructor(
                 _message.value = "Error al agregar gasto"
                 return@launch
             }
+            _message.value = "Item agregado"
             reloadExpenseItems()
             reloadExpenseGroups()
             recalculateSettlementSilently(expenseGroupId)
@@ -532,18 +538,42 @@ class ExpenseViewModel @Inject constructor(
     }
 
     fun markDebtorConfirmed(fromMemberId: String, toMemberId: String) {
+        if (_isSubmitting.value) return
         viewModelScope.launch {
             val expenseGroupId = _selectedExpenseGroupId.value ?: return@launch
-            runCatching { repository.markDebtorConfirmed(fromMemberId, toMemberId, expenseGroupId) }
-            refreshDebtLinks()
+            _isSubmitting.value = true
+            try {
+                val result = runCatching { repository.markDebtorConfirmed(fromMemberId, toMemberId, expenseGroupId) }
+                if (result.isFailure) {
+                    _message.value = "Error al confirmar el pago"
+                } else {
+                    _message.value = "Pago confirmado"
+                    refreshDebtLinks()
+                    reloadExpenseGroups()
+                }
+            } finally {
+                _isSubmitting.value = false
+            }
         }
     }
 
     fun markCreditorConfirmed(fromMemberId: String, toMemberId: String) {
+        if (_isSubmitting.value) return
         viewModelScope.launch {
             val expenseGroupId = _selectedExpenseGroupId.value ?: return@launch
-            runCatching { repository.markCreditorConfirmed(fromMemberId, toMemberId, expenseGroupId) }
-            refreshDebtLinks()
+            _isSubmitting.value = true
+            try {
+                val result = runCatching { repository.markCreditorConfirmed(fromMemberId, toMemberId, expenseGroupId) }
+                if (result.isFailure) {
+                    _message.value = "Error al confirmar el pago"
+                } else {
+                    _message.value = "Pago recibido confirmado"
+                    refreshDebtLinks()
+                    reloadExpenseGroups()
+                }
+            } finally {
+                _isSubmitting.value = false
+            }
         }
     }
 

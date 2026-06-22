@@ -144,7 +144,7 @@ class ExpenseViewModelTest {
         vm.addExpenseItem(name = "Taxi", unitPriceText = "50", quantityText = "1")
 
         assertTrue(repo.calculateSettlementCallCount >= 1)
-        assertEquals(null, vm.message.value)
+        assertEquals("Item agregado", vm.message.value)
     }
 
     @Test

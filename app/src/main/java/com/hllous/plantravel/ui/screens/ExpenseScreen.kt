@@ -142,6 +142,7 @@ fun ExpenseScreen(viewModel: ExpenseViewModel, navController: NavHostController)
     val selectedGroupId by viewModel.selectedGroupId.collectAsState(initial = null)
     val currentMember by viewModel.currentMember.collectAsState(initial = null)
     val dashboardState by viewModel.dashboardState.collectAsState()
+    val isSubmitting by viewModel.isSubmitting.collectAsState()
     val currentMemberId: String? = currentMember?.id
     val selectedTravelGroup = travelGroups.firstOrNull { it.id == selectedGroupId }
 
@@ -403,6 +404,7 @@ fun ExpenseScreen(viewModel: ExpenseViewModel, navController: NavHostController)
                     settlements = settlements,
                     peerToPerDebts = peerToPerDebtsWithLinks,
                     currentMemberId = currentMemberId,
+                    isSubmitting = isSubmitting,
                     settlementsExpanded = settlementsExpanded,
                     onToggleSettlements = { settlementsExpanded = !settlementsExpanded },
                     onMarkDebtorConfirmed = { from, to -> viewModel.markDebtorConfirmed(from, to) },
@@ -1731,6 +1733,7 @@ private fun SettlementCard(settlement: MemberSettlement) {
 private fun PeerToPerDebtRow(
     uiModel: PeerToPerDebtUiModel,
     currentMemberId: String?,
+    isSubmitting: Boolean,
     onMarkDebtorConfirmed: (fromMemberId: String, toMemberId: String) -> Unit,
     onMarkCreditorConfirmed: (fromMemberId: String, toMemberId: String) -> Unit,
 ) {
@@ -1792,6 +1795,7 @@ private fun PeerToPerDebtRow(
             if (isDebtor && !uiModel.debtorConfirmed) {
                 OutlinedButton(
                     onClick = { onMarkDebtorConfirmed(debt.fromMemberId, debt.toMemberId) },
+                    enabled = !isSubmitting,
                 ) {
                     Text("Marcar como pagado", style = MaterialTheme.typography.labelSmall)
                 }
@@ -1799,6 +1803,7 @@ private fun PeerToPerDebtRow(
             if (isCreditor && uiModel.debtorConfirmed && !uiModel.creditorConfirmed) {
                 Button(
                     onClick = { onMarkCreditorConfirmed(debt.fromMemberId, debt.toMemberId) },
+                    enabled = !isSubmitting,
                 ) {
                     Text("Confirmar pago", style = MaterialTheme.typography.labelSmall)
                 }
@@ -2089,6 +2094,7 @@ private fun ExpenseBottomPanel(
     settlements: List<MemberSettlement>,
     peerToPerDebts: List<PeerToPerDebtUiModel>,
     currentMemberId: String?,
+    isSubmitting: Boolean,
     settlementsExpanded: Boolean,
     onToggleSettlements: () -> Unit,
     onMarkDebtorConfirmed: (fromMemberId: String, toMemberId: String) -> Unit,
@@ -2246,6 +2252,7 @@ private fun ExpenseBottomPanel(
                                     PeerToPerDebtRow(
                                         uiModel = uiModel,
                                         currentMemberId = currentMemberId,
+                                        isSubmitting = isSubmitting,
                                         onMarkDebtorConfirmed = onMarkDebtorConfirmed,
                                         onMarkCreditorConfirmed = onMarkCreditorConfirmed,
                                     )
