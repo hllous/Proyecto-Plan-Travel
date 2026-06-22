@@ -92,6 +92,12 @@ class DestinationViewModel @Inject constructor(
     private val _pendingCategory = MutableStateFlow<String?>(null)
     val pendingCategory: StateFlow<String?> = _pendingCategory.asStateFlow()
 
+    private val _isSubmitting = MutableStateFlow(false)
+    val isSubmitting: StateFlow<Boolean> = _isSubmitting.asStateFlow()
+
+    private val _message = MutableStateFlow<String?>(null)
+    val message: StateFlow<String?> = _message.asStateFlow()
+
     private val _reloadTrigger = MutableStateFlow(0)
 
     internal var googleDestinationPhotoFetcher: suspend (StoredDestination) -> String? = { destination ->
@@ -560,28 +566,38 @@ class DestinationViewModel @Inject constructor(
     fun setTripDestination(destination: StoredDestination) {
         val groupId = selectedGroupHolder.selectedGroupId.value ?: return
         viewModelScope.launch {
-            val storedDestination = if (destination.id.isBlank()) {
-                repository.upsertDestination(destination.toDraft())
-            } else {
-                destination
-            }
+            _isSubmitting.value = true
+            try {
+                val storedDestination = if (destination.id.isBlank()) {
+                    repository.upsertDestination(destination.toDraft())
+                } else {
+                    destination
+                }
 
-            val placeId = storedDestination.googlePlaceId
-                ?: resolveGooglePlaceId(storedDestination)
-                ?: storedDestination.sourceId.takeIf { storedDestination.source == "google" }
-                ?: storedDestination.name
+                val placeId = storedDestination.googlePlaceId
+                    ?: resolveGooglePlaceId(storedDestination)
+                    ?: storedDestination.sourceId.takeIf { storedDestination.source == "google" }
+                    ?: storedDestination.name
 
-            runCatching {
-                repository.setTripDestination(
-                    groupId = groupId,
-                    placeId = placeId,
-                    name = storedDestination.name,
-                    lat = storedDestination.lat,
-                    lng = storedDestination.lng,
-                )
+                val result = runCatching {
+                    repository.setTripDestination(
+                        groupId = groupId,
+                        placeId = placeId,
+                        name = storedDestination.name,
+                        lat = storedDestination.lat,
+                        lng = storedDestination.lng,
+                    )
+                }
+                _message.value = if (result.isSuccess) "Destino actualizado" else "Error al actualizar el destino"
+                reloadGroups()
+            } finally {
+                _isSubmitting.value = false
             }
-            reloadGroups()
         }
+    }
+
+    fun clearMessage() {
+        _message.value = null
     }
 
     private suspend fun resolveGooglePlaceId(destination: StoredDestination): String? = runCatching {

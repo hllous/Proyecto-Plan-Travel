@@ -176,7 +176,7 @@ private fun Level2Content(
     var selectedCategory by rememberSaveable { mutableStateOf(POI_CATEGORIES.first().label) }
     var selectedPoi by remember { mutableStateOf<PlaceResult?>(null) }
 
-    LaunchedEffect(Unit) {
+    LaunchedEffect(destination.placeId) {
         viewModel.selectPoiCategory(selectedCategory)
     }
 
@@ -701,6 +701,8 @@ private fun Level1BrowseContent(
     val currentMember by viewModel.currentMember.collectAsState()
     val regionLoading by viewModel.regionLoading.collectAsState()
     val tripDestination by viewModel.tripDestination.collectAsState()
+    val isSubmitting by viewModel.isSubmitting.collectAsState()
+    val vmMessage by viewModel.message.collectAsState()
 
     var selectedTabIndex by rememberSaveable { mutableStateOf(0) }
     var searchQuery by rememberSaveable { mutableStateOf("") }
@@ -714,6 +716,13 @@ private fun Level1BrowseContent(
 
     LaunchedEffect(Unit) {
         viewModel.selectRegion(REGIONS[0])
+    }
+
+    LaunchedEffect(vmMessage) {
+        vmMessage?.let { message ->
+            snackbarHostState.showSnackbar(message)
+            viewModel.clearMessage()
+        }
     }
 
     LaunchedEffect(pendingMessage) {
@@ -936,6 +945,7 @@ private fun Level1BrowseContent(
             currentMember = currentMember,
             tripDestination = tripDestination,
             activePollType = activePoll?.type,
+            isSubmitting = isSubmitting,
             onDismiss = { selectedDestination = null },
             onSetDestination = {
                 viewModel.setTripDestination(destination)
@@ -1121,6 +1131,7 @@ private fun CityBottomSheet(
     currentMember: GroupMember?,
     tripDestination: TripDestinationState,
     activePollType: PollType?,
+    isSubmitting: Boolean = false,
     onDismiss: () -> Unit,
     onSetDestination: () -> Unit,
     onCreatePollForDestination: () -> Unit,
@@ -1199,9 +1210,18 @@ private fun CityBottomSheet(
                                     }
                                 }
                             },
+                            enabled = !isSubmitting,
                             modifier = Modifier.fillMaxWidth(),
                         ) {
-                            Text("Establecer como destino")
+                            if (isSubmitting) {
+                                CircularProgressIndicator(
+                                    modifier = Modifier.size(16.dp),
+                                    strokeWidth = 2.dp,
+                                    color = MaterialTheme.colorScheme.onPrimary,
+                                )
+                            } else {
+                                Text("Establecer como destino")
+                            }
                         }
                     }
                     else -> {
