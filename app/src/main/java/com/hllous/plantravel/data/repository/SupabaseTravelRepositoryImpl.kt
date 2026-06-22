@@ -21,7 +21,6 @@ import com.hllous.plantravel.domain.model.StoredDestination
 import com.hllous.plantravel.domain.model.TravelGroup
 import com.hllous.plantravel.domain.repository.TravelRepository
 import com.hllous.plantravel.domain.settlement.AssignmentOutcome
-import android.util.Log
 import io.github.jan.supabase.SupabaseClient
 import io.github.jan.supabase.auth.auth
 import io.github.jan.supabase.postgrest.from
@@ -437,14 +436,11 @@ class SupabaseTravelRepositoryImpl @Inject constructor(
                 val bcChannel = supabase.channel("group-polls-broadcast-$groupId")
                 val broadcasts = bcChannel.broadcastFlow<JsonObject>(event = "poll_changed")
                 runCatching { bcChannel.subscribe(blockUntilSubscribed = true) }
-                    .onSuccess { Log.d("RT", "[RT] subscribed: group-polls-broadcast-$groupId") }
                 try {
                     broadcasts.collect {
-                        Log.d("RT", "[RT] broadcast: poll_changed")
                         send(Unit)
                     }
                 } finally {
-                    Log.d("RT", "[RT] removed: group-polls-broadcast-$groupId")
                     supabase.realtime.removeChannel(bcChannel)
                 }
             }.shareIn(repositoryScope, SharingStarted.Eagerly, replay = 0)
@@ -875,15 +871,14 @@ class SupabaseTravelRepositoryImpl @Inject constructor(
 
         try {
             coroutineScope {
-                launch { runCatching { pgChannel.subscribe(blockUntilSubscribed = true) }.onSuccess { Log.d("RT", "[RT] subscribed: itinerary-events-$groupId") } }
-                launch { runCatching { bcChannel.subscribe(blockUntilSubscribed = true) }.onSuccess { Log.d("RT", "[RT] subscribed: itinerary-events-broadcast-$groupId") } }
+                launch { runCatching { pgChannel.subscribe(blockUntilSubscribed = true) } }
+                launch { runCatching { bcChannel.subscribe(blockUntilSubscribed = true) } }
             }
             merge(
-                pgChanges.map { Log.d("RT", "[RT] postgres change: itinerary_events"); Unit },
-                broadcasts.map { Log.d("RT", "[RT] broadcast: itinerary_event_changed"); Unit },
+                pgChanges.map { Unit },
+                broadcasts.map { Unit },
             ).collect { send(fetchItineraryEvents(groupId)) }
         } finally {
-            Log.d("RT", "[RT] removed: itinerary-events-$groupId")
             supabase.realtime.removeChannel(pgChannel)
             supabase.realtime.removeChannel(bcChannel)
         }
@@ -941,13 +936,11 @@ class SupabaseTravelRepositoryImpl @Inject constructor(
             // coroutineScope → channelFlow → PollViewModel's .catch { emit(null) },
             // which would null-out the poll that was already emitted by fetchActivePoll above.
             runCatching { pgChannel.subscribe(blockUntilSubscribed = true) }
-                .onSuccess { Log.d("RT", "[RT] subscribed: group-polls-$groupId") }
             merge(
-                pgChanges.map { Log.d("RT", "[RT] postgres change: group_polls (active)"); Unit },
+                pgChanges.map { Unit },
                 pollBroadcastFlow(groupId),
             ).collect { send(fetchActivePoll(groupId)) }
         } finally {
-            Log.d("RT", "[RT] removed: group-polls-$groupId")
             supabase.realtime.removeChannel(pgChannel)
         }
     }
@@ -962,13 +955,11 @@ class SupabaseTravelRepositoryImpl @Inject constructor(
 
         try {
             runCatching { pgChannel.subscribe(blockUntilSubscribed = true) }
-                .onSuccess { Log.d("RT", "[RT] subscribed: group-polls-all-$groupId") }
             merge(
-                pgChanges.map { Log.d("RT", "[RT] postgres change: group_polls (all)"); Unit },
+                pgChanges.map { Unit },
                 pollBroadcastFlow(groupId),
             ).collect { send(fetchAllPolls(groupId)) }
         } finally {
-            Log.d("RT", "[RT] removed: group-polls-all-$groupId")
             supabase.realtime.removeChannel(pgChannel)
         }
     }
@@ -1071,19 +1062,18 @@ class SupabaseTravelRepositoryImpl @Inject constructor(
 
         try {
             coroutineScope {
-                launch { runCatching { pgChannel.subscribe(blockUntilSubscribed = true) }.onSuccess { Log.d("RT", "[RT] subscribed: poll-candidates-$pollId") } }
-                launch { runCatching { bcChannel.subscribe(blockUntilSubscribed = true) }.onSuccess { Log.d("RT", "[RT] subscribed: poll-candidates-broadcast-$pollId") } }
+                launch { runCatching { pgChannel.subscribe(blockUntilSubscribed = true) } }
+                launch { runCatching { bcChannel.subscribe(blockUntilSubscribed = true) } }
             }
             merge(
-                candidateChanges.map { Log.d("RT", "[RT] postgres change: poll_candidates"); Unit },
-                voteChanges.map { Log.d("RT", "[RT] postgres change: poll_votes"); Unit },
-                broadcasts.map { Log.d("RT", "[RT] broadcast: poll_candidate_changed"); Unit },
+                candidateChanges.map { Unit },
+                voteChanges.map { Unit },
+                broadcasts.map { Unit },
             ).collect {
                     if (currentMemberId == null) currentMemberId = currentMemberIdForPoll(pollId)
                     send(fetchPollCandidatesWithVotes(pollId, currentMemberId))
                 }
         } finally {
-            Log.d("RT", "[RT] removed: poll-candidates-$pollId")
             supabase.realtime.removeChannel(pgChannel)
             supabase.realtime.removeChannel(bcChannel)
         }
@@ -1169,15 +1159,14 @@ class SupabaseTravelRepositoryImpl @Inject constructor(
 
         try {
             coroutineScope {
-                launch { runCatching { pgChannel.subscribe(blockUntilSubscribed = true) }.onSuccess { Log.d("RT", "[RT] subscribed: expense-groups-$groupId") } }
-                launch { runCatching { bcChannel.subscribe(blockUntilSubscribed = true) }.onSuccess { Log.d("RT", "[RT] subscribed: expense-groups-broadcast-$groupId") } }
+                launch { runCatching { pgChannel.subscribe(blockUntilSubscribed = true) } }
+                launch { runCatching { bcChannel.subscribe(blockUntilSubscribed = true) } }
             }
             merge(
-                pgChanges.map { Log.d("RT", "[RT] postgres change: expense_groups"); Unit },
-                broadcasts.map { Log.d("RT", "[RT] broadcast: expense_group_changed"); Unit },
+                pgChanges.map { Unit },
+                broadcasts.map { Unit },
             ).collect { send(fetchExpenseGroups(groupId)) }
         } finally {
-            Log.d("RT", "[RT] removed: expense-groups-$groupId")
             supabase.realtime.removeChannel(pgChannel)
             supabase.realtime.removeChannel(bcChannel)
         }
@@ -1261,15 +1250,14 @@ class SupabaseTravelRepositoryImpl @Inject constructor(
 
         try {
             coroutineScope {
-                launch { runCatching { pgChannel.subscribe(blockUntilSubscribed = true) }.onSuccess { Log.d("RT", "[RT] subscribed: expense-items-$expenseGroupId") } }
-                launch { runCatching { bcChannel.subscribe(blockUntilSubscribed = true) }.onSuccess { Log.d("RT", "[RT] subscribed: expense-items-broadcast-$expenseGroupId") } }
+                launch { runCatching { pgChannel.subscribe(blockUntilSubscribed = true) } }
+                launch { runCatching { bcChannel.subscribe(blockUntilSubscribed = true) } }
             }
             merge(
-                pgChanges.map { Log.d("RT", "[RT] postgres change: expense_items"); Unit },
-                broadcasts.map { Log.d("RT", "[RT] broadcast: expense_item_changed"); Unit },
+                pgChanges.map { Unit },
+                broadcasts.map { Unit },
             ).collect { send(fetchExpenseItems(expenseGroupId)) }
         } finally {
-            Log.d("RT", "[RT] removed: expense-items-$expenseGroupId")
             supabase.realtime.removeChannel(pgChannel)
             supabase.realtime.removeChannel(bcChannel)
         }
@@ -1290,15 +1278,14 @@ class SupabaseTravelRepositoryImpl @Inject constructor(
 
         try {
             coroutineScope {
-                launch { runCatching { pgChannel.subscribe(blockUntilSubscribed = true) }.onSuccess { Log.d("RT", "[RT] subscribed: assignments-$expenseGroupId") } }
-                launch { runCatching { bcChannel.subscribe(blockUntilSubscribed = true) }.onSuccess { Log.d("RT", "[RT] subscribed: assignments-broadcast-$expenseGroupId") } }
+                launch { runCatching { pgChannel.subscribe(blockUntilSubscribed = true) } }
+                launch { runCatching { bcChannel.subscribe(blockUntilSubscribed = true) } }
             }
             merge(
-                pgChanges.map { Log.d("RT", "[RT] postgres change: item_assignments"); Unit },
-                broadcasts.map { Log.d("RT", "[RT] broadcast: assignment_changed"); Unit },
+                pgChanges.map { Unit },
+                broadcasts.map { Unit },
             ).collect { send(fetchAssignments(expenseGroupId)) }
         } finally {
-            Log.d("RT", "[RT] removed: assignments-$expenseGroupId")
             supabase.realtime.removeChannel(pgChannel)
             supabase.realtime.removeChannel(bcChannel)
         }
