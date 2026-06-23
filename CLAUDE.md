@@ -21,6 +21,16 @@ In Spanish.
 - Always call `reload*()` after create/update/delete mutations; never rely on Realtime alone
 - 213 tests must pass before any commit (`./gradlew :app:testDebugUnitTest`)
 
+## Ktor engine requirement
+
+**Always use `ktor-client-okhttp`, never `ktor-client-android`.**
+
+`ktor-client-android` uses `HttpURLConnection` which has no WebSocket support. Supabase Realtime requires WebSockets. Using the wrong engine causes the silent error `Engine doesn't support WebSocketCapability`, which retries every 7 seconds and never connects — killing all Postgres Changes and Broadcast delivery permanently.
+
+- `app/build.gradle.kts` must have `implementation("io.ktor:ktor-client-okhttp:x.y.z")`
+- Any `HttpClient(Android)` in DI modules must be changed to `HttpClient(OkHttp)` with `import io.ktor.client.engine.okhttp.OkHttp`
+- If you add a new Ktor dependency or touch build.gradle, verify the engine is still OkHttp
+
 ## Realtime rules
 
 - NEVER use `filter()` on `postgresChangeFlow`
