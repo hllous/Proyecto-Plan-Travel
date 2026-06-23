@@ -636,7 +636,16 @@ class SupabaseTravelRepositoryImpl @Inject constructor(
                 add(userBroadcasts.map { Unit })
                 bcGroupEntries.forEach { (_, flow) -> add(flow.map { Unit }) }
             }
-            merge(*allFlows.toTypedArray()).collect { send(fetchGroupsForUser(userId)) }
+            var prevMemberCounts = initialGroups.associate { it.id to it.memberCount }
+            merge(*allFlows.toTypedArray()).collect {
+                val newGroups = fetchGroupsForUser(userId)
+                send(newGroups)
+                newGroups.forEach { group ->
+                    val prev = prevMemberCounts[group.id]
+                    if (prev != null && prev != group.memberCount) notifyMembersChanged(group.id)
+                }
+                prevMemberCounts = newGroups.associate { it.id to it.memberCount }
+            }
         } finally {
             supabase.realtime.removeChannel(pgChannel)
             supabase.realtime.removeChannel(bcChannel)
@@ -653,10 +662,23 @@ class SupabaseTravelRepositoryImpl @Inject constructor(
     override fun observeGroups(): Flow<List<TravelGroup>> = observeGroupsSharedFlow
 
     private val observeMembersSharedFlows = ConcurrentHashMap<String, SharedFlow<List<GroupMember>>>()
+    private val observeMembersVersions = ConcurrentHashMap<String, MutableStateFlow<Int>>()
 
+    private fun membersVersion(groupId: String): MutableStateFlow<Int> =
+        observeMembersVersions.getOrPut(groupId) { MutableStateFlow(0) }
+
+    // Restart the observeMembers channelFlow for the given group, forcing an immediate DB
+    // re-fetch. Called after any mutation that changes group membership (join, leave, kick)
+    // so the local device never relies solely on broadcast delivery.
+    private fun notifyMembersChanged(groupId: String) {
+        membersVersion(groupId).value++
+    }
+
+    @OptIn(ExperimentalCoroutinesApi::class)
     override fun observeMembers(groupId: String): Flow<List<GroupMember>> =
         observeMembersSharedFlows.getOrPut(groupId) {
-            createObserveMembersChannelFlow(groupId)
+            membersVersion(groupId)
+                .flatMapLatest { createObserveMembersChannelFlow(groupId) }
                 .shareIn(repositoryScope, SharingStarted.WhileSubscribed(5000), replay = 1)
         }
 
@@ -728,9 +750,8 @@ class SupabaseTravelRepositoryImpl @Inject constructor(
             filter { eq("id", memberId) }
         }
         member?.groupId?.let {
+            notifyMembersChanged(it)
             sendBroadcast("groups-broadcast-$it", "group_list_changed")
-            // Broadcast to members channel so observeMembers re-fetches on all devices
-            // (Postgres Changes may be RLS-blocked for the kicked member's DELETE row).
             sendBroadcast("members-broadcast-$it", "member_joined")
         }
     }
@@ -747,9 +768,8 @@ class SupabaseTravelRepositoryImpl @Inject constructor(
         // is gone by the time the realtime event is evaluated). Force an immediate re-fetch
         // on this device via _observeGroupsVersion, and broadcast for other devices.
         _observeGroupsVersion.value++
+        notifyMembersChanged(groupId)
         sendBroadcast("groups-broadcast-$groupId", "group_list_changed")
-        // Notify observeMembers on other devices so the leaver disappears from their member list
-        // without requiring an app restart.
         sendBroadcast("members-broadcast-$groupId", "member_joined")
     }
 
@@ -851,15 +871,9 @@ class SupabaseTravelRepositoryImpl @Inject constructor(
         // Trigger the joiner's own observeGroups broadcast fallback so their group list updates
         // without relying on the Postgres Change self-echo (which RLS may block).
         sendBroadcast("groups-broadcast-$userId", "groups_changed")
-        // Notify existing group members so their observeGroups broadcast fallback fires and
-        // memberCount / member list refresh without restart.
         sendBroadcast("groups-broadcast-${token.groupId}", "group_list_changed")
-        // Notify observeMembers on other devices: Postgres Changes for a cross-user INSERT on
-        // group_members is RLS-blocked (the new member row is visible but the existing members'
-        // RLS policy evaluates before the row is committed). Broadcast is the only reliable path.
         sendBroadcast("members-broadcast-${token.groupId}", "member_joined")
-        // Restart observeGroupsSharedFlow so per-group broadcast channels are rebuilt to include
-        // the newly joined group (bcGroupEntries is a snapshot at flow-start time).
+        notifyMembersChanged(token.groupId)
         _observeGroupsVersion.value++
 
         return Result.success(token.groupId)
