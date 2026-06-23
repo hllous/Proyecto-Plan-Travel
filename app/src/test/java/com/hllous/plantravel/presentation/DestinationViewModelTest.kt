@@ -1,11 +1,13 @@
 package com.hllous.plantravel.presentation
 
+import com.hllous.plantravel.FakeDestinationPhotoResolver
 import com.hllous.plantravel.FakePlacesApiClient
 import com.hllous.plantravel.FakeSessionProvider
 import com.hllous.plantravel.FakeTravelRepository
 import com.hllous.plantravel.MainDispatcherRule
 import com.hllous.plantravel.data.destination.DestinationFallbackImage
 import com.hllous.plantravel.data.destination.DestinationTextNormalizer
+import com.hllous.plantravel.domain.destination.DestinationPhotoResolver
 import com.hllous.plantravel.domain.model.PlaceResult
 import com.hllous.plantravel.domain.model.StoredDestination
 import com.hllous.plantravel.domain.model.TravelGroup
@@ -79,120 +81,22 @@ class DestinationViewModelTest {
         session: FakeSessionProvider = FakeSessionProvider(userId = "user-1"),
         holder: SelectedGroupHolder = SelectedGroupHolder(),
         ranker: PlaceRecommendationRanker = PlaceRecommendationRanker(),
+        photoResolver: DestinationPhotoResolver = FakeDestinationPhotoResolver(),
     ) = DestinationViewModel(
         repository = repo,
         placesApiClient = places,
         sessionProvider = session,
         selectedGroupHolder = holder,
         ranker = ranker,
+        photoResolver = photoResolver,
     )
 
-    // ── Google Places photo fetcher ───────────────────────────────────────────
-
-    @Test
-    fun googlePhotoFetcherPicksLocalityAndIgnoresNonLocalityResults() = runTest {
-        // Uses real fetchGooglePhotoUrl (googleDestinationPhotoFetcher not overridden).
-        // Verifies client-side isLocalityLike filter — not dependent on server-side includedType.
-        val repo = FakeTravelRepository(
-            initialDestinations = listOf(
-                storedDestination("dest-bari", "Bariloche", "Patagonia", "Río Negro"),
-            ),
-        )
-        val places = FakePlacesApiClient(
-            destinationResults = listOf(
-                PlaceResult(
-                    placeId = "place-museum",
-                    name = "Museo Patagónico",
-                    photoUrl = "https://example.com/museum.jpg",
-                    rating = 4.5, reviewCount = 50,
-                    address = "Bariloche, Río Negro, Argentina",
-                    lat = -41.13, lng = -71.31,
-                    primaryType = "museum",
-                    types = listOf("museum", "tourist_attraction"),
-                ),
-                PlaceResult(
-                    placeId = "place-city",
-                    name = "Bariloche",
-                    photoUrl = "https://example.com/bariloche.jpg",
-                    rating = 4.9, reviewCount = 1000,
-                    address = "Bariloche, Río Negro, Argentina",
-                    lat = -41.13, lng = -71.31,
-                    primaryType = "locality",
-                    types = listOf("locality"),
-                ),
-            ),
-        )
-        val vm = viewModel(repo = repo, places = places).apply {
-            wikipediaDestinationPhotoFetcher = { null }
-        }
-
-        vm.selectRegion("Patagonia")
-        advanceUntilIdle()
-
-        assertEquals("https://example.com/bariloche.jpg", vm.destinationPhotoUrls.value["dest-bari"])
-    }
-
-    @Test
-    fun googlePhotoFetcherAcceptsAdministrativeAreaLevel3ForSmallTowns() = runTest {
-        // Small Argentine towns are often tagged administrative_area_level_3, not locality.
-        // The client-side isLocalityLike filter must accept this type.
-        val repo = FakeTravelRepository(
-            initialDestinations = listOf(
-                storedDestination("dest-cerv", "Cervantes", "Patagonia", "Río Negro",
-                    lat = -39.28, lng = -66.99),
-            ),
-        )
-        val places = FakePlacesApiClient(
-            destinationResults = listOf(
-                PlaceResult(
-                    placeId = "place-cerv",
-                    name = "Cervantes",
-                    photoUrl = "https://example.com/cervantes-town.jpg",
-                    rating = 4.2, reviewCount = 30,
-                    address = "Cervantes, Río Negro, Argentina",
-                    lat = -39.28, lng = -66.99,
-                    primaryType = "administrative_area_level_3",
-                    types = listOf("administrative_area_level_3", "political"),
-                ),
-            ),
-        )
-        val vm = viewModel(repo = repo, places = places).apply {
-            wikipediaDestinationPhotoFetcher = { null }
-        }
-
-        vm.selectRegion("Patagonia")
-        advanceUntilIdle()
-
-        assertEquals(
-            "https://example.com/cervantes-town.jpg",
-            vm.destinationPhotoUrls.value["dest-cerv"],
-        )
-    }
-
-    @Test
-    fun googlePhotoFetcherFallsThroughToWikipediaWhenPlacesApiThrows() = runTest {
-        // Uses real fetchGooglePhotoUrl — verifies runCatching swallows API errors
-        // and the resolution chain continues to Wikipedia.
-        val repo = FakeTravelRepository(
-            initialDestinations = listOf(
-                storedDestination("dest-1", "Bariloche", "Patagonia", "Río Negro"),
-            ),
-        )
-        val places = FakePlacesApiClient(searchDestinationsThrows = true)
-        val vm = viewModel(repo = repo, places = places).apply {
-            wikipediaDestinationPhotoFetcher = { "https://wikipedia.example/${it.name}.jpg" }
-        }
-
-        vm.selectRegion("Patagonia")
-        advanceUntilIdle()
-
-        assertEquals("https://wikipedia.example/Bariloche.jpg", vm.destinationPhotoUrls.value["dest-1"])
-    }
+    // ── Photo caching / deduplication ────────────────────────────────────────
 
     @Test
     fun googleFetcherNotCalledForDestinationsWithStoredWikipediaPhoto() = runTest {
-        // Destinations that already have a real displayPhotoUrl (including Wikipedia) must
-        // not trigger a Google fetch — avoids burning API quota on already-resolved destinations.
+        // Destinations that already have a real displayPhotoUrl must not trigger a resolver
+        // call — avoids burning API quota on already-resolved destinations.
         val repo = FakeTravelRepository(
             initialDestinations = listOf(
                 storedDestination(
@@ -201,16 +105,13 @@ class DestinationViewModelTest {
                 ),
             ),
         )
-        var googleCallCount = 0
-        val vm = viewModel(repo = repo).apply {
-            googleDestinationPhotoFetcher = { googleCallCount++; "https://google.example/chalten.jpg" }
-            wikipediaDestinationPhotoFetcher = { null }
-        }
+        val resolver = FakeDestinationPhotoResolver { "https://google.example/chalten.jpg" }
+        val vm = viewModel(repo = repo, photoResolver = resolver)
 
         vm.selectRegion("Patagonia")
         advanceUntilIdle()
 
-        assertEquals(0, googleCallCount)
+        assertEquals(0, resolver.resolveCallCount)
         assertEquals(
             "https://upload.wikimedia.org/wikipedia/commons/thumb/chalten.jpg",
             vm.destinationPhotoUrls.value["dest-wiki"],
@@ -219,25 +120,22 @@ class DestinationViewModelTest {
 
     @Test
     fun photoFetcherDoesNotStartDuplicateRequestForInFlightDestination() = runTest {
-        // If loadPhotosFor is called twice before the first fetch completes, the fetcher
+        // If loadPhotosFor is called twice before the first fetch completes, the resolver
         // must only be called once (photoLoadingDestinationKeys deduplication).
         val repo = FakeTravelRepository(
             initialDestinations = listOf(
                 storedDestination("dest-1", "Ushuaia", "Patagonia", "Tierra del Fuego"),
             ),
         )
-        var fetchCount = 0
-        val vm = viewModel(repo = repo).apply {
-            googleDestinationPhotoFetcher = { fetchCount++; "https://example.com/ushuaia.jpg" }
-            wikipediaDestinationPhotoFetcher = { null }
-        }
+        val resolver = FakeDestinationPhotoResolver { "https://example.com/ushuaia.jpg" }
+        val vm = viewModel(repo = repo, photoResolver = resolver)
 
         // Two rapid loads before coroutines settle
         vm.selectRegion("Patagonia")
         vm.selectRegion("Patagonia")
         advanceUntilIdle()
 
-        assertEquals(1, fetchCount)
+        assertEquals(1, resolver.resolveCallCount)
         assertEquals("https://example.com/ushuaia.jpg", vm.destinationPhotoUrls.value["dest-1"])
     }
 
@@ -251,10 +149,10 @@ class DestinationViewModelTest {
                 storedDestination("2", "Ushuaia", "Patagonia", "Tierra del Fuego", population = 82615),
             ),
         )
-        val vm = viewModel(repo = repo).apply {
-            googleDestinationPhotoFetcher = { "https://example.com/${it.name}.jpg" }
-            wikipediaDestinationPhotoFetcher = { null }
-        }
+        val vm = viewModel(
+            repo = repo,
+            photoResolver = FakeDestinationPhotoResolver { "https://example.com/${it.name}.jpg" },
+        )
 
         vm.selectRegion("Patagonia")
         advanceUntilIdle()
@@ -380,79 +278,17 @@ class DestinationViewModelTest {
                 storedDestination("dest-1", "El Chaltén", "Patagonia", "Santa Cruz"),
             ),
         )
-        val vm = viewModel(repo = repo).apply {
-            googleDestinationPhotoFetcher = { null }
-            wikipediaDestinationPhotoFetcher = { dest -> "https://wikipedia.example/${dest.name}.jpg" }
-        }
+        val vm = viewModel(
+            repo = repo,
+            photoResolver = FakeDestinationPhotoResolver { dest -> "https://wikipedia.example/${dest.name}.jpg" },
+        )
 
         vm.selectRegion("Patagonia")
         advanceUntilIdle()
 
-        assertEquals("dest-1", repo.lastUpdatedDestinationPhotoId)
         assertEquals(
             "https://wikipedia.example/El Chaltén.jpg",
             vm.destinationPhotoUrls.value["dest-1"],
-        )
-    }
-
-    @Test
-    fun wikipediaFetcherReceivesFullDestinationEnablingProvinceDisambiguation() = runTest {
-        val repo = FakeTravelRepository(
-            initialDestinations = listOf(
-                storedDestination("dest-gaiman", "Gaiman", "Patagonia", "Chubut"),
-            ),
-        )
-        var capturedName: String? = null
-        var capturedProvince: String? = null
-        val vm = viewModel(repo = repo).apply {
-            googleDestinationPhotoFetcher = { null }
-            wikipediaDestinationPhotoFetcher = { dest ->
-                capturedName = dest.name
-                capturedProvince = dest.province
-                "https://es.wikipedia.example/${dest.name}-${dest.province}.jpg"
-            }
-        }
-
-        vm.selectRegion("Patagonia")
-        advanceUntilIdle()
-
-        assertEquals("Gaiman", capturedName)
-        assertEquals("Chubut", capturedProvince)
-        assertEquals(
-            "https://es.wikipedia.example/Gaiman-Chubut.jpg",
-            vm.destinationPhotoUrls.value["dest-gaiman"],
-        )
-    }
-
-    @Test
-    fun wikipediaFetcherReceivesCoordinatesForGeographicDisambiguation() = runTest {
-        val repo = FakeTravelRepository(
-            initialDestinations = listOf(
-                storedDestination(
-                    "dest-cervantes", "Cervantes", "Patagonia", "Río Negro",
-                    lat = -39.123, lng = -67.456,
-                ),
-            ),
-        )
-        var capturedLat: Double? = null
-        var capturedLng: Double? = null
-        val vm = viewModel(repo = repo).apply {
-            googleDestinationPhotoFetcher = { null }
-            wikipediaDestinationPhotoFetcher = { dest ->
-                capturedLat = dest.lat
-                capturedLng = dest.lng
-                "https://es.wikipedia.example/geo-${dest.lat}_${dest.lng}.jpg"
-            }
-        }
-
-        vm.selectRegion("Patagonia")
-        advanceUntilIdle()
-
-        assertEquals(-39.123, capturedLat!!, 0.0001)
-        assertEquals(-67.456, capturedLng!!, 0.0001)
-        assertEquals(
-            "https://es.wikipedia.example/geo--39.123_-67.456.jpg",
-            vm.destinationPhotoUrls.value["dest-cervantes"],
         )
     }
 
@@ -464,13 +300,12 @@ class DestinationViewModelTest {
             ),
         )
         var attempts = 0
-        val vm = viewModel(repo = repo).apply {
-            googleDestinationPhotoFetcher = {
-                attempts++
-                if (attempts == 1) null else "https://example.com/el-chalten.jpg"
-            }
-            wikipediaDestinationPhotoFetcher = { null }
+        val dest = storedDestination("dest-1", "El Chaltén", "Patagonia", "Santa Cruz")
+        val resolver = FakeDestinationPhotoResolver { d ->
+            attempts++
+            if (attempts == 1) DestinationFallbackImage.tokenFor(d) else "https://example.com/el-chalten.jpg"
         }
+        val vm = viewModel(repo = repo, photoResolver = resolver)
 
         vm.selectRegion("Patagonia")
         advanceUntilIdle()
@@ -493,15 +328,14 @@ class DestinationViewModelTest {
                 storedDestination("dest-1", "Lago Puelo", "Patagonia", "Chubut"),
             ),
         )
-        val vm = viewModel(repo = repo).apply {
-            googleDestinationPhotoFetcher = { null }
-            wikipediaDestinationPhotoFetcher = { null }
-        }
+        val vm = viewModel(
+            repo = repo,
+            photoResolver = FakeDestinationPhotoResolver { d -> DestinationFallbackImage.tokenFor(d) },
+        )
 
         vm.selectRegion("Patagonia")
         advanceUntilIdle()
 
-        assertNull(repo.lastUpdatedDestinationPhotoId)
         assertEquals(
             DestinationFallbackImage.tokenForRegion("Patagonia"),
             vm.destinationPhotoUrls.value["dest-1"],

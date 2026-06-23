@@ -1,5 +1,6 @@
 package com.hllous.plantravel.presentation
 
+import com.hllous.plantravel.FakeDestinationPhotoResolver
 import com.hllous.plantravel.FakePlacesApiClient
 import com.hllous.plantravel.FakeSessionProvider
 import com.hllous.plantravel.FakeTravelRepository
@@ -33,6 +34,7 @@ class DestinationViewModelRealtimeTest {
         sessionProvider = FakeSessionProvider(userId = "user-1"),
         selectedGroupHolder = holder,
         ranker = PlaceRecommendationRanker(),
+        photoResolver = FakeDestinationPhotoResolver(),
     )
 
     private fun warmUp(block: suspend () -> Unit): CoroutineScope {

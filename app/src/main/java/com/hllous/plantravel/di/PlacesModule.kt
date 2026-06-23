@@ -1,7 +1,9 @@
 package com.hllous.plantravel.di
 
 import com.hllous.plantravel.BuildConfig
+import com.hllous.plantravel.data.destination.DestinationPhotoResolverImpl
 import com.hllous.plantravel.data.places.GooglePlacesApiClient
+import com.hllous.plantravel.domain.destination.DestinationPhotoResolver
 import com.hllous.plantravel.domain.places.PlacesApiClient
 import dagger.Binds
 import dagger.Module
@@ -23,6 +25,10 @@ abstract class PlacesModule {
     @Binds
     @Singleton
     abstract fun bindPlacesApiClient(impl: GooglePlacesApiClient): PlacesApiClient
+
+    @Binds
+    @Singleton
+    abstract fun bindDestinationPhotoResolver(impl: DestinationPhotoResolverImpl): DestinationPhotoResolver
 
     companion object {
         @Provides
