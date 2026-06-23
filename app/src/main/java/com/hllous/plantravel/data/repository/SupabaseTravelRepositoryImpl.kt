@@ -701,6 +701,11 @@ class SupabaseTravelRepositoryImpl @Inject constructor(
             .insert(InsertGroupDto(id = groupId, name = groupName, adminUserId = userId))
         supabase.from("group_members")
             .insert(InsertMemberDto(groupId = groupId, userId = userId, role = MemberRole.ADMIN.name))
+        // Postgres Changes for INSERT is unreliable here: the group_members row doesn't
+        // exist yet when travel_groups fires, so fetchGroupsForUser misses it; and the
+        // group_members INSERT RLS check is self-referential and may not deliver.
+        // Restart the flow immediately so the new group is fetched from DB.
+        _observeGroupsVersion.value++
         return groupId
     }
 
@@ -721,7 +726,12 @@ class SupabaseTravelRepositoryImpl @Inject constructor(
         supabase.from("group_members").delete {
             filter { eq("id", memberId) }
         }
-        member?.groupId?.let { sendBroadcast("groups-broadcast-$it", "group_list_changed") }
+        member?.groupId?.let {
+            sendBroadcast("groups-broadcast-$it", "group_list_changed")
+            // Broadcast to members channel so observeMembers re-fetches on all devices
+            // (Postgres Changes may be RLS-blocked for the kicked member's DELETE row).
+            sendBroadcast("members-broadcast-$it", "member_joined")
+        }
     }
 
     override suspend fun leaveGroup(groupId: String) {
@@ -732,6 +742,10 @@ class SupabaseTravelRepositoryImpl @Inject constructor(
                 eq("user_id", userId)
             }
         }
+        // Postgres Changes for this DELETE is blocked by RLS (the user's own membership row
+        // is gone by the time the realtime event is evaluated). Force an immediate re-fetch
+        // on this device via _observeGroupsVersion, and broadcast for other devices.
+        _observeGroupsVersion.value++
         sendBroadcast("groups-broadcast-$groupId", "group_list_changed")
     }
 
@@ -740,6 +754,11 @@ class SupabaseTravelRepositoryImpl @Inject constructor(
         supabase.from("travel_groups").delete {
             filter { eq("id", groupId) }
         }
+        // Postgres Changes for travel_groups DELETE is RLS-blocked: the admin's group_members
+        // row is cascade-deleted in the same transaction, so realtime can't verify access.
+        // Increment _observeGroupsVersion to immediately restart the groups flow on this device
+        // (same pattern as consumeInvite). Broadcast notifies other members' devices.
+        _observeGroupsVersion.value++
         sendBroadcast("groups-broadcast-$groupId", "group_list_changed")
     }
 
