@@ -11,7 +11,7 @@ import dagger.Provides
 import dagger.hilt.InstallIn
 import dagger.hilt.components.SingletonComponent
 import io.ktor.client.HttpClient
-import io.ktor.client.engine.android.Android
+import io.ktor.client.engine.okhttp.OkHttp
 import io.ktor.client.plugins.contentnegotiation.ContentNegotiation
 import io.ktor.serialization.kotlinx.json.json
 import javax.inject.Named
@@ -33,7 +33,7 @@ abstract class PlacesModule {
     companion object {
         @Provides
         @Singleton
-        fun providePlacesHttpClient(): HttpClient = HttpClient(Android) {
+        fun providePlacesHttpClient(): HttpClient = HttpClient(OkHttp) {
             install(ContentNegotiation) {
                 json(Json { ignoreUnknownKeys = true; encodeDefaults = true })
             }
