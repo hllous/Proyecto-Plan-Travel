@@ -49,24 +49,24 @@ class AuthViewModelTest {
 
     @Test
     fun login_onFailure_emitsError() {
-        val repo = FakeAuthRepository(loginResult = Result.failure(Exception("Credenciales inválidas")))
+        val repo = FakeAuthRepository(loginResult = Result.failure(Exception("invalid_credentials")))
         val vm = viewModel(repo)
 
         vm.login("a@b.com", "wrong")
 
-        assertEquals(AuthState.Error("Credenciales inválidas"), vm.state.value)
+        assertEquals(AuthState.Error("Email o contraseña incorrectos"), vm.state.value)
     }
 
     // --- register ---
 
     @Test
     fun register_onFailure_emitsError() {
-        val repo = FakeAuthRepository(registerResult = Result.failure(Exception("Email ya registrado")))
+        val repo = FakeAuthRepository(registerResult = Result.failure(Exception("user_already_exists")))
         val vm = viewModel(repo)
 
         vm.register("a@b.com", "pass", "Ana")
 
-        assertEquals(AuthState.Error("Email ya registrado"), vm.state.value)
+        assertEquals(AuthState.Error("Ya existe una cuenta con ese email"), vm.state.value)
     }
 
     @Test
@@ -96,13 +96,13 @@ class AuthViewModelTest {
 
     @Test
     fun createProfile_onFailure_emitsError() {
-        val repo = FakeAuthRepository(createProfileResult = Result.failure(Exception("Error al guardar")))
+        val repo = FakeAuthRepository(createProfileResult = Result.failure(Exception("network error")))
         val vm = viewModel(repo)
         repo.userIdFlow.tryEmit("user-123")
 
         vm.createProfile("Ana", "+5491100000000")
 
-        assertEquals(AuthState.Error("Error al guardar"), vm.state.value)
+        assertEquals(AuthState.Error("Sin conexión a internet. Verificá tu red"), vm.state.value)
     }
 
     @Test
@@ -232,7 +232,7 @@ class AuthViewModelTest {
 
         vm.loginWithGoogle()
 
-        assertEquals(AuthState.Error("OAuth error"), vm.state.value)
+        assertEquals(AuthState.Error("Ocurrió un error inesperado. Intentá de nuevo"), vm.state.value)
     }
 
     @Test
