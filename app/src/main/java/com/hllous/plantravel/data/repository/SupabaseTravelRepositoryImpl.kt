@@ -748,6 +748,9 @@ class SupabaseTravelRepositoryImpl @Inject constructor(
         // on this device via _observeGroupsVersion, and broadcast for other devices.
         _observeGroupsVersion.value++
         sendBroadcast("groups-broadcast-$groupId", "group_list_changed")
+        // Notify observeMembers on other devices so the leaver disappears from their member list
+        // without requiring an app restart.
+        sendBroadcast("members-broadcast-$groupId", "member_joined")
     }
 
     override suspend fun deleteGroup(groupId: String) {
@@ -851,6 +854,10 @@ class SupabaseTravelRepositoryImpl @Inject constructor(
         // Notify existing group members so their observeGroups broadcast fallback fires and
         // memberCount / member list refresh without restart.
         sendBroadcast("groups-broadcast-${token.groupId}", "group_list_changed")
+        // Notify observeMembers on other devices: Postgres Changes for a cross-user INSERT on
+        // group_members is RLS-blocked (the new member row is visible but the existing members'
+        // RLS policy evaluates before the row is committed). Broadcast is the only reliable path.
+        sendBroadcast("members-broadcast-${token.groupId}", "member_joined")
         // Restart observeGroupsSharedFlow so per-group broadcast channels are rebuilt to include
         // the newly joined group (bcGroupEntries is a snapshot at flow-start time).
         _observeGroupsVersion.value++
