@@ -43,6 +43,7 @@ class FakeTravelRepository(
     var setExpenseGroupPinnedThrows: Boolean = false,
     var setExpenseGroupPayerThrows: Boolean = false,
     var mpAliasByUserId: Map<String, String?> = emptyMap(),
+    var paymentStatusByKey: Map<Triple<String, String, String>, PaymentStatus> = emptyMap(),
     var updateMpAliasThrows: Boolean = false,
     var settlementResultsByExpenseGroupId: Map<String, SettlementResult> = emptyMap(),
     initialGroups: List<TravelGroup> = emptyList(),
@@ -209,7 +210,8 @@ class FakeTravelRepository(
         if (updateMpAliasThrows) throw RuntimeException("network error")
     }
 
-    override suspend fun getPaymentStatus(fromMemberId: String, toMemberId: String, expenseGroupId: String): PaymentStatus? = null
+    override suspend fun getPaymentStatus(fromMemberId: String, toMemberId: String, expenseGroupId: String): PaymentStatus? =
+        paymentStatusByKey[Triple(fromMemberId, toMemberId, expenseGroupId)]
 
     override suspend fun markDebtorConfirmed(fromMemberId: String, toMemberId: String, expenseGroupId: String) = Unit
 

@@ -3,6 +3,8 @@ package com.hllous.plantravel.presentation.expense
 import androidx.lifecycle.ViewModel
 import androidx.lifecycle.viewModelScope
 import com.hllous.plantravel.domain.auth.SessionProvider
+import com.hllous.plantravel.domain.expense.ExpenseDashboardService
+import com.hllous.plantravel.domain.expense.ExpenseDashboardState
 import com.hllous.plantravel.domain.model.ExpenseGroup
 import com.hllous.plantravel.domain.model.ExpenseGroupState
 import com.hllous.plantravel.domain.model.ExpenseItem
@@ -12,7 +14,6 @@ import com.hllous.plantravel.domain.model.ItemAssignment
 import com.hllous.plantravel.domain.model.MemberSettlement
 import com.hllous.plantravel.domain.model.PeerToPerDebt
 import com.hllous.plantravel.domain.model.PeerToPerDebtUiModel
-import com.hllous.plantravel.domain.model.SettlementResult
 import com.hllous.plantravel.domain.model.SettlementWarning
 import com.hllous.plantravel.domain.model.TravelGroup
 import com.hllous.plantravel.domain.repository.TravelRepository
@@ -20,12 +21,10 @@ import com.hllous.plantravel.domain.settlement.AssignmentOutcome
 import com.hllous.plantravel.domain.settlement.AssignmentRejectionReason
 import com.hllous.plantravel.domain.usecase.AddExpenseItemUseCase
 import com.hllous.plantravel.domain.usecase.AssignItemToMemberUseCase
-import com.hllous.plantravel.domain.usecase.CalculateSettlementUseCase
 import com.hllous.plantravel.domain.usecase.CreateExpenseGroupUseCase
 import com.hllous.plantravel.domain.usecase.DeleteExpenseGroupUseCase
 import com.hllous.plantravel.domain.usecase.DeleteExpenseItemUseCase
 import com.hllous.plantravel.domain.usecase.FinalizeExpenseGroupUseCase
-import com.hllous.plantravel.domain.usecase.SetExpenseGroupPayerUseCase
 import com.hllous.plantravel.domain.usecase.SetExpenseGroupPinnedUseCase
 import com.hllous.plantravel.domain.usecase.UpdateExpenseGroupNameUseCase
 import com.hllous.plantravel.presentation.UiState
@@ -53,30 +52,16 @@ class ExpenseViewModel @Inject constructor(
     private val repository: TravelRepository,
     private val sessionProvider: SessionProvider,
     private val selectedGroupHolder: SelectedGroupHolder,
+    private val dashboardService: ExpenseDashboardService,
     private val addExpenseItemUseCase: AddExpenseItemUseCase,
     private val assignItemToMemberUseCase: AssignItemToMemberUseCase,
     private val deleteExpenseItemUseCase: DeleteExpenseItemUseCase,
-    private val calculateSettlementUseCase: CalculateSettlementUseCase,
     private val createExpenseGroupUseCase: CreateExpenseGroupUseCase,
     private val updateExpenseGroupNameUseCase: UpdateExpenseGroupNameUseCase,
     private val deleteExpenseGroupUseCase: DeleteExpenseGroupUseCase,
     private val finalizeExpenseGroupUseCase: FinalizeExpenseGroupUseCase,
     private val setExpenseGroupPinnedUseCase: SetExpenseGroupPinnedUseCase,
-    private val setExpenseGroupPayerUseCase: SetExpenseGroupPayerUseCase,
 ) : ViewModel() {
-
-    data class ExpenseDashboardMovement(
-        val group: ExpenseGroup,
-        val memberNetCents: Long,
-    )
-
-    data class ExpenseDashboardState(
-        val totalCents: Long = 0,
-        val pendingGroupsCount: Int = 0,
-        val memberNetCents: Long = 0,
-        val pinnedMovements: List<ExpenseDashboardMovement> = emptyList(),
-        val recentMovements: List<ExpenseDashboardMovement> = emptyList(),
-    )
 
     private val _dashboardState = MutableStateFlow(ExpenseDashboardState())
     val dashboardState: StateFlow<ExpenseDashboardState> = _dashboardState.asStateFlow()
@@ -108,7 +93,7 @@ class ExpenseViewModel @Inject constructor(
         .map { list -> list.firstOrNull { it.userId == sessionProvider.userId } }
         .stateIn(viewModelScope, SharingStarted.WhileSubscribed(5000), null)
 
-    // ── Peer-to-peer debts (declared here so init blocks below can reference them) ──
+    // ── Peer-to-peer debts ────────────────────────────────────────────────────
 
     private val _peerToPerDebts = MutableStateFlow<List<PeerToPerDebt>>(emptyList())
     val peerToPerDebts: StateFlow<List<PeerToPerDebt>> = _peerToPerDebts
@@ -136,13 +121,17 @@ class ExpenseViewModel @Inject constructor(
         viewModelScope.launch {
             combine(expenseGroups, currentMember) { groups, member -> groups to member }
                 .collectLatest { (groups, member) ->
-                    recalculateDashboard(groups, member)
+                    _dashboardState.value = dashboardService.computeDashboard(groups, member)
                 }
         }
-        // When another user confirms a payment, the broadcast triggers expenseGroups to re-emit.
-        // Re-fetch debt links so the confirmation status updates without restart.
+        // When another user confirms a payment, re-enrich the existing debts.
         viewModelScope.launch {
-            expenseGroups.collect { if (_peerToPerDebts.value.isNotEmpty()) refreshDebtLinks() }
+            expenseGroups.collect {
+                if (_peerToPerDebts.value.isNotEmpty()) {
+                    val expenseGroupId = _selectedExpenseGroupId.value ?: return@collect
+                    applySettlementView(expenseGroupId)
+                }
+            }
         }
     }
 
@@ -248,7 +237,7 @@ class ExpenseViewModel @Inject constructor(
     fun setPayer(memberId: String?) {
         viewModelScope.launch {
             val expenseGroupId = _selectedExpenseGroupId.value ?: return@launch
-            val result = runCatching { setExpenseGroupPayerUseCase(expenseGroupId, memberId) }
+            val result = runCatching { repository.setExpenseGroupPayer(expenseGroupId, memberId) }
             if (result.isFailure) {
                 _message.value = "Error al seleccionar pagador"
             } else {
@@ -351,13 +340,28 @@ class ExpenseViewModel @Inject constructor(
     fun refreshSettlement() {
         viewModelScope.launch {
             val expenseGroupId = _selectedExpenseGroupId.value ?: return@launch
-            val result = runCatching { calculateSettlementUseCase(expenseGroupId) }
-            if (result.isFailure) {
+            if (applySettlementView(expenseGroupId).isFailure) {
                 _message.value = "Error al calcular liquidacion"
-                return@launch
             }
-            updateSettlement(result.getOrThrow())
         }
+    }
+
+    private suspend fun applySettlementView(expenseGroupId: String): Result<Unit> {
+        val payerMemberId = expenseGroups.value.firstOrNull { it.id == expenseGroupId }?.paidByMemberId
+        val result = runCatching {
+            dashboardService.computeSettlementView(expenseGroupId, payerMemberId, members.value)
+        }
+        result.onSuccess { view ->
+            _settlements.value = view.settlements
+            _settlementWarnings.value = view.warnings
+            _peerToPerDebts.value = view.debts.map { it.debt }
+            _peerToPerDebtsWithLinks.value = view.debts
+        }
+        return result.map { }
+    }
+
+    private suspend fun recalculateSettlementSilently(expenseGroupId: String) {
+        applySettlementView(expenseGroupId)
     }
 
     fun addExpenseItem(name: String, unitPriceText: String, quantityText: String) {
@@ -438,105 +442,6 @@ class ExpenseViewModel @Inject constructor(
         }
     }
 
-    private suspend fun recalculateSettlementSilently(expenseGroupId: String) {
-        runCatching { calculateSettlementUseCase(expenseGroupId) }.onSuccess { updateSettlement(it) }
-    }
-
-    private suspend fun recalculateDashboard(
-        groups: List<ExpenseGroup>,
-        member: GroupMember?,
-    ) {
-        if (groups.isEmpty()) {
-            _dashboardState.value = ExpenseDashboardState()
-            return
-        }
-
-        val allMovements = groups.map { group ->
-            val memberNetCents = member?.let { currentMember ->
-                runCatching {
-                    val settlements = calculateSettlementUseCase(group.id).memberSettlements
-                    val payerMemberId = group.paidByMemberId
-                    when {
-                        payerMemberId == null -> 0L
-                        currentMember.id == payerMemberId ->
-                            -settlements.filter { it.memberId != payerMemberId }.sumOf { it.amountCents }
-                        else ->
-                            settlements.firstOrNull { it.memberId == currentMember.id }?.amountCents ?: 0L
-                    }
-                }.getOrDefault(0L)
-            } ?: 0L
-            ExpenseDashboardMovement(group = group, memberNetCents = memberNetCents)
-        }.sortedWith(
-            compareByDescending<ExpenseDashboardMovement> { it.group.pinnedAtMillis ?: Long.MIN_VALUE }
-                .thenByDescending { it.group.createdAtMillis ?: Long.MIN_VALUE }
-        )
-
-        val pinnedMovements = allMovements.filter { it.group.pinnedAtMillis != null }
-        val recentMovements = allMovements.filter { it.group.pinnedAtMillis == null }
-
-        _dashboardState.value = ExpenseDashboardState(
-            totalCents = groups.sumOf { it.totalPriceCents },
-            pendingGroupsCount = groups.count { it.state == ExpenseGroupState.Open },
-            memberNetCents = allMovements.sumOf { it.memberNetCents },
-            pinnedMovements = pinnedMovements,
-            recentMovements = recentMovements,
-        )
-    }
-
-    private fun updateSettlement(result: SettlementResult) {
-        _settlements.value = result.memberSettlements
-        _settlementWarnings.value = result.warnings
-        val payerMemberId = _selectedExpenseGroupId.value?.let { id ->
-            expenseGroups.value.firstOrNull { it.id == id }?.paidByMemberId
-        }
-        val debts = buildDebtsFromPayerView(result.memberSettlements, payerMemberId)
-        _peerToPerDebts.value = debts
-        viewModelScope.launch { refreshDebtLinks(debts) }
-    }
-
-    private fun buildDebtsFromPayerView(
-        settlements: List<MemberSettlement>,
-        payerMemberId: String?
-    ): List<PeerToPerDebt> {
-        val payer = settlements.firstOrNull { it.memberId == payerMemberId } ?: return emptyList()
-        return settlements
-            .filter { it.memberId != payerMemberId && it.amountCents > 0 }
-            .map { debtor ->
-                PeerToPerDebt(
-                    fromMemberId = debtor.memberId,
-                    fromMemberName = debtor.memberName,
-                    toMemberId = payer.memberId,
-                    toMemberName = payer.memberName,
-                    amountCents = debtor.amountCents,
-                )
-            }
-    }
-
-    private suspend fun refreshDebtLinks(debts: List<PeerToPerDebt> = _peerToPerDebts.value) {
-        val expenseGroupId = _selectedExpenseGroupId.value ?: return
-        val currentMembers = members.value
-        val uiModels = debts.map { debt ->
-            val creditorUserId = currentMembers.firstOrNull { it.id == debt.toMemberId }?.userId
-            val mpAlias = if (creditorUserId != null)
-                runCatching { repository.getMpAlias(creditorUserId) }.getOrNull()
-            else null
-            val deepLink = mpAlias?.takeIf { it.isNotBlank() }?.let { alias ->
-                val amountPesos = debt.amountCents / 100
-                "mercadopago://send?amount=$amountPesos&alias=$alias"
-            }
-            val status = runCatching {
-                repository.getPaymentStatus(debt.fromMemberId, debt.toMemberId, expenseGroupId)
-            }.getOrNull()
-            PeerToPerDebtUiModel(
-                debt = debt,
-                deepLink = deepLink,
-                debtorConfirmed = status?.debtorConfirmed ?: false,
-                creditorConfirmed = status?.creditorConfirmed ?: false,
-            )
-        }
-        _peerToPerDebtsWithLinks.value = uiModels
-    }
-
     fun markDebtorConfirmed(fromMemberId: String, toMemberId: String) {
         if (_isSubmitting.value) return
         viewModelScope.launch {
@@ -548,7 +453,7 @@ class ExpenseViewModel @Inject constructor(
                     _message.value = "Error al confirmar el pago"
                 } else {
                     _message.value = "Pago confirmado"
-                    refreshDebtLinks()
+                    applySettlementView(expenseGroupId)
                     reloadExpenseGroups()
                 }
             } finally {
@@ -568,7 +473,7 @@ class ExpenseViewModel @Inject constructor(
                     _message.value = "Error al confirmar el pago"
                 } else {
                     _message.value = "Pago recibido confirmado"
-                    refreshDebtLinks()
+                    applySettlementView(expenseGroupId)
                     reloadExpenseGroups()
                 }
             } finally {

@@ -10,16 +10,15 @@ import com.hllous.plantravel.domain.model.MemberSettlement
 import com.hllous.plantravel.domain.model.SettlementResult
 import com.hllous.plantravel.domain.settlement.AssignmentOutcome
 import com.hllous.plantravel.domain.settlement.AssignmentRejectionReason
+import com.hllous.plantravel.domain.expense.ExpenseDashboardService
 import com.hllous.plantravel.domain.usecase.AddExpenseItemUseCase
 import com.hllous.plantravel.domain.usecase.AssignItemToMemberUseCase
-import com.hllous.plantravel.domain.usecase.CalculateSettlementUseCase
 import com.hllous.plantravel.domain.model.GroupMember
 import com.hllous.plantravel.domain.model.MemberRole
 import com.hllous.plantravel.domain.usecase.CreateExpenseGroupUseCase
 import com.hllous.plantravel.domain.usecase.DeleteExpenseGroupUseCase
 import com.hllous.plantravel.domain.usecase.DeleteExpenseItemUseCase
 import com.hllous.plantravel.domain.usecase.FinalizeExpenseGroupUseCase
-import com.hllous.plantravel.domain.usecase.SetExpenseGroupPayerUseCase
 import com.hllous.plantravel.domain.usecase.SetExpenseGroupPinnedUseCase
 import com.hllous.plantravel.domain.usecase.UpdateExpenseGroupNameUseCase
 import com.hllous.plantravel.presentation.expense.ExpenseViewModel
@@ -48,16 +47,15 @@ class ExpenseViewModelTest {
         repository = repo,
         sessionProvider = session,
         selectedGroupHolder = holder,
+        dashboardService = ExpenseDashboardService(repo),
         addExpenseItemUseCase = AddExpenseItemUseCase(repo),
         assignItemToMemberUseCase = AssignItemToMemberUseCase(repo),
         deleteExpenseItemUseCase = DeleteExpenseItemUseCase(repo),
-        calculateSettlementUseCase = CalculateSettlementUseCase(repo),
         createExpenseGroupUseCase = CreateExpenseGroupUseCase(repo),
         updateExpenseGroupNameUseCase = UpdateExpenseGroupNameUseCase(repo),
         deleteExpenseGroupUseCase = DeleteExpenseGroupUseCase(repo),
         finalizeExpenseGroupUseCase = FinalizeExpenseGroupUseCase(repo),
         setExpenseGroupPinnedUseCase = SetExpenseGroupPinnedUseCase(repo),
-        setExpenseGroupPayerUseCase = SetExpenseGroupPayerUseCase(repo),
     )
 
     @Test

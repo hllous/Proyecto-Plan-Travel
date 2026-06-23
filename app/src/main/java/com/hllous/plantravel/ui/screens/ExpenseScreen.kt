@@ -116,6 +116,8 @@ import com.hllous.plantravel.domain.model.MemberSettlement
 import com.hllous.plantravel.domain.model.PeerToPerDebt
 import com.hllous.plantravel.domain.model.PeerToPerDebtUiModel
 import com.hllous.plantravel.domain.model.SettlementWarning
+import com.hllous.plantravel.domain.expense.ExpenseDashboardMovement
+import com.hllous.plantravel.domain.expense.ExpenseDashboardState
 import com.hllous.plantravel.presentation.UiState
 import com.hllous.plantravel.presentation.expense.ExpenseViewModel
 import com.hllous.plantravel.ui.components.ErrorCard
@@ -459,7 +461,7 @@ private fun ExpenseGroupListScreen(
     groups: List<ExpenseGroup>,
     members: List<GroupMember>,
     travelGroupName: String,
-    dashboardState: ExpenseViewModel.ExpenseDashboardState,
+    dashboardState: ExpenseDashboardState,
     snackbarHostState: SnackbarHostState,
     scrollBehavior: androidx.compose.material3.TopAppBarScrollBehavior,
     onCreateGroup: (String, String?, () -> Unit) -> Unit,
@@ -470,8 +472,8 @@ private fun ExpenseGroupListScreen(
 ) {
     var showCreateScreen by rememberSaveable { mutableStateOf(false) }
     var showAllMovements by rememberSaveable { mutableStateOf(false) }
-    var groupOptionsTarget by remember { mutableStateOf<ExpenseViewModel.ExpenseDashboardMovement?>(null) }
-    var renameTarget by remember { mutableStateOf<ExpenseViewModel.ExpenseDashboardMovement?>(null) }
+    var groupOptionsTarget by remember { mutableStateOf<ExpenseDashboardMovement?>(null) }
+    var renameTarget by remember { mutableStateOf<ExpenseDashboardMovement?>(null) }
     var renameValue by rememberSaveable { mutableStateOf("") }
 
     if (showCreateScreen) {
@@ -494,7 +496,7 @@ private fun ExpenseGroupListScreen(
     val pinnedMovements = dashboardState.pinnedMovements
     val primaryGroup = (pinnedMovements + dashboardState.recentMovements).firstOrNull()?.group
 
-    fun openRenameDialog(movement: ExpenseViewModel.ExpenseDashboardMovement) {
+    fun openRenameDialog(movement: ExpenseDashboardMovement) {
         renameTarget = movement
         renameValue = movement.group.name
         groupOptionsTarget = null
@@ -939,7 +941,7 @@ private fun ExpenseMainActionButton(
 @OptIn(ExperimentalMaterial3Api::class, ExperimentalFoundationApi::class)
 @Composable
 private fun ExpenseRecentMovementCard(
-    movement: ExpenseViewModel.ExpenseDashboardMovement,
+    movement: ExpenseDashboardMovement,
     onClick: () -> Unit,
     onLongPress: () -> Unit,
 ) {

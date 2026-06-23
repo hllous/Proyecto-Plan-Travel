@@ -112,12 +112,6 @@ class DeleteExpenseItemUseCase @Inject constructor(
     }
 }
 
-class CalculateSettlementUseCase @Inject constructor(
-    private val repository: TravelRepository
-) {
-    suspend operator fun invoke(expenseGroupId: String) = repository.calculateSettlement(expenseGroupId)
-}
-
 class CreateExpenseGroupUseCase @Inject constructor(
     private val repository: TravelRepository
 ) {
@@ -154,14 +148,6 @@ class SetExpenseGroupPinnedUseCase @Inject constructor(
 ) {
     suspend operator fun invoke(expenseGroupId: String, pinned: Boolean) {
         repository.setExpenseGroupPinned(expenseGroupId, pinned)
-    }
-}
-
-class SetExpenseGroupPayerUseCase @Inject constructor(
-    private val repository: TravelRepository
-) {
-    suspend operator fun invoke(expenseGroupId: String, memberId: String?) {
-        repository.setExpenseGroupPayer(expenseGroupId, memberId)
     }
 }
 
