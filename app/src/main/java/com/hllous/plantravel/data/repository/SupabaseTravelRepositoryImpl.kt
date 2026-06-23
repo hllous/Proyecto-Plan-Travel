@@ -713,6 +713,7 @@ class SupabaseTravelRepositoryImpl @Inject constructor(
         supabase.from("travel_groups").update({ set("name", name) }) {
             filter { eq("id", groupId) }
         }
+        _observeGroupsVersion.value++
         sendBroadcast("groups-broadcast-$groupId", "group_list_changed")
     }
 
@@ -864,16 +865,19 @@ class SupabaseTravelRepositoryImpl @Inject constructor(
             set("trip_destination_lat", lat)
             set("trip_destination_lng", lng)
         }) { filter { eq("id", groupId) } }
+        _observeGroupsVersion.value++
         sendBroadcast("groups-broadcast-$groupId", "group_list_changed")
     }
 
     override suspend fun endTrip(groupId: String) {
         supabase.from("travel_groups").update({ set("status", "closed") }) { filter { eq("id", groupId) } }
+        _observeGroupsVersion.value++
         sendBroadcast("groups-broadcast-$groupId", "group_list_changed")
     }
 
     override suspend fun reactivateTrip(groupId: String) {
         supabase.from("travel_groups").update({ set("status", "active") }) { filter { eq("id", groupId) } }
+        _observeGroupsVersion.value++
         sendBroadcast("groups-broadcast-$groupId", "group_list_changed")
     }
 
