@@ -303,6 +303,7 @@ class SupabaseTravelRepositoryImpl @Inject constructor(
         @SerialName("group_id") val groupId: String,
         val type: String,
         val state: String,
+        val name: String = "",
         @SerialName("expires_at") val expiresAt: String? = null,
         @SerialName("winner_place_id") val winnerPlaceId: String? = null,
         @SerialName("created_at") val createdAt: String? = null,
@@ -311,6 +312,7 @@ class SupabaseTravelRepositoryImpl @Inject constructor(
             id = id, groupId = groupId,
             type = if (type.equals("destination", ignoreCase = true)) PollType.DESTINATION else PollType.ACTIVITY,
             state = if (state.equals("closed", ignoreCase = true)) PollState.CLOSED else PollState.OPEN,
+            name = name,
             expiresAt = expiresAt, winnerPlaceId = winnerPlaceId,
         )
     }
@@ -320,6 +322,7 @@ class SupabaseTravelRepositoryImpl @Inject constructor(
         val id: String,
         @SerialName("group_id") val groupId: String,
         val type: String,
+        val name: String = "",
         @SerialName("expires_at") val expiresAt: String? = null,
     )
 
@@ -464,18 +467,32 @@ class SupabaseTravelRepositoryImpl @Inject constructor(
             .decodeList<PollDto>()
             .map { it.toDomain() }
 
-    // Returns the most recent poll for the group (open or closed). Without ORDER BY, Postgres
-    // returns rows in heap order — after closing one poll and creating another, the stale closed
     override suspend fun fetchActivePoll(groupId: String): Poll? =
         supabase.from("group_polls")
             .select {
-                filter { eq("group_id", groupId) }
+                filter {
+                    eq("group_id", groupId)
+                    eq("type", "destination")
+                }
                 order("created_at", Order.DESCENDING)
                 limit(1)
             }
             .decodeList<PollDto>()
             .firstOrNull()
             ?.toDomain()
+
+    private suspend fun fetchActiveActivityPolls(groupId: String): List<Poll> =
+        supabase.from("group_polls")
+            .select {
+                filter {
+                    eq("group_id", groupId)
+                    eq("state", "open")
+                    eq("type", "activity")
+                }
+                order("created_at", Order.DESCENDING)
+            }
+            .decodeList<PollDto>()
+            .map { it.toDomain() }
 
     private suspend fun fetchPollCandidatesWithVotes(pollId: String, currentMemberId: String?): List<PollCandidate> {
         val candidates = supabase.from("poll_candidates")
@@ -1008,12 +1025,41 @@ class SupabaseTravelRepositoryImpl @Inject constructor(
         }
     }
 
-    override suspend fun createPoll(groupId: String, type: PollType, expiresAt: String?): String {
+    override fun observeActiveActivityPolls(groupId: String): Flow<List<Poll>> = channelFlow {
+        send(fetchActiveActivityPolls(groupId))
+
+        val pgChannel = supabase.channel("group-polls-activity-$groupId-${UUID.randomUUID()}")
+        val pgChanges = pgChannel.postgresChangeFlow<PostgresAction>(schema = "public") {
+            table = "group_polls"
+        }
+
+        try {
+            runCatching { pgChannel.subscribe(blockUntilSubscribed = true) }
+            merge(
+                pgChanges.map { Unit },
+                pollBroadcastFlow(groupId),
+            ).collect { send(fetchActiveActivityPolls(groupId)) }
+        } finally {
+            supabase.realtime.removeChannel(pgChannel)
+        }
+    }
+
+    override suspend fun createPoll(groupId: String, type: PollType, name: String, expiresAt: String?): String {
         val id = UUID.randomUUID().toString()
         supabase.from("group_polls")
-            .insert(InsertPollDto(id = id, groupId = groupId, type = type.name.lowercase(), expiresAt = expiresAt))
+            .insert(InsertPollDto(id = id, groupId = groupId, type = type.name.lowercase(), name = name, expiresAt = expiresAt))
         sendBroadcast("group-polls-broadcast-$groupId", "poll_changed")
         return id
+    }
+
+    override suspend fun renamePoll(pollId: String, name: String) {
+        val groupId = supabase.from("group_polls")
+            .select { filter { eq("id", pollId) } }
+            .decodeList<PollDto>().firstOrNull()?.groupId ?: return
+        supabase.from("group_polls").update({ set("name", name) }) {
+            filter { eq("id", pollId) }
+        }
+        sendBroadcast("group-polls-broadcast-$groupId", "poll_changed")
     }
 
     // Resolves the group_members.id for the current auth user in a given group.

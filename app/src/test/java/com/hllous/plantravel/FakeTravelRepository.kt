@@ -58,6 +58,7 @@ class FakeTravelRepository(
     val customObserveExpenseGroups: ((String) -> Flow<List<ExpenseGroup>>)? = null,
     val customObserveActivePoll: ((String) -> Flow<Poll?>)? = null,
     val customObserveAllPolls: ((String) -> Flow<List<Poll>>)? = null,
+    val customObserveActiveActivityPolls: ((String) -> Flow<List<Poll>>)? = null,
     val customFetchActivePoll: (suspend (String) -> Poll?)? = null,
     val customObservePollCandidates: ((String) -> Flow<List<PollCandidate>>)? = null,
 ) : TravelRepository {
@@ -291,7 +292,7 @@ class FakeTravelRepository(
     // ─── Trip planning stubs ──────────────────────────────────────────────────
 
     private val _itineraryEvents = MutableStateFlow<Map<String, List<ItineraryEvent>>>(emptyMap())
-    private val _activePollByGroup = MutableStateFlow<Map<String, Poll?>>(emptyMap())
+    private val _pollsByGroup = MutableStateFlow<Map<String, List<Poll>>>(emptyMap())
     private val _candidatesByPoll = MutableStateFlow<Map<String, List<PollCandidate>>>(emptyMap())
 
     var setTripDestinationCallCount = 0
@@ -302,6 +303,9 @@ class FakeTravelRepository(
     var addPollCandidateCallCount = 0
     var lastAddedPollCandidatePollId: String? = null
     var lastAddedPollCandidatePlaceId: String? = null
+    var renamePollCallCount = 0
+    var lastRenamedPollId: String? = null
+    var lastRenamedPollName: String? = null
 
     override suspend fun setTripDestination(groupId: String, placeId: String, name: String, lat: Double, lng: Double) {
         if (setTripDestinationThrows) throw RuntimeException("network error")
@@ -363,22 +367,49 @@ class FakeTravelRepository(
     }
 
     override fun observeActivePoll(groupId: String): Flow<Poll?> =
-        customObserveActivePoll?.invoke(groupId) ?: _activePollByGroup.map { it[groupId] }
+        customObserveActivePoll?.invoke(groupId)
+            ?: _pollsByGroup.map { map ->
+                map[groupId]?.lastOrNull { it.type == PollType.DESTINATION }
+            }
 
     override fun observeAllPolls(groupId: String): Flow<List<Poll>> =
         customObserveAllPolls?.invoke(groupId)
-            ?: _activePollByGroup.map { map -> listOfNotNull(map[groupId]) }
+            ?: _pollsByGroup.map { it[groupId] ?: emptyList() }
+
+    override fun observeActiveActivityPolls(groupId: String): Flow<List<Poll>> =
+        customObserveActiveActivityPolls?.invoke(groupId)
+            ?: _pollsByGroup.map { map ->
+                map[groupId]?.filter { it.state == com.hllous.plantravel.domain.model.PollState.OPEN && it.type == PollType.ACTIVITY }
+                    ?: emptyList()
+            }
 
     override suspend fun fetchActivePoll(groupId: String): Poll? =
-        customFetchActivePoll?.invoke(groupId) ?: _activePollByGroup.value[groupId]
+        customFetchActivePoll?.invoke(groupId)
+            ?: _pollsByGroup.value[groupId]?.lastOrNull { it.type == PollType.DESTINATION }
 
-    override suspend fun createPoll(groupId: String, type: PollType, expiresAt: String?): String {
+    override suspend fun createPoll(groupId: String, type: PollType, name: String, expiresAt: String?): String {
         if (createPollThrows) throw RuntimeException("network error")
-        val poll = Poll(id = "fake-poll-id", groupId = groupId, type = type, state = com.hllous.plantravel.domain.model.PollState.OPEN, expiresAt = expiresAt)
-        val current = _activePollByGroup.value.toMutableMap()
-        current[groupId] = poll
-        _activePollByGroup.value = current
+        val poll = Poll(
+            id = "fake-poll-${System.currentTimeMillis()}",
+            groupId = groupId,
+            type = type,
+            state = com.hllous.plantravel.domain.model.PollState.OPEN,
+            name = name,
+            expiresAt = expiresAt,
+        )
+        val current = _pollsByGroup.value.toMutableMap()
+        current[groupId] = (current[groupId] ?: emptyList()) + poll
+        _pollsByGroup.value = current
         return poll.id
+    }
+
+    override suspend fun renamePoll(pollId: String, name: String) {
+        renamePollCallCount++
+        lastRenamedPollId = pollId
+        lastRenamedPollName = name
+        _pollsByGroup.value = _pollsByGroup.value.mapValues { (_, polls) ->
+            polls.map { if (it.id == pollId) it.copy(name = name) else it }
+        }
     }
 
     override suspend fun addPollCandidate(pollId: String, placeId: String, name: String, photoUrl: String, lat: Double, lng: Double): String {
@@ -413,20 +444,20 @@ class FakeTravelRepository(
     }
 
     override suspend fun closePoll(pollId: String) {
-        _activePollByGroup.value = _activePollByGroup.value.mapValues { (_, poll) ->
-            if (poll?.id == pollId) poll.copy(state = com.hllous.plantravel.domain.model.PollState.CLOSED) else poll
+        _pollsByGroup.value = _pollsByGroup.value.mapValues { (_, polls) ->
+            polls.map { if (it.id == pollId) it.copy(state = com.hllous.plantravel.domain.model.PollState.CLOSED) else it }
         }
     }
 
     override suspend fun setPollWinner(pollId: String, placeId: String) {
-        _activePollByGroup.value = _activePollByGroup.value.mapValues { (_, poll) ->
-            if (poll?.id == pollId) poll.copy(winnerPlaceId = placeId) else poll
+        _pollsByGroup.value = _pollsByGroup.value.mapValues { (_, polls) ->
+            polls.map { if (it.id == pollId) it.copy(winnerPlaceId = placeId) else it }
         }
     }
 
     override suspend fun deletePoll(pollId: String) {
-        _activePollByGroup.value = _activePollByGroup.value.mapValues { (_, poll) ->
-            if (poll?.id == pollId) null else poll
+        _pollsByGroup.value = _pollsByGroup.value.mapValues { (_, polls) ->
+            polls.filter { it.id != pollId }
         }
     }
 
@@ -452,7 +483,17 @@ class FakeTravelRepository(
     }
 
     fun simulatePollUpdate(groupId: String, poll: Poll?) {
-        _activePollByGroup.value = _activePollByGroup.value.toMutableMap().also { it[groupId] = poll }
+        val current = _pollsByGroup.value.toMutableMap()
+        val existing = current[groupId] ?: emptyList()
+        current[groupId] = if (poll == null) existing else {
+            val replaced = existing.map { if (it.id == poll.id) poll else it }
+            if (replaced.none { it.id == poll.id }) replaced + poll else replaced
+        }
+        _pollsByGroup.value = current
+    }
+
+    fun simulatePollsUpdate(groupId: String, polls: List<Poll>) {
+        _pollsByGroup.value = _pollsByGroup.value.toMutableMap().also { it[groupId] = polls }
     }
 
     fun simulateCandidatesUpdate(pollId: String, candidates: List<PollCandidate>) {

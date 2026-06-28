@@ -42,6 +42,7 @@ import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.ModalBottomSheet
 import androidx.compose.material3.OutlinedButton
 import androidx.compose.material3.OutlinedCard
+import androidx.compose.material3.OutlinedTextField
 import androidx.compose.material3.RadioButton
 import androidx.compose.material3.Scaffold
 import androidx.compose.material3.SnackbarHost
@@ -212,8 +213,8 @@ fun PollScreen(
     if (showCreationSheet) {
         PollCreationBottomSheet(
             onDismiss = { showCreationSheet = false },
-            onCreate = { type, expiresAt ->
-                viewModel.createPoll(type, expiresAt)
+            onCreate = { type, name, expiresAt ->
+                viewModel.createPoll(type, name, expiresAt)
                 showCreationSheet = false
             },
         )
@@ -585,10 +586,11 @@ private fun PollCandidateCard(
 @Composable
 private fun PollCreationBottomSheet(
     onDismiss: () -> Unit,
-    onCreate: (type: PollType, expiresAt: String?) -> Unit,
+    onCreate: (type: PollType, name: String, expiresAt: String?) -> Unit,
 ) {
     val sheetState = rememberModalBottomSheetState(skipPartiallyExpanded = true)
     var selectedType by rememberSaveable { mutableStateOf(PollType.DESTINATION) }
+    var pollName by rememberSaveable { mutableStateOf("¿A dónde vamos?") }
     var showDatePicker by rememberSaveable { mutableStateOf(false) }
     var expiresAt by rememberSaveable { mutableStateOf<String?>(null) }
     val datePickerState = rememberDatePickerState()
@@ -627,7 +629,10 @@ private fun PollCreationBottomSheet(
                                 .fillMaxWidth()
                                 .selectable(
                                     selected = selectedType == type,
-                                    onClick = { selectedType = type },
+                                    onClick = {
+                                        selectedType = type
+                                        pollName = if (type == PollType.DESTINATION) "¿A dónde vamos?" else "¿Qué hacemos?"
+                                    },
                                     role = Role.RadioButton,
                                 )
                                 .padding(vertical = 4.dp),
@@ -642,6 +647,14 @@ private fun PollCreationBottomSheet(
                         }
                     }
             }
+
+            OutlinedTextField(
+                value = pollName,
+                onValueChange = { pollName = it },
+                label = { Text("Nombre de la encuesta") },
+                singleLine = true,
+                modifier = Modifier.fillMaxWidth(),
+            )
 
             Spacer(modifier = Modifier.height(4.dp))
 
@@ -671,7 +684,7 @@ private fun PollCreationBottomSheet(
                     Text("Cancelar")
                 }
                 FilledTonalButton(
-                    onClick = { onCreate(selectedType, expiresAt) },
+                    onClick = { onCreate(selectedType, pollName, expiresAt) },
                     modifier = Modifier.weight(1f),
                 ) {
                     Text("Crear")

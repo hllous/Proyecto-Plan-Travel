@@ -111,6 +111,7 @@ data class Poll(
     val groupId: String,
     val type: PollType,
     val state: PollState,
+    val name: String = "",
     val expiresAt: String? = null,
     val winnerPlaceId: String? = null,
 )

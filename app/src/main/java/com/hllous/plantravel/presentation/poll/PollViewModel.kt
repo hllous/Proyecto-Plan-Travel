@@ -7,6 +7,7 @@ import com.hllous.plantravel.domain.model.GroupMember
 import com.hllous.plantravel.domain.model.PlaceResult
 import com.hllous.plantravel.domain.model.Poll
 import com.hllous.plantravel.domain.model.PollCandidate
+import com.hllous.plantravel.domain.model.PollState
 import com.hllous.plantravel.domain.model.PollType
 import com.hllous.plantravel.domain.repository.TravelRepository
 import com.hllous.plantravel.presentation.UiState
@@ -56,6 +57,17 @@ class PollViewModel @Inject constructor(
         }
         .stateIn(viewModelScope, SharingStarted.WhileSubscribed(5000), null)
 
+    private val _screenPoll = MutableStateFlow<Poll?>(null)
+
+    // screenPoll is the poll currently displayed. If explicitly set (activity poll navigation),
+    // it overrides poll; otherwise falls back to the active destination poll.
+    val screenPoll: StateFlow<Poll?> = combine(_screenPoll, poll) { sp, p -> sp ?: p }
+        .stateIn(viewModelScope, SharingStarted.WhileSubscribed(5000), null)
+
+    fun setScreenPoll(poll: Poll?) {
+        _screenPoll.value = poll
+    }
+
     val currentMember: StateFlow<GroupMember?> = selectedGroupHolder.selectedGroupId
         .flatMapLatest { groupId ->
             if (groupId == null) flowOf(null)
@@ -85,8 +97,30 @@ class PollViewModel @Inject constructor(
         }
         .stateIn(viewModelScope, SharingStarted.WhileSubscribed(5000), emptyList())
 
+    val activeActivityPolls: StateFlow<List<Poll>> = combine(
+        _reloadTrigger,
+        selectedGroupHolder.selectedGroupId,
+    ) { _, groupId -> groupId }
+        .flatMapLatest { groupId ->
+            if (groupId == null) flowOf(emptyList())
+            else repository.observeActiveActivityPolls(groupId).catch { emit(emptyList()) }
+        }
+        .stateIn(viewModelScope, SharingStarted.WhileSubscribed(5000), emptyList())
+
+    val closedActivityPolls: StateFlow<List<Poll>> = combine(
+        _reloadTrigger,
+        selectedGroupHolder.selectedGroupId,
+    ) { _, groupId -> groupId }
+        .flatMapLatest { groupId ->
+            if (groupId == null) flowOf(emptyList())
+            else repository.observeAllPolls(groupId)
+                .map { polls -> polls.filter { it.type == PollType.ACTIVITY && it.state == PollState.CLOSED } }
+                .catch { emit(emptyList()) }
+        }
+        .stateIn(viewModelScope, SharingStarted.WhileSubscribed(5000), emptyList())
+
     val candidates: StateFlow<UiState<List<PollCandidateUiModel>>> = combine(
-        poll,
+        screenPoll,
         _candidateReloadTrigger,
         memberCount,
     ) { activePoll, _, count -> activePoll to count }
@@ -108,12 +142,21 @@ class PollViewModel @Inject constructor(
         }
         .stateIn(viewModelScope, SharingStarted.WhileSubscribed(5000), UiState.Loading)
 
-    fun createPoll(type: PollType, expiresAt: String? = null) {
+    val isTied: StateFlow<Boolean> = candidates
+        .map { state ->
+            if (state !is UiState.Success || state.data.size < 2) return@map false
+            val maxVotes = state.data.maxOf { it.voteCount }
+            if (maxVotes == 0) return@map false
+            state.data.count { it.voteCount == maxVotes } >= 2
+        }
+        .stateIn(viewModelScope, SharingStarted.Eagerly, false)
+
+    fun createPoll(type: PollType, name: String, expiresAt: String? = null) {
         val groupId = selectedGroupHolder.selectedGroupId.value ?: return
         viewModelScope.launch {
             _isSubmitting.value = true
             try {
-                runCatching { repository.createPoll(groupId, type, expiresAt) }
+                runCatching { repository.createPoll(groupId, type, name, expiresAt) }
                     .onFailure { _errorMessage.value = "Ya hay una encuesta activa" }
                 reloadPoll()
             } finally {
@@ -122,8 +165,21 @@ class PollViewModel @Inject constructor(
         }
     }
 
+    fun renamePoll(pollId: String, name: String) {
+        viewModelScope.launch {
+            _isSubmitting.value = true
+            try {
+                runCatching { repository.renamePoll(pollId, name) }
+                    .onFailure { _errorMessage.value = "Error al renombrar la encuesta" }
+                    .onSuccess { reloadPoll() }
+            } finally {
+                _isSubmitting.value = false
+            }
+        }
+    }
+
     fun addCandidate(place: PlaceResult) {
-        val pollId = poll.value?.id ?: return
+        val pollId = screenPoll.value?.id ?: return
         viewModelScope.launch {
             _isSubmitting.value = true
             try {
@@ -138,7 +194,7 @@ class PollViewModel @Inject constructor(
 
     fun toggleVote(candidateId: String) {
         val memberId = currentMember.value?.id ?: return
-        val pollId = poll.value?.id ?: return
+        val pollId = screenPoll.value?.id ?: return
         viewModelScope.launch {
             _isSubmitting.value = true
             try {
@@ -151,7 +207,7 @@ class PollViewModel @Inject constructor(
     }
 
     fun closePoll() {
-        val pollId = poll.value?.id ?: return
+        val pollId = screenPoll.value?.id ?: return
         viewModelScope.launch {
             _isSubmitting.value = true
             try {
@@ -165,7 +221,7 @@ class PollViewModel @Inject constructor(
     }
 
     fun deletePoll() {
-        val pollId = poll.value?.id ?: return
+        val pollId = screenPoll.value?.id ?: return
         viewModelScope.launch {
             _isSubmitting.value = true
             try {
@@ -179,7 +235,7 @@ class PollViewModel @Inject constructor(
     }
 
     fun selectWinner(candidateId: String) {
-        val activePoll = poll.value ?: return
+        val activePoll = screenPoll.value ?: return
         val groupId = selectedGroupHolder.selectedGroupId.value ?: return
         val winner = (candidates.value as? UiState.Success)
             ?.data?.firstOrNull { it.candidate.id == candidateId }

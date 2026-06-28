@@ -20,6 +20,7 @@ import kotlinx.coroutines.test.UnconfinedTestDispatcher
 import org.junit.Assert.assertEquals
 import org.junit.Assert.assertFalse
 import org.junit.Assert.assertNotNull
+import org.junit.Assert.assertNull
 import org.junit.Assert.assertTrue
 import org.junit.Rule
 import org.junit.Test
@@ -220,7 +221,7 @@ class PollViewModelTest {
         val repo = FakeTravelRepository().also { it.createPollThrows = true }
         val vm = viewModel(repo = repo)
 
-        vm.createPoll(PollType.DESTINATION)
+        vm.createPoll(PollType.DESTINATION, "¿A dónde vamos?")
 
         assertNotNull(vm.errorMessage.value)
         assertEquals("Ya hay una encuesta activa", vm.errorMessage.value)
@@ -249,6 +250,152 @@ class PollViewModelTest {
         // 4 members: candidate A has 3 votes → 3/4 = 0.75; candidate B has 1 vote → 1/4 = 0.25
         assertEquals(0.75f, uiCandidates[0].voteProgress, 0.001f)
         assertEquals(0.25f, uiCandidates[1].voteProgress, 0.001f)
+        job.cancel()
+    }
+
+    // ── New behaviors: multiple polls, naming, rename, isTied ────────────────
+
+    @Test
+    fun activeActivityPollsEmitsOnlyOpenActivityPolls() {
+        val repo = FakeTravelRepository()
+        val holder = SelectedGroupHolder().also { it.selectedGroupId.value = "group-1" }
+        val destPoll    = Poll(id = "dest-1", groupId = "group-1", type = PollType.DESTINATION, state = PollState.OPEN,   name = "¿A dónde vamos?")
+        val actOpen     = Poll(id = "act-1",  groupId = "group-1", type = PollType.ACTIVITY,    state = PollState.OPEN,   name = "¿Qué hacemos?")
+        val actClosed   = Poll(id = "act-2",  groupId = "group-1", type = PollType.ACTIVITY,    state = PollState.CLOSED, name = "Ya votamos")
+        repo.simulatePollsUpdate("group-1", listOf(destPoll, actOpen, actClosed))
+
+        val vm = viewModel(repo = repo, holder = holder)
+        val job = CoroutineScope(UnconfinedTestDispatcher()).launch { vm.activeActivityPolls.collect {} }
+
+        val result = vm.activeActivityPolls.value
+        assertEquals(1, result.size)
+        assertEquals("act-1", result[0].id)
+        assertEquals(PollType.ACTIVITY, result[0].type)
+        assertEquals(PollState.OPEN, result[0].state)
+        job.cancel()
+    }
+
+    @Test
+    fun closedActivityPollsEmitsOnlyClosedActivityPolls() {
+        val repo = FakeTravelRepository()
+        val holder = SelectedGroupHolder().also { it.selectedGroupId.value = "group-1" }
+        val destPoll  = Poll(id = "dest-1", groupId = "group-1", type = PollType.DESTINATION, state = PollState.OPEN,   name = "¿A dónde vamos?")
+        val actOpen   = Poll(id = "act-1",  groupId = "group-1", type = PollType.ACTIVITY,    state = PollState.OPEN,   name = "Activa")
+        val actClosed = Poll(id = "act-2",  groupId = "group-1", type = PollType.ACTIVITY,    state = PollState.CLOSED, name = "Cerrada")
+        repo.simulatePollsUpdate("group-1", listOf(destPoll, actOpen, actClosed))
+
+        val vm = viewModel(repo = repo, holder = holder)
+        val job = CoroutineScope(UnconfinedTestDispatcher()).launch { vm.closedActivityPolls.collect {} }
+
+        val result = vm.closedActivityPolls.value
+        assertEquals(1, result.size)
+        assertEquals("act-2", result[0].id)
+        assertEquals(PollState.CLOSED, result[0].state)
+        job.cancel()
+    }
+
+    @Test
+    fun activePollIgnoresActivityPolls() {
+        val repo = FakeTravelRepository()
+        val holder = SelectedGroupHolder().also { it.selectedGroupId.value = "group-1" }
+        val actPoll = Poll(id = "act-1", groupId = "group-1", type = PollType.ACTIVITY, state = PollState.OPEN, name = "Actividad")
+        repo.simulatePollsUpdate("group-1", listOf(actPoll))
+
+        val vm = viewModel(repo = repo, holder = holder)
+        val job = CoroutineScope(UnconfinedTestDispatcher()).launch { vm.poll.collect {} }
+
+        assertNull(vm.poll.value)
+        job.cancel()
+    }
+
+    @Test
+    fun createPollStoresNameInRepository() {
+        val repo = FakeTravelRepository()
+        val holder = SelectedGroupHolder().also { it.selectedGroupId.value = "group-1" }
+        val vm = viewModel(repo = repo, holder = holder)
+        val job = CoroutineScope(UnconfinedTestDispatcher()).launch { vm.poll.collect {} }
+
+        vm.createPoll(PollType.DESTINATION, "¿A dónde vamos?")
+
+        assertEquals("¿A dónde vamos?", vm.poll.value?.name)
+        job.cancel()
+    }
+
+    @Test
+    fun renamePollCallsRepositoryWithCorrectArguments() {
+        val repo = FakeTravelRepository()
+        val holder = SelectedGroupHolder().also { it.selectedGroupId.value = "group-1" }
+        repo.simulatePollUpdate("group-1", openPoll)
+        val vm = viewModel(repo = repo, holder = holder)
+
+        vm.renamePoll("poll-1", "Nuevo nombre")
+
+        assertEquals(1, repo.renamePollCallCount)
+        assertEquals("poll-1", repo.lastRenamedPollId)
+        assertEquals("Nuevo nombre", repo.lastRenamedPollName)
+    }
+
+    @Test
+    fun selectWinnerOnActivityPollDoesNotCallSetTripDestination() {
+        val activityPoll = Poll(id = "act-1", groupId = "group-1", type = PollType.ACTIVITY, state = PollState.CLOSED, name = "Actividades")
+        val repo = FakeTravelRepository()
+        val holder = SelectedGroupHolder().also { it.selectedGroupId.value = "group-1" }
+        repo.simulatePollsUpdate("group-1", listOf(activityPoll))
+        val winner = PollCandidate(id = "cand-win", pollId = "act-1", placeId = "place-win", name = "Kayak", photoUrl = "", addedByMemberId = "m1")
+        repo.simulateCandidatesUpdate("act-1", listOf(winner))
+
+        val vm = viewModel(repo = repo, holder = holder)
+        val job = CoroutineScope(UnconfinedTestDispatcher()).launch { vm.candidates.collect {} }
+        vm.setScreenPoll(activityPoll)
+
+        vm.selectWinner("cand-win")
+
+        assertEquals(0, repo.setTripDestinationCallCount)
+        job.cancel()
+    }
+
+    @Test
+    fun isTiedIsTrueWhenTopCandidatesShareMaxVotes() {
+        val member = GroupMember(id = "m1", groupId = "group-1", userId = "user-1", name = "User", role = MemberRole.USER)
+        val repo = FakeTravelRepository(initialMembers = mapOf("group-1" to listOf(member)))
+        val holder = SelectedGroupHolder().also { it.selectedGroupId.value = "group-1" }
+        repo.simulatePollUpdate("group-1", openPoll)
+        val tiedCandidates = listOf(
+            PollCandidate(id = "c1", pollId = "poll-1", placeId = "p1", name = "A", photoUrl = "", addedByMemberId = "m1", voteCount = 3),
+            PollCandidate(id = "c2", pollId = "poll-1", placeId = "p2", name = "B", photoUrl = "", addedByMemberId = "m1", voteCount = 3),
+            PollCandidate(id = "c3", pollId = "poll-1", placeId = "p3", name = "C", photoUrl = "", addedByMemberId = "m1", voteCount = 1),
+        )
+        repo.simulateCandidatesUpdate("poll-1", tiedCandidates)
+
+        val vm = viewModel(repo = repo, holder = holder)
+        val job = CoroutineScope(UnconfinedTestDispatcher()).launch {
+            vm.candidates.collect {}
+            vm.isTied.collect {}
+        }
+
+        assertTrue(vm.isTied.value)
+        job.cancel()
+    }
+
+    @Test
+    fun isTiedIsFalseWhenThereIsAClearLeader() {
+        val member = GroupMember(id = "m1", groupId = "group-1", userId = "user-1", name = "User", role = MemberRole.USER)
+        val repo = FakeTravelRepository(initialMembers = mapOf("group-1" to listOf(member)))
+        val holder = SelectedGroupHolder().also { it.selectedGroupId.value = "group-1" }
+        repo.simulatePollUpdate("group-1", openPoll)
+        val candidates = listOf(
+            PollCandidate(id = "c1", pollId = "poll-1", placeId = "p1", name = "A", photoUrl = "", addedByMemberId = "m1", voteCount = 5),
+            PollCandidate(id = "c2", pollId = "poll-1", placeId = "p2", name = "B", photoUrl = "", addedByMemberId = "m1", voteCount = 2),
+        )
+        repo.simulateCandidatesUpdate("poll-1", candidates)
+
+        val vm = viewModel(repo = repo, holder = holder)
+        val job = CoroutineScope(UnconfinedTestDispatcher()).launch {
+            vm.candidates.collect {}
+            vm.isTied.collect {}
+        }
+
+        assertFalse(vm.isTied.value)
         job.cancel()
     }
 

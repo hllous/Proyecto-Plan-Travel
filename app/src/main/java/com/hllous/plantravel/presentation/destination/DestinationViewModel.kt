@@ -361,7 +361,7 @@ class DestinationViewModel @Inject constructor(
             val existingPoll = resolveActivePoll()
             val pollId = when {
                 existingPoll == null -> runCatching {
-                    repository.createPoll(groupId, PollType.ACTIVITY, null)
+                    repository.createPoll(groupId, PollType.ACTIVITY, "¿Qué hacemos?", null)
                 }.onSuccess { reloadGroups() }.getOrNull()
                 existingPoll.type == PollType.ACTIVITY -> existingPoll.id
                 else -> null
@@ -386,7 +386,7 @@ class DestinationViewModel @Inject constructor(
             val existingPoll = resolveActivePoll()
             val pollId = when {
                 existingPoll == null -> runCatching {
-                    repository.createPoll(groupId, PollType.DESTINATION, null)
+                    repository.createPoll(groupId, PollType.DESTINATION, "¿A dónde vamos?", null)
                 }.onSuccess { reloadGroups() }.getOrNull()
                 existingPoll.type == PollType.DESTINATION -> existingPoll.id
                 else -> null

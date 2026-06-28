@@ -62,8 +62,10 @@ interface TravelRepository {
 
     fun observeActivePoll(groupId: String): Flow<Poll?>
     fun observeAllPolls(groupId: String): Flow<List<Poll>>
+    fun observeActiveActivityPolls(groupId: String): Flow<List<Poll>>
     suspend fun fetchActivePoll(groupId: String): Poll?
-    suspend fun createPoll(groupId: String, type: PollType, expiresAt: String?): String
+    suspend fun createPoll(groupId: String, type: PollType, name: String, expiresAt: String?): String
+    suspend fun renamePoll(pollId: String, name: String)
     suspend fun addPollCandidate(pollId: String, placeId: String, name: String, photoUrl: String, lat: Double = 0.0, lng: Double = 0.0): String
     suspend fun toggleVote(candidateId: String, memberId: String, pollId: String)
     suspend fun closePoll(pollId: String)

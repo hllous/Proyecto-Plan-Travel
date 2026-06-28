@@ -438,6 +438,10 @@ fun MainAppContent(
                     navController = navController,
                 )
             }
+            // PROTOTYPE — delete after animation decisions are locked (#59)
+            composable("prototype_poll_animation") {
+                com.hllous.plantravel.ui.prototype.PollAnimationPrototypeScreen()
+            }
         }
     }
 }
