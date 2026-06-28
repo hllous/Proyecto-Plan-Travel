@@ -307,6 +307,7 @@ class SupabaseTravelRepositoryImpl @Inject constructor(
         @SerialName("expires_at") val expiresAt: String? = null,
         @SerialName("winner_place_id") val winnerPlaceId: String? = null,
         @SerialName("winner_photo_url") val winnerPhotoUrl: String? = null,
+        @SerialName("thumbnail_photo_url") val thumbnailPhotoUrl: String? = null,
         @SerialName("created_at") val createdAt: String? = null,
     ) {
         fun toDomain() = Poll(
@@ -317,6 +318,7 @@ class SupabaseTravelRepositoryImpl @Inject constructor(
             expiresAt = expiresAt,
             winnerPlaceId = winnerPlaceId,
             winnerPhotoUrl = winnerPhotoUrl,
+            thumbnailPhotoUrl = thumbnailPhotoUrl,
         )
     }
 
@@ -1088,6 +1090,15 @@ class SupabaseTravelRepositoryImpl @Inject constructor(
         supabase.from("poll_candidates")
             .insert(InsertPollCandidateDto(id = id, pollId = pollId, placeId = placeId,
                 name = name, photoUrl = photoUrl, addedByMemberId = memberId, lat = lat, lng = lng))
+        // Store thumbnail on the poll from the first candidate added (for Level 1 card preview)
+        val hasThumbnail = supabase.from("group_polls")
+            .select { filter { eq("id", pollId) } }
+            .decodeList<PollDto>().firstOrNull()?.thumbnailPhotoUrl != null
+        if (!hasThumbnail) {
+            supabase.from("group_polls").update({ set("thumbnail_photo_url", photoUrl) }) {
+                filter { eq("id", pollId) }
+            }
+        }
         sendBroadcast("poll-candidates-broadcast-$pollId", "poll_candidate_changed")
         return id
     }

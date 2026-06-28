@@ -430,6 +430,13 @@ class FakeTravelRepository(
         val current = _candidatesByPoll.value.toMutableMap()
         current[pollId] = (current[pollId] ?: emptyList()) + candidate
         _candidatesByPoll.value = current
+        // Set thumbnail on the poll from the first candidate (mirrors SupabaseImpl behavior)
+        val hasThumbnail = _pollsByGroup.value.values.flatten().firstOrNull { it.id == pollId }?.thumbnailPhotoUrl != null
+        if (!hasThumbnail) {
+            _pollsByGroup.value = _pollsByGroup.value.mapValues { (_, polls) ->
+                polls.map { if (it.id == pollId) it.copy(thumbnailPhotoUrl = photoUrl) else it }
+            }
+        }
         return candidate.id
     }
 

@@ -264,6 +264,13 @@ fun PollScreen(
                         viewModel.setScreenPoll(detailPoll)
                         viewModel.toggleVote(candidateId)
                     },
+                    onSetAsDestination = {
+                        val cs = candidatesState as? UiState.Success ?: return@PollDetailContent
+                        val winner = cs.data.firstOrNull { it.candidate.placeId == detailPoll.winnerPlaceId }
+                            ?: return@PollDetailContent
+                        pendingWinner = winner
+                        showConfirmDestination = true
+                    },
                 )
             }
         }
@@ -500,10 +507,11 @@ private fun PollListCard(
                     .background(MaterialTheme.colorScheme.surfaceVariant),
                 contentAlignment = Alignment.Center,
             ) {
-                if (poll.winnerPhotoUrl != null) {
+                val cardPhotoUrl = poll.winnerPhotoUrl ?: poll.thumbnailPhotoUrl
+                if (cardPhotoUrl != null) {
                     AsyncImage(
                         model = ImageRequest.Builder(context)
-                            .data(poll.winnerPhotoUrl)
+                            .data(cardPhotoUrl)
                             .allowHardware(false)
                             .build(),
                         contentDescription = null,
@@ -594,6 +602,7 @@ private fun PollDetailContent(
     isSubmitting: Boolean,
     modifier: Modifier = Modifier,
     onToggleVote: (String) -> Unit,
+    onSetAsDestination: (() -> Unit)? = null,
 ) {
     val isClosed = poll.state == PollState.CLOSED
 
@@ -621,6 +630,24 @@ private fun PollDetailContent(
                             labelColor = MaterialTheme.colorScheme.onPrimaryContainer,
                         ),
                 )
+            }
+        }
+
+        // Show "Establecer como destino / actividad" button for closed polls with a winner
+        if (isClosed && poll.winnerPlaceId != null && isAdmin && onSetAsDestination != null) {
+            item {
+                val buttonLabel = if (poll.type == PollType.DESTINATION) "Establecer como destino" else "Agregar al itinerario"
+                FilledTonalButton(
+                    onClick = onSetAsDestination,
+                    enabled = !isSubmitting,
+                    modifier = Modifier
+                        .fillMaxWidth()
+                        .padding(horizontal = 16.dp, vertical = 4.dp),
+                ) {
+                    Icon(Icons.Default.EmojiEvents, contentDescription = null, modifier = Modifier.size(18.dp))
+                    Spacer(modifier = Modifier.width(8.dp))
+                    Text(buttonLabel)
+                }
             }
         }
 
