@@ -221,16 +221,38 @@ class PollViewModelTest {
         val repo = FakeTravelRepository()
         val holder = SelectedGroupHolder().also { it.selectedGroupId.value = "group-1" }
         val vm = viewModel(repo = repo, holder = holder)
+        var result: Boolean? = null
 
         vm.setWinnerAsDestination(
             placeId = "place-win",
             name = "Bariloche",
             lat = -41.1,
             lng = -71.3,
+            onResult = { result = it },
         )
 
         assertEquals(1, repo.setTripDestinationCallCount)
         assertEquals("place-win", repo.lastTripDestinationPlaceId)
+        assertEquals(true, result)
+    }
+
+    @Test
+    fun setWinnerAsDestinationReportsFailureThroughCallback() {
+        val repo = FakeTravelRepository().also { it.setTripDestinationThrows = true }
+        val holder = SelectedGroupHolder().also { it.selectedGroupId.value = "group-1" }
+        val vm = viewModel(repo = repo, holder = holder)
+        var result: Boolean? = null
+
+        vm.setWinnerAsDestination(
+            placeId = "place-win",
+            name = "Bariloche",
+            lat = -41.1,
+            lng = -71.3,
+            onResult = { result = it },
+        )
+
+        assertEquals(false, result)
+        assertEquals("Error al seleccionar destino", vm.errorMessage.value)
     }
 
     // ── Test 6: createPoll when already active surfaces error message ─────────

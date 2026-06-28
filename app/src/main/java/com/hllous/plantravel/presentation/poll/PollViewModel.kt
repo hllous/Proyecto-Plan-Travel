@@ -119,6 +119,32 @@ class PollViewModel @Inject constructor(
         }
         .stateIn(viewModelScope, SharingStarted.WhileSubscribed(5000), emptyList())
 
+    val latestDestinationPoll: StateFlow<Poll?> = allPolls
+        .map { polls -> polls.firstOrNull { it.type == PollType.DESTINATION } }
+        .stateIn(viewModelScope, SharingStarted.WhileSubscribed(5000), null)
+
+    val latestActivityPoll: StateFlow<Poll?> = allPolls
+        .map { polls -> polls.firstOrNull { it.type == PollType.ACTIVITY } }
+        .stateIn(viewModelScope, SharingStarted.WhileSubscribed(5000), null)
+
+    val destPollCandidates: StateFlow<List<PollCandidate>> = latestDestinationPoll
+        .flatMapLatest { poll ->
+            if (poll == null) flowOf(emptyList())
+            else repository.observePollCandidates(poll.id)
+                .map { list -> list.sortedByDescending { it.voteCount } }
+                .catch { emit(emptyList()) }
+        }
+        .stateIn(viewModelScope, SharingStarted.WhileSubscribed(5000), emptyList())
+
+    val activityPollCandidates: StateFlow<List<PollCandidate>> = latestActivityPoll
+        .flatMapLatest { poll ->
+            if (poll == null) flowOf(emptyList())
+            else repository.observePollCandidates(poll.id)
+                .map { list -> list.sortedByDescending { it.voteCount } }
+                .catch { emit(emptyList()) }
+        }
+        .stateIn(viewModelScope, SharingStarted.WhileSubscribed(5000), emptyList())
+
     val candidates: StateFlow<UiState<List<PollCandidateUiModel>>> = combine(
         screenPoll,
         _candidateReloadTrigger,
@@ -252,14 +278,21 @@ class PollViewModel @Inject constructor(
         }
     }
 
-    fun setWinnerAsDestination(placeId: String, name: String, lat: Double, lng: Double) {
+    fun setWinnerAsDestination(
+        placeId: String,
+        name: String,
+        lat: Double,
+        lng: Double,
+        onResult: (Boolean) -> Unit = {},
+    ) {
         val groupId = selectedGroupHolder.selectedGroupId.value ?: return
         viewModelScope.launch {
             _isSubmitting.value = true
             try {
-                runCatching {
+                val result = runCatching {
                     repository.setTripDestination(groupId, placeId, name, lat, lng)
                 }.onFailure { _errorMessage.value = "Error al seleccionar destino" }
+                onResult(result.isSuccess)
             } finally {
                 _isSubmitting.value = false
             }

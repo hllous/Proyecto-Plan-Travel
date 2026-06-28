@@ -98,6 +98,7 @@ import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.dp
 import androidx.navigation.NavHostController
+import androidx.navigation.compose.currentBackStackEntryAsState
 import coil3.compose.AsyncImage
 import coil3.request.ImageRequest
 import coil3.request.allowHardware
@@ -122,6 +123,9 @@ private val POI_CATEGORIES = listOf(
     PoiCategory("Actividades", Icons.Default.LocalActivity),
     PoiCategory("Naturaleza", Icons.Default.Park),
 )
+internal const val POLL_DESTINATION_PREFERRED_CATEGORY_KEY = "poll_destination_preferred_category"
+internal const val POLL_DESTINATION_ACTIVITIES_CATEGORY = "Actividades"
+internal const val DESTINATIONS_BOTTOM_NAV_LEVEL2_KEY = "destinations_bottom_nav_level2"
 
 @OptIn(ExperimentalMaterial3Api::class)
 @Composable
@@ -134,19 +138,41 @@ fun DestinationScreen(
     }
 
     val tripDestination by viewModel.tripDestination.collectAsState()
+    val currentBackStackEntry by navController.currentBackStackEntryAsState()
+    val preferredCategoryFlow = remember(currentBackStackEntry) {
+        currentBackStackEntry?.savedStateHandle?.getStateFlow<String?>(
+            POLL_DESTINATION_PREFERRED_CATEGORY_KEY,
+            null,
+        )
+    }
+    val preferredCategoryState = preferredCategoryFlow?.collectAsState()
     var overrideToLevel1 by rememberSaveable { mutableStateOf(false) }
+    var initialLevel2Category by rememberSaveable { mutableStateOf(POI_CATEGORIES.first().label) }
+
+    LaunchedEffect(preferredCategoryState?.value) {
+        val preferredCategory = preferredCategoryState?.value ?: return@LaunchedEffect
+        initialLevel2Category = preferredCategory
+        currentBackStackEntry?.savedStateHandle?.remove<String>(POLL_DESTINATION_PREFERRED_CATEGORY_KEY)
+    }
 
     LaunchedEffect(tripDestination) {
         if (tripDestination is TripDestinationState.Set) overrideToLevel1 = false
     }
 
     val destination = tripDestination as? TripDestinationState.Set
+    val isLevel2Active = destination != null && !overrideToLevel1
+
+    LaunchedEffect(currentBackStackEntry, isLevel2Active) {
+        currentBackStackEntry?.savedStateHandle?.set(DESTINATIONS_BOTTOM_NAV_LEVEL2_KEY, isLevel2Active)
+    }
+
     if (destination != null && !overrideToLevel1) {
         Level2Content(
             viewModel = viewModel,
             destination = destination,
             navController = navController,
             onChangeDestination = { overrideToLevel1 = true },
+            initialCategory = initialLevel2Category,
         )
     } else {
         Level1BrowseContent(
@@ -166,6 +192,7 @@ private fun Level2Content(
     destination: TripDestinationState.Set,
     navController: NavHostController,
     onChangeDestination: () -> Unit,
+    initialCategory: String,
 ) {
     val poisByCategory by viewModel.poisByCategory.collectAsState()
     val activePoll by viewModel.activePoll.collectAsState()
@@ -173,10 +200,11 @@ private fun Level2Content(
     val pendingPoi by viewModel.pendingPoi.collectAsState()
     val pendingCategory by viewModel.pendingCategory.collectAsState()
 
-    var selectedCategory by rememberSaveable { mutableStateOf(POI_CATEGORIES.first().label) }
+    var selectedCategory by rememberSaveable(destination.placeId, initialCategory) { mutableStateOf(initialCategory) }
     var selectedPoi by remember { mutableStateOf<PlaceResult?>(null) }
 
-    LaunchedEffect(destination.placeId) {
+    LaunchedEffect(destination.placeId, initialCategory) {
+        selectedCategory = initialCategory
         viewModel.selectPoiCategory(selectedCategory)
     }
 
@@ -216,7 +244,7 @@ private fun Level2Content(
             ExtendedFloatingActionButton(
                 onClick = { navController.navigate("poll_detail") },
                 icon = { Icon(Icons.Default.HowToVote, contentDescription = null) },
-                text = { Text(if (activePoll != null) "Ver encuesta" else "Crear encuesta") },
+                text = { Text(if (activePoll != null) "Ver encuesta" else "Encuesta") },
             )
         },
     ) { innerPadding ->
@@ -245,6 +273,11 @@ private fun Level2Content(
                                 modifier = Modifier.size(16.dp),
                             )
                         },
+                        colors = FilterChipDefaults.filterChipColors(
+                            selectedContainerColor = MaterialTheme.colorScheme.primary,
+                            selectedLabelColor = MaterialTheme.colorScheme.onPrimary,
+                            selectedLeadingIconColor = MaterialTheme.colorScheme.onPrimary,
+                        ),
                     )
                 }
             }
@@ -393,7 +426,10 @@ private fun PoiGridCard(
                     .fillMaxSize()
                     .background(
                         Brush.verticalGradient(
-                            colors = listOf(Color.Transparent, Color(0x80000000)),
+                            colors = listOf(
+                                Color.Transparent,
+                                MaterialTheme.colorScheme.scrim.copy(alpha = 0.5f),
+                            ),
                             startY = 60f,
                         ),
                     ),
@@ -401,7 +437,7 @@ private fun PoiGridCard(
             Text(
                 text = place.name,
                 style = MaterialTheme.typography.labelLarge,
-                color = Color.White,
+                color = MaterialTheme.colorScheme.onPrimary,
                 maxLines = 2,
                 overflow = TextOverflow.Ellipsis,
                 modifier = Modifier
@@ -431,14 +467,14 @@ private fun PoiGridCard(
                     Icon(
                         Icons.Default.Star,
                         contentDescription = null,
-                        tint = Color(0xFFFFD700),
+                        tint = MaterialTheme.colorScheme.tertiary,
                         modifier = Modifier.size(12.dp),
                     )
                     Spacer(modifier = Modifier.width(2.dp))
                     Text(
                         text = "%.1f".format(place.rating),
                         style = MaterialTheme.typography.labelSmall,
-                        color = Color.White,
+                        color = MaterialTheme.colorScheme.onPrimary,
                     )
                 }
             }
@@ -779,7 +815,7 @@ private fun Level1BrowseContent(
             ExtendedFloatingActionButton(
                 onClick = { navController.navigate("poll_detail") },
                 icon = { Icon(Icons.Default.HowToVote, contentDescription = null) },
-                text = { Text(if (activePoll != null) "Ver encuesta" else "Crear encuesta") },
+                text = { Text(if (activePoll != null) "Ver encuesta" else "Encuesta") },
             )
         },
     ) { innerPadding ->
@@ -1006,7 +1042,10 @@ private fun HeroDestinationCard(
                     .fillMaxSize()
                     .background(
                         Brush.verticalGradient(
-                            colors = listOf(Color.Transparent, Color(0x99000000)),
+                            colors = listOf(
+                                Color.Transparent,
+                                MaterialTheme.colorScheme.scrim.copy(alpha = 0.6f),
+                            ),
                             startY = 80f,
                         ),
                     ),
@@ -1020,7 +1059,7 @@ private fun HeroDestinationCard(
                     text = destination.name,
                     style = MaterialTheme.typography.displaySmall,
                     fontFamily = FrauncesFamily,
-                    color = Color.White,
+                    color = MaterialTheme.colorScheme.onPrimary,
                     fontWeight = FontWeight.Medium,
                     maxLines = 2,
                     overflow = TextOverflow.Ellipsis,
@@ -1028,7 +1067,7 @@ private fun HeroDestinationCard(
                 Text(
                     text = destination.province,
                     style = MaterialTheme.typography.bodyMedium,
-                    color = Color.White.copy(alpha = 0.85f),
+                    color = MaterialTheme.colorScheme.onPrimary.copy(alpha = 0.85f),
                 )
             }
         }
@@ -1293,6 +1332,10 @@ private fun CityBottomSheet(
     if (showPollPromptDialog) {
         AlertDialog(
             onDismissRequest = { showPollPromptDialog = false },
+            containerColor = MaterialTheme.colorScheme.surface,
+            iconContentColor = MaterialTheme.colorScheme.primary,
+            titleContentColor = MaterialTheme.colorScheme.onSurface,
+            textContentColor = MaterialTheme.colorScheme.onSurfaceVariant,
             icon = { Icon(Icons.Default.HowToVote, contentDescription = null) },
             title = {
                 Text(
@@ -1322,7 +1365,7 @@ private fun CityBottomSheet(
                         onCreatePollForDestination()
                     }
                 }) {
-                    Text(if (activePollType == PollType.ACTIVITY) "Ver encuesta" else "Crear encuesta")
+                    Text(if (activePollType == PollType.ACTIVITY) "Ver encuesta" else "Encuesta")
                 }
             },
             dismissButton = {
@@ -1337,6 +1380,10 @@ private fun CityBottomSheet(
     if (showAlreadySelectedDialog) {
         AlertDialog(
             onDismissRequest = { showAlreadySelectedDialog = false },
+            containerColor = MaterialTheme.colorScheme.surface,
+            iconContentColor = MaterialTheme.colorScheme.primary,
+            titleContentColor = MaterialTheme.colorScheme.onSurface,
+            textContentColor = MaterialTheme.colorScheme.onSurfaceVariant,
             title = { Text("Destino ya seleccionado") },
             text = { Text("\"${destination.name}\" ya es el destino actual del grupo.") },
             confirmButton = {
@@ -1349,6 +1396,10 @@ private fun CityBottomSheet(
         val currentName = (tripDestination as? TripDestinationState.Set)?.name.orEmpty()
         AlertDialog(
             onDismissRequest = { showReplaceDialog = false },
+            containerColor = MaterialTheme.colorScheme.surface,
+            iconContentColor = MaterialTheme.colorScheme.primary,
+            titleContentColor = MaterialTheme.colorScheme.onSurface,
+            textContentColor = MaterialTheme.colorScheme.onSurfaceVariant,
             title = { Text("¿Reemplazar destino?") },
             text = {
                 Text(
@@ -1439,7 +1490,7 @@ private fun DestinationImageFallback(
                     colors = listOf(
                         MaterialTheme.colorScheme.secondaryContainer,
                         MaterialTheme.colorScheme.surfaceVariant,
-                        Color.White.copy(alpha = 0.35f),
+                        MaterialTheme.colorScheme.surface.copy(alpha = 0.72f),
                     ),
                 ),
             ),

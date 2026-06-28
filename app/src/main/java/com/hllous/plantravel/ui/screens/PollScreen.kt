@@ -62,6 +62,7 @@ import androidx.compose.material3.OutlinedCard
 import androidx.compose.material3.OutlinedTextField
 import androidx.compose.material3.RadioButton
 import androidx.compose.material3.Scaffold
+import androidx.compose.material3.SnackbarDuration
 import androidx.compose.material3.SnackbarHost
 import androidx.compose.material3.SnackbarHostState
 import androidx.compose.material3.SuggestionChip
@@ -115,6 +116,7 @@ import java.time.Instant
 import java.time.ZoneOffset
 import kotlin.math.sin
 import kotlin.random.Random
+import kotlinx.coroutines.delay
 import kotlinx.coroutines.launch
 
 // ── State helpers ─────────────────────────────────────────────────────────────
@@ -136,6 +138,7 @@ private data class WinnerOverlayData(
 fun PollScreen(
     viewModel: PollViewModel,
     navController: NavHostController,
+    requestedPollId: String? = null,
 ) {
     val allPolls by viewModel.allPolls.collectAsState()
     val candidatesState by viewModel.candidates.collectAsState()
@@ -146,12 +149,17 @@ fun PollScreen(
     val memberCount by viewModel.memberCount.collectAsState()
 
     val snackbarHostState = remember { SnackbarHostState() }
+    val scope = rememberCoroutineScope()
     var showCreationSheet by rememberSaveable { mutableStateOf(false) }
     var showDeleteDialog by rememberSaveable { mutableStateOf(false) }
 
     // Level 1 → Level 2 navigation
     var detailPollId by rememberSaveable { mutableStateOf<String?>(null) }
     val detailPoll = detailPollId?.let { id -> allPolls.firstOrNull { it.id == id } }
+
+    LaunchedEffect(requestedPollId) {
+        if (requestedPollId != null) detailPollId = requestedPollId
+    }
 
     // Winner selection flow (triggered by Finalizar)
     var winnerFlowStep by remember { mutableStateOf(WinnerFlowStep.NONE) }
@@ -290,6 +298,10 @@ fun PollScreen(
     if (showDeleteDialog) {
         AlertDialog(
             onDismissRequest = { showDeleteDialog = false },
+            containerColor = MaterialTheme.colorScheme.surface,
+            iconContentColor = MaterialTheme.colorScheme.primary,
+            titleContentColor = MaterialTheme.colorScheme.onSurface,
+            textContentColor = MaterialTheme.colorScheme.onSurfaceVariant,
             title = { Text("Eliminar encuesta") },
             text = { Text("¿Eliminar esta encuesta y todos sus candidatos? Esta acción no se puede deshacer.") },
             confirmButton = {
@@ -354,6 +366,10 @@ fun PollScreen(
         val pw = pendingWinner
         AlertDialog(
             onDismissRequest = { showConfirmDestination = false; pendingWinner = null },
+            containerColor = MaterialTheme.colorScheme.surface,
+            iconContentColor = MaterialTheme.colorScheme.primary,
+            titleContentColor = MaterialTheme.colorScheme.onSurface,
+            textContentColor = MaterialTheme.colorScheme.onSurfaceVariant,
             title = { Text("¿Seleccionar destino?") },
             text = {
                 Text("¿Querés seleccionar ${pw?.candidate?.name ?: "el ganador"} como destino del viaje?")
@@ -366,6 +382,22 @@ fun PollScreen(
                             name = pw.candidate.name,
                             lat = pw.candidate.lat,
                             lng = pw.candidate.lng,
+                            onResult = { success ->
+                                if (!success) return@setWinnerAsDestination
+                                navController.previousBackStackEntry
+                                    ?.savedStateHandle
+                                    ?.set(POLL_DESTINATION_PREFERRED_CATEGORY_KEY, POLL_DESTINATION_ACTIVITIES_CATEGORY)
+                                scope.launch {
+                                    snackbarHostState.showSnackbar(
+                                        message = "Destino seleccionado: ${pw.candidate.name}",
+                                        duration = SnackbarDuration.Short,
+                                    )
+                                }
+                                scope.launch {
+                                    delay(1200)
+                                    navController.popBackStack()
+                                }
+                            },
                         )
                     }
                     showConfirmDestination = false
@@ -789,27 +821,46 @@ private fun TieChoiceDialog(
     onManual: () -> Unit,
     onCoinFlip: () -> Unit,
 ) {
-    AlertDialog(
-        onDismissRequest = onDismiss,
-        title = { Text("¡Hay un empate! 🤝") },
-        text = { Text("¿Cómo querés elegir el ganador?") },
-        confirmButton = {
+    Dialog(onDismissRequest = onDismiss) {
+        Surface(
+            shape = RoundedCornerShape(28.dp),
+            color = MaterialTheme.colorScheme.surface,
+            tonalElevation = 6.dp,
+        ) {
             Column(
-                verticalArrangement = Arrangement.spacedBy(8.dp),
-                modifier = Modifier.fillMaxWidth(),
+                modifier = Modifier.padding(24.dp),
+                horizontalAlignment = Alignment.CenterHorizontally,
+                verticalArrangement = Arrangement.spacedBy(16.dp),
             ) {
-                Button(onClick = onCoinFlip, modifier = Modifier.fillMaxWidth()) {
+                Text(
+                    "¡Hay un empate! 🤝",
+                    style = MaterialTheme.typography.titleLarge,
+                    fontWeight = FontWeight.Bold,
+                    textAlign = TextAlign.Center,
+                )
+                Text(
+                    "¿Cómo querés elegir el ganador?",
+                    style = MaterialTheme.typography.bodyMedium,
+                    color = MaterialTheme.colorScheme.onSurfaceVariant,
+                    textAlign = TextAlign.Center,
+                )
+                Button(
+                    onClick = onCoinFlip,
+                    modifier = Modifier.fillMaxWidth(),
+                    colors = ButtonDefaults.buttonColors(
+                        containerColor = MaterialTheme.colorScheme.primary,
+                        contentColor = MaterialTheme.colorScheme.onPrimary,
+                    ),
+                ) {
                     Text("🪙  Tirar la moneda")
                 }
                 OutlinedButton(onClick = onManual, modifier = Modifier.fillMaxWidth()) {
                     Text("Seleccionar manualmente")
                 }
+                TextButton(onClick = onDismiss) { Text("Cancelar") }
             }
-        },
-        dismissButton = {
-            TextButton(onClick = onDismiss) { Text("Cancelar") }
-        },
-    )
+        }
+    }
 }
 
 @Composable
@@ -818,16 +869,39 @@ private fun WinnerSelectionDialog(
     onDismiss: () -> Unit,
     onSelectWinner: (String) -> Unit,
 ) {
-    AlertDialog(
-        onDismissRequest = onDismiss,
-        title = { Text("Seleccionar ganador") },
-        text = {
-            Column(verticalArrangement = Arrangement.spacedBy(8.dp)) {
+    Dialog(onDismissRequest = onDismiss) {
+        Surface(
+            shape = RoundedCornerShape(28.dp),
+            color = MaterialTheme.colorScheme.surface,
+            tonalElevation = 6.dp,
+        ) {
+            Column(
+                modifier = Modifier.padding(24.dp),
+                horizontalAlignment = Alignment.CenterHorizontally,
+                verticalArrangement = Arrangement.spacedBy(16.dp),
+            ) {
+                Text(
+                    "Seleccionar ganador",
+                    style = MaterialTheme.typography.titleLarge,
+                    fontWeight = FontWeight.Bold,
+                    textAlign = TextAlign.Center,
+                )
+                Text(
+                    "Elegí manualmente qué candidato gana la encuesta.",
+                    style = MaterialTheme.typography.bodyMedium,
+                    color = MaterialTheme.colorScheme.onSurfaceVariant,
+                    textAlign = TextAlign.Center,
+                )
+                Column(verticalArrangement = Arrangement.spacedBy(8.dp)) {
                 candidates.forEach { uiModel ->
-                    Card(
+                    OutlinedCard(
                         onClick = { onSelectWinner(uiModel.candidate.id) },
                         modifier = Modifier.fillMaxWidth(),
-                        shape = RoundedCornerShape(8.dp),
+                        shape = RoundedCornerShape(16.dp),
+                        colors = CardDefaults.outlinedCardColors(
+                            containerColor = MaterialTheme.colorScheme.surfaceContainerLow,
+                        ),
+                        border = BorderStroke(1.dp, MaterialTheme.colorScheme.outlineVariant),
                     ) {
                         Row(
                             modifier = Modifier.fillMaxWidth().padding(12.dp),
@@ -860,11 +934,11 @@ private fun WinnerSelectionDialog(
                         }
                     }
                 }
+                }
+                TextButton(onClick = onDismiss) { Text("Cancelar") }
             }
-        },
-        confirmButton = {},
-        dismissButton = { TextButton(onClick = onDismiss) { Text("Cancelar") } },
-    )
+        }
+    }
 }
 
 @Composable
@@ -918,8 +992,19 @@ private fun TiedCoinFlipDialog(
                 val angle = rotation.value % 360f
                 val showFront = angle < 90f || angle >= 270f
                 val faceName = if (showFront) front.candidate.name else back.candidate.name
-                val coinFront = listOf(Color(0xFFFFE566), Color(0xFFE6A000))
-                val coinBack = listOf(Color(0xFFD4B200), Color(0xFF9A7A00))
+                val coinFront = listOf(
+                    MaterialTheme.colorScheme.primaryContainer,
+                    MaterialTheme.colorScheme.primary,
+                )
+                val coinBack = listOf(
+                    MaterialTheme.colorScheme.secondaryContainer,
+                    MaterialTheme.colorScheme.secondary,
+                )
+                val coinTextColor = if (showFront) {
+                    MaterialTheme.colorScheme.onPrimaryContainer
+                } else {
+                    MaterialTheme.colorScheme.onSecondaryContainer
+                }
 
                 Box(
                     modifier = Modifier
@@ -933,8 +1018,14 @@ private fun TiedCoinFlipDialog(
                         horizontalAlignment = Alignment.CenterHorizontally,
                         modifier = Modifier.graphicsLayer { scaleX = if (showFront) 1f else -1f },
                     ) {
-                        Text(faceName.first().toString(), fontSize = 52.sp, fontWeight = FontWeight.ExtraBold, color = Color(0xFF7A4200))
-                        Text(faceName.take(4).uppercase(), fontSize = 11.sp, fontWeight = FontWeight.Bold, color = Color(0xFF7A4200).copy(alpha = 0.6f), letterSpacing = 2.sp)
+                        Text(faceName.first().toString(), fontSize = 52.sp, fontWeight = FontWeight.ExtraBold, color = coinTextColor)
+                        Text(
+                            faceName.take(4).uppercase(),
+                            fontSize = 11.sp,
+                            fontWeight = FontWeight.Bold,
+                            color = coinTextColor.copy(alpha = 0.7f),
+                            letterSpacing = 2.sp,
+                        )
                     }
                 }
 
@@ -967,8 +1058,11 @@ private fun TiedCoinFlipDialog(
                     isFlipping -> Text("Girando...", style = MaterialTheme.typography.bodyMedium, color = MaterialTheme.colorScheme.onSurfaceVariant)
                     else -> Button(
                         onClick = { flip() },
-                        colors = ButtonDefaults.buttonColors(containerColor = Color(0xFFE6A000)),
-                    ) { Text("🪙  Tirar moneda", color = Color.White, fontWeight = FontWeight.Bold) }
+                        colors = ButtonDefaults.buttonColors(
+                            containerColor = MaterialTheme.colorScheme.primary,
+                            contentColor = MaterialTheme.colorScheme.onPrimary,
+                        ),
+                    ) { Text("🪙  Tirar moneda", fontWeight = FontWeight.Bold) }
                 }
 
                 TextButton(onClick = onDismiss) { Text("Cancelar") }
@@ -1008,7 +1102,18 @@ private fun WinnerOverlay(
         label = "alpha",
     )
 
-    val confetti = remember(animKey) { buildConfetti() }
+    val confettiPalette = listOf(
+        MaterialTheme.colorScheme.primary,
+        MaterialTheme.colorScheme.primaryContainer,
+        MaterialTheme.colorScheme.secondary,
+        MaterialTheme.colorScheme.secondaryContainer,
+        MaterialTheme.colorScheme.tertiary,
+        MaterialTheme.colorScheme.tertiaryContainer,
+        MaterialTheme.colorScheme.error,
+        MaterialTheme.colorScheme.outline,
+        MaterialTheme.colorScheme.onSurface,
+    )
+    val confetti = remember(animKey, confettiPalette) { buildConfetti(confettiPalette) }
     val inf = rememberInfiniteTransition(label = "confetti")
     val progress by inf.animateFloat(
         initialValue = 0f, targetValue = 1f,
@@ -1017,7 +1122,10 @@ private fun WinnerOverlay(
     )
 
     Box(
-        modifier = Modifier.fillMaxSize().background(Color(0xED000000)).clickable(onClick = onDismiss),
+        modifier = Modifier
+            .fillMaxSize()
+            .background(MaterialTheme.colorScheme.scrim.copy(alpha = 0.93f))
+            .clickable(onClick = onDismiss),
         contentAlignment = Alignment.Center,
     ) {
         Canvas(Modifier.fillMaxSize().graphicsLayer { this.alpha = alpha }) {
@@ -1043,29 +1151,36 @@ private fun WinnerOverlay(
             Text(
                 if (isDestinationPoll) "¡Nos vamos a" else "¡Vamos a",
                 style = MaterialTheme.typography.titleLarge,
-                color = Color.White.copy(alpha = 0.72f),
+                color = MaterialTheme.colorScheme.onPrimary.copy(alpha = 0.76f),
                 textAlign = TextAlign.Center,
             )
             Text(
                 "$winnerName!",
                 style = MaterialTheme.typography.displaySmall,
-                color = Color.White,
+                color = MaterialTheme.colorScheme.onPrimary,
                 fontWeight = FontWeight.Bold,
                 fontFamily = FrauncesFamily,
                 textAlign = TextAlign.Center,
             )
             Spacer(Modifier.height(4.dp))
-            Surface(shape = RoundedCornerShape(50), color = Color(0xFF2563EB).copy(alpha = 0.30f)) {
+            Surface(
+                shape = RoundedCornerShape(50),
+                color = MaterialTheme.colorScheme.primaryContainer.copy(alpha = 0.36f),
+            ) {
                 Text(
                     "👍  $voteCount de $totalVotes votos",
                     modifier = Modifier.padding(horizontal = 22.dp, vertical = 9.dp),
                     style = MaterialTheme.typography.bodyLarge,
-                    color = Color.White,
+                    color = MaterialTheme.colorScheme.onPrimaryContainer,
                     fontWeight = FontWeight.Medium,
                 )
             }
             Spacer(Modifier.height(10.dp))
-            Text("Toca para continuar", style = MaterialTheme.typography.bodySmall, color = Color.White.copy(alpha = 0.38f))
+            Text(
+                "Toca para continuar",
+                style = MaterialTheme.typography.bodySmall,
+                color = MaterialTheme.colorScheme.onPrimary.copy(alpha = 0.42f),
+            )
         }
     }
 }
@@ -1075,12 +1190,7 @@ private data class ConfettiPiece(
     val w: Float, val h: Float, val speed: Float, val rot0: Float, val wobble: Float,
 )
 
-private fun buildConfetti(): List<ConfettiPiece> {
-    val palette = listOf(
-        Color(0xFF2563EB), Color(0xFF7C3AED), Color(0xFFD97706),
-        Color(0xFF10B981), Color(0xFFEF4444), Color(0xFFEC4899),
-        Color(0xFFFFFFFF), Color(0xFF60A5FA), Color(0xFFFBB928),
-    )
+private fun buildConfetti(palette: List<Color>): List<ConfettiPiece> {
     return (0..80).map {
         ConfettiPiece(
             xFrac = Random.nextFloat(), startOffset = Random.nextFloat(),
