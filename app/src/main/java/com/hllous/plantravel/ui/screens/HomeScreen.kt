@@ -50,6 +50,7 @@ import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
 import androidx.compose.ui.geometry.Offset
+import androidx.compose.ui.graphics.Brush
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.graphics.vector.ImageVector
 import androidx.compose.ui.layout.ContentScale
@@ -953,20 +954,27 @@ private fun HomeRecommendationCard(
         shape = RoundedCornerShape(18.dp)
     ) {
         Column {
-            AsyncImage(
-                model = item.place.photoUrl.ifBlank { null }?.let { url ->
-                    ImageRequest.Builder(context)
-                        .data(url)
-                        .allowHardware(false)
-                        .build()
-                },
-                contentDescription = item.place.name,
+            val tertiaryContainer = MaterialTheme.colorScheme.tertiaryContainer
+            val primaryContainer = MaterialTheme.colorScheme.primaryContainer
+            Box(
                 modifier = Modifier
                     .fillMaxWidth()
                     .height(88.dp)
-                    .clip(RoundedCornerShape(topStart = 18.dp, topEnd = 18.dp)),
-                contentScale = ContentScale.Crop,
-            )
+                    .clip(RoundedCornerShape(topStart = 18.dp, topEnd = 18.dp))
+                    .background(Brush.linearGradient(listOf(tertiaryContainer, primaryContainer)))
+            ) {
+                AsyncImage(
+                    model = item.place.photoUrl.ifBlank { null }?.let { url ->
+                        ImageRequest.Builder(context)
+                            .data(url)
+                            .allowHardware(false)
+                            .build()
+                    },
+                    contentDescription = item.place.name,
+                    modifier = Modifier.fillMaxSize(),
+                    contentScale = ContentScale.Crop,
+                )
+            }
             Column(
                 Modifier.padding(10.dp),
                 verticalArrangement = Arrangement.spacedBy(4.dp)
@@ -1033,20 +1041,27 @@ private fun HomeStoredDestinationCard(
         shape = RoundedCornerShape(18.dp)
     ) {
         Column {
-            AsyncImage(
-                model = photoUrl?.ifBlank { null }?.let { url ->
-                    ImageRequest.Builder(context)
-                        .data(url)
-                        .allowHardware(false)
-                        .build()
-                },
-                contentDescription = destination.name,
+            val primaryContainer = MaterialTheme.colorScheme.primaryContainer
+            val secondaryContainer = MaterialTheme.colorScheme.secondaryContainer
+            Box(
                 modifier = Modifier
                     .fillMaxWidth()
                     .height(88.dp)
-                    .clip(RoundedCornerShape(topStart = 18.dp, topEnd = 18.dp)),
-                contentScale = ContentScale.Crop,
-            )
+                    .clip(RoundedCornerShape(topStart = 18.dp, topEnd = 18.dp))
+                    .background(Brush.linearGradient(listOf(primaryContainer, secondaryContainer)))
+            ) {
+                AsyncImage(
+                    model = photoUrl?.ifBlank { null }?.let { url ->
+                        ImageRequest.Builder(context)
+                            .data(url)
+                            .allowHardware(false)
+                            .build()
+                    },
+                    contentDescription = destination.name,
+                    modifier = Modifier.fillMaxSize(),
+                    contentScale = ContentScale.Crop,
+                )
+            }
             Column(
                 Modifier.padding(10.dp),
                 verticalArrangement = Arrangement.spacedBy(4.dp)
