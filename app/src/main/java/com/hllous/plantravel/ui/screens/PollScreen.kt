@@ -1,6 +1,21 @@
 package com.hllous.plantravel.ui.screens
 
+import androidx.compose.animation.core.Animatable
+import androidx.compose.animation.core.FastOutSlowInEasing
+import androidx.compose.animation.core.LinearEasing
+import androidx.compose.animation.core.LinearOutSlowInEasing
+import androidx.compose.animation.core.RepeatMode
+import androidx.compose.animation.core.Spring
+import androidx.compose.animation.core.animateFloat
+import androidx.compose.animation.core.animateFloatAsState
+import androidx.compose.animation.core.infiniteRepeatable
+import androidx.compose.animation.core.rememberInfiniteTransition
+import androidx.compose.animation.core.spring
+import androidx.compose.animation.core.tween
 import androidx.compose.foundation.BorderStroke
+import androidx.compose.foundation.Canvas
+import androidx.compose.foundation.background
+import androidx.compose.foundation.clickable
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
@@ -18,6 +33,7 @@ import androidx.compose.foundation.lazy.LazyColumn
 import androidx.compose.foundation.lazy.items
 import androidx.compose.foundation.selection.selectable
 import androidx.compose.foundation.selection.selectableGroup
+import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.automirrored.filled.ArrowBack
@@ -27,6 +43,7 @@ import androidx.compose.material.icons.filled.ThumbUp
 import androidx.compose.material.icons.outlined.ThumbUp
 import androidx.compose.material3.AlertDialog
 import androidx.compose.material3.Button
+import androidx.compose.material3.ButtonDefaults
 import androidx.compose.material3.Card
 import androidx.compose.material3.CardDefaults
 import androidx.compose.material3.CircularProgressIndicator
@@ -43,6 +60,7 @@ import androidx.compose.material3.ModalBottomSheet
 import androidx.compose.material3.OutlinedButton
 import androidx.compose.material3.OutlinedCard
 import androidx.compose.material3.OutlinedTextField
+import androidx.compose.material3.Surface
 import androidx.compose.material3.RadioButton
 import androidx.compose.material3.Scaffold
 import androidx.compose.material3.SnackbarHost
@@ -60,11 +78,18 @@ import androidx.compose.runtime.collectAsState
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
+import androidx.compose.runtime.rememberCoroutineScope
 import androidx.compose.runtime.saveable.rememberSaveable
 import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
+import androidx.compose.ui.geometry.Offset
+import androidx.compose.ui.geometry.Size
+import androidx.compose.ui.graphics.Brush
+import androidx.compose.ui.graphics.Color
+import androidx.compose.ui.graphics.drawscope.rotate
+import androidx.compose.ui.graphics.graphicsLayer
 import androidx.compose.ui.layout.ContentScale
 import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.semantics.Role
@@ -72,6 +97,8 @@ import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.style.TextAlign
 import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.dp
+import androidx.compose.ui.unit.sp
+import androidx.compose.ui.window.Dialog
 import androidx.navigation.NavHostController
 import coil3.compose.AsyncImage
 import coil3.request.ImageRequest
@@ -87,6 +114,17 @@ import com.hllous.plantravel.ui.theme.FrauncesFamily
 import java.time.Instant
 import java.time.LocalDate
 import java.time.ZoneOffset
+import kotlin.math.sin
+import kotlin.random.Random
+import kotlinx.coroutines.launch
+
+private data class WinnerOverlayData(
+    val name: String,
+    val voteCount: Int,
+    val totalVotes: Int,
+    val isDestination: Boolean,
+    val key: Int,
+)
 
 @OptIn(ExperimentalMaterial3Api::class)
 @Composable
@@ -102,6 +140,8 @@ fun PollScreen(
     val currentMember by viewModel.currentMember.collectAsState()
     val errorMessage by viewModel.errorMessage.collectAsState()
     val isSubmitting by viewModel.isSubmitting.collectAsState()
+    val isTied by viewModel.isTied.collectAsState()
+    val memberCount by viewModel.memberCount.collectAsState()
 
     val snackbarHostState = remember { SnackbarHostState() }
     var showCreationSheet by rememberSaveable { mutableStateOf(false) }
@@ -109,6 +149,7 @@ fun PollScreen(
     var showDeleteDialog by rememberSaveable { mutableStateOf(false) }
     // Poll whose candidates the winner dialog will display (null = destination poll)
     var selectedPollForWinner by remember { mutableStateOf<Poll?>(null) }
+    var winnerOverlayData by remember { mutableStateOf<WinnerOverlayData?>(null) }
 
     LaunchedEffect(errorMessage) {
         if (errorMessage != null) {
@@ -242,14 +283,38 @@ fun PollScreen(
     }
 
     if (showWinnerDialog) {
+        val dialogCandidates = (candidatesState as? UiState.Success)?.data ?: emptyList()
         WinnerSelectionDialog(
-            candidates = (candidatesState as? UiState.Success)?.data ?: emptyList(),
+            candidates = dialogCandidates,
+            isTied = isTied,
             onDismiss = { showWinnerDialog = false; selectedPollForWinner = null },
             onSelectWinner = { candidateId ->
+                val winner = dialogCandidates.firstOrNull { it.candidate.id == candidateId }
                 viewModel.selectWinner(candidateId)
+                if (winner != null) {
+                    val isDestination = selectedPollForWinner?.type != PollType.ACTIVITY
+                    winnerOverlayData = WinnerOverlayData(
+                        name = winner.candidate.name,
+                        voteCount = winner.voteCount,
+                        totalVotes = memberCount,
+                        isDestination = isDestination,
+                        key = System.currentTimeMillis().toInt(),
+                    )
+                }
                 showWinnerDialog = false
                 selectedPollForWinner = null
             },
+        )
+    }
+
+    winnerOverlayData?.let { data ->
+        WinnerOverlay(
+            isDestinationPoll = data.isDestination,
+            winnerName = data.name,
+            voteCount = data.voteCount,
+            totalVotes = data.totalVotes,
+            animKey = data.key,
+            onDismiss = { winnerOverlayData = null },
         )
     }
 
@@ -846,58 +911,354 @@ private fun PollCreationBottomSheet(
 @Composable
 private fun WinnerSelectionDialog(
     candidates: List<PollCandidateUiModel>,
+    isTied: Boolean,
     onDismiss: () -> Unit,
     onSelectWinner: (String) -> Unit,
 ) {
-    AlertDialog(
-        onDismissRequest = onDismiss,
-        title = { Text("Seleccionar ganador") },
-        text = {
-            Column(verticalArrangement = Arrangement.spacedBy(8.dp)) {
-                candidates.forEach { uiModel ->
-                    Card(
-                        onClick = { onSelectWinner(uiModel.candidate.id) },
-                        modifier = Modifier.fillMaxWidth(),
-                        shape = RoundedCornerShape(8.dp),
-                    ) {
-                        Row(
-                            modifier = Modifier
-                                .fillMaxWidth()
-                                .padding(12.dp),
-                            verticalAlignment = Alignment.CenterVertically,
-                            horizontalArrangement = Arrangement.SpaceBetween,
+    if (isTied) {
+        val maxVotes = candidates.maxOfOrNull { it.voteCount } ?: 0
+        val tiedCandidates = candidates.filter { it.voteCount == maxVotes }.shuffled()
+        TiedCoinFlipDialog(
+            tiedCandidates = tiedCandidates,
+            onDismiss = onDismiss,
+            onSelectWinner = onSelectWinner,
+        )
+    } else {
+        AlertDialog(
+            onDismissRequest = onDismiss,
+            title = { Text("Seleccionar ganador") },
+            text = {
+                Column(verticalArrangement = Arrangement.spacedBy(8.dp)) {
+                    candidates.forEach { uiModel ->
+                        Card(
+                            onClick = { onSelectWinner(uiModel.candidate.id) },
+                            modifier = Modifier.fillMaxWidth(),
+                            shape = RoundedCornerShape(8.dp),
                         ) {
-                            Text(
-                                text = uiModel.candidate.name,
-                                style = MaterialTheme.typography.bodyMedium,
-                                fontWeight = FontWeight.Medium,
-                                modifier = Modifier.weight(1f),
-                                maxLines = 1,
-                                overflow = TextOverflow.Ellipsis,
-                            )
-                            Spacer(modifier = Modifier.width(8.dp))
-                            Row(verticalAlignment = Alignment.CenterVertically) {
-                                Icon(
-                                    Icons.Default.ThumbUp,
-                                    contentDescription = null,
-                                    modifier = Modifier.size(14.dp),
-                                    tint = MaterialTheme.colorScheme.onSurfaceVariant,
-                                )
-                                Spacer(modifier = Modifier.width(4.dp))
+                            Row(
+                                modifier = Modifier
+                                    .fillMaxWidth()
+                                    .padding(12.dp),
+                                verticalAlignment = Alignment.CenterVertically,
+                                horizontalArrangement = Arrangement.SpaceBetween,
+                            ) {
                                 Text(
-                                    text = "${uiModel.voteCount}",
-                                    style = MaterialTheme.typography.labelMedium,
-                                    color = MaterialTheme.colorScheme.onSurfaceVariant,
+                                    text = uiModel.candidate.name,
+                                    style = MaterialTheme.typography.bodyMedium,
+                                    fontWeight = FontWeight.Medium,
+                                    modifier = Modifier.weight(1f),
+                                    maxLines = 1,
+                                    overflow = TextOverflow.Ellipsis,
                                 )
+                                Spacer(modifier = Modifier.width(8.dp))
+                                Row(verticalAlignment = Alignment.CenterVertically) {
+                                    Icon(
+                                        Icons.Default.ThumbUp,
+                                        contentDescription = null,
+                                        modifier = Modifier.size(14.dp),
+                                        tint = MaterialTheme.colorScheme.onSurfaceVariant,
+                                    )
+                                    Spacer(modifier = Modifier.width(4.dp))
+                                    Text(
+                                        text = "${uiModel.voteCount}",
+                                        style = MaterialTheme.typography.labelMedium,
+                                        color = MaterialTheme.colorScheme.onSurfaceVariant,
+                                    )
+                                }
                             }
                         }
                     }
                 }
+            },
+            confirmButton = {},
+            dismissButton = {
+                TextButton(onClick = onDismiss) { Text("Cancelar") }
+            },
+        )
+    }
+}
+
+@Composable
+private fun TiedCoinFlipDialog(
+    tiedCandidates: List<PollCandidateUiModel>,
+    onDismiss: () -> Unit,
+    onSelectWinner: (String) -> Unit,
+) {
+    val front = tiedCandidates.getOrNull(0) ?: return
+    val back = tiedCandidates.getOrNull(1) ?: front
+
+    var winner by remember { mutableStateOf<PollCandidateUiModel?>(null) }
+    var isFlipping by remember { mutableStateOf(false) }
+    val rotation = remember { Animatable(0f) }
+    val coinScale = remember { Animatable(0.72f) }
+    val winAlpha = remember { Animatable(0f) }
+    val scope = rememberCoroutineScope()
+
+    fun flip() {
+        if (isFlipping) return
+        scope.launch {
+            isFlipping = true
+            winner = null
+            winAlpha.snapTo(0f)
+            rotation.snapTo(0f)
+            coinScale.snapTo(0.72f)
+            launch { coinScale.animateTo(1f, tween(750, easing = FastOutSlowInEasing)) }
+            val landFront = Random.nextBoolean()
+            val landing = if (landFront) 0f else 180f
+            rotation.animateTo(1440f + landing, tween(2600, easing = LinearOutSlowInEasing))
+            winner = if (landFront) front else back
+            winAlpha.animateTo(1f, tween(480, easing = FastOutSlowInEasing))
+            isFlipping = false
+        }
+    }
+
+    Dialog(onDismissRequest = onDismiss) {
+        Surface(
+            shape = RoundedCornerShape(28.dp),
+            color = MaterialTheme.colorScheme.surface,
+            tonalElevation = 6.dp,
+        ) {
+            Column(
+                modifier = Modifier.padding(24.dp),
+                horizontalAlignment = Alignment.CenterHorizontally,
+                verticalArrangement = Arrangement.spacedBy(16.dp),
+            ) {
+                Text(
+                    "¡Hay un empate! 🤝",
+                    style = MaterialTheme.typography.titleLarge,
+                    fontWeight = FontWeight.Bold,
+                    textAlign = TextAlign.Center,
+                )
+                Text(
+                    tiedCandidates.joinToString("  ·  ") { it.candidate.name.take(14) },
+                    style = MaterialTheme.typography.bodyMedium,
+                    color = MaterialTheme.colorScheme.onSurfaceVariant,
+                    textAlign = TextAlign.Center,
+                )
+
+                val angle = rotation.value % 360f
+                val showFront = angle < 90f || angle >= 270f
+                val faceName = if (showFront) front.candidate.name else back.candidate.name
+                val coinFront = listOf(Color(0xFFFFE566), Color(0xFFE6A000))
+                val coinBack = listOf(Color(0xFFD4B200), Color(0xFF9A7A00))
+
+                Box(
+                    modifier = Modifier
+                        .size(148.dp)
+                        .graphicsLayer {
+                            rotationY = rotation.value
+                            scaleX = coinScale.value
+                            scaleY = coinScale.value
+                        }
+                        .clip(CircleShape)
+                        .background(Brush.radialGradient(if (showFront) coinFront else coinBack)),
+                    contentAlignment = Alignment.Center,
+                ) {
+                    Column(
+                        horizontalAlignment = Alignment.CenterHorizontally,
+                        modifier = Modifier.graphicsLayer { scaleX = if (showFront) 1f else -1f },
+                    ) {
+                        Text(
+                            faceName.first().toString(),
+                            fontSize = 52.sp,
+                            fontWeight = FontWeight.ExtraBold,
+                            color = Color(0xFF7A4200),
+                        )
+                        Text(
+                            faceName.take(4).uppercase(),
+                            fontSize = 11.sp,
+                            fontWeight = FontWeight.Bold,
+                            color = Color(0xFF7A4200).copy(alpha = 0.6f),
+                            letterSpacing = 2.sp,
+                        )
+                    }
+                }
+
+                when {
+                    winner != null -> {
+                        Column(
+                            horizontalAlignment = Alignment.CenterHorizontally,
+                            verticalArrangement = Arrangement.spacedBy(8.dp),
+                            modifier = Modifier.graphicsLayer { this.alpha = winAlpha.value },
+                        ) {
+                            Text("🎉", fontSize = 40.sp)
+                            Text(
+                                "¡Ganó ${winner!!.candidate.name}!",
+                                style = MaterialTheme.typography.titleMedium,
+                                fontWeight = FontWeight.Bold,
+                                textAlign = TextAlign.Center,
+                                color = MaterialTheme.colorScheme.primary,
+                            )
+                            Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
+                                TextButton(onClick = {
+                                    scope.launch {
+                                        winner = null
+                                        winAlpha.snapTo(0f)
+                                        rotation.snapTo(0f)
+                                        coinScale.snapTo(0.72f)
+                                    }
+                                }) { Text("↺  Volver a tirar") }
+                                Button(onClick = { onSelectWinner(winner!!.candidate.id) }) {
+                                    Text("Confirmar")
+                                }
+                            }
+                        }
+                    }
+                    isFlipping -> Text(
+                        "Girando...",
+                        style = MaterialTheme.typography.bodyMedium,
+                        color = MaterialTheme.colorScheme.onSurfaceVariant,
+                    )
+                    else -> Button(
+                        onClick = { flip() },
+                        colors = ButtonDefaults.buttonColors(containerColor = Color(0xFFE6A000)),
+                    ) {
+                        Text("🪙  Tirar moneda", color = Color.White, fontWeight = FontWeight.Bold)
+                    }
+                }
+
+                TextButton(onClick = onDismiss) { Text("Cancelar") }
             }
-        },
-        confirmButton = {},
-        dismissButton = {
-            TextButton(onClick = onDismiss) { Text("Cancelar") }
-        },
+        }
+    }
+}
+
+@Composable
+private fun WinnerOverlay(
+    isDestinationPoll: Boolean,
+    winnerName: String,
+    voteCount: Int,
+    totalVotes: Int,
+    animKey: Int,
+    onDismiss: () -> Unit,
+) {
+    var started by remember(animKey) { mutableStateOf(false) }
+
+    LaunchedEffect(animKey) {
+        kotlinx.coroutines.delay(80)
+        started = true
+        kotlinx.coroutines.delay(4500)
+        onDismiss()
+    }
+
+    val contentScale by animateFloatAsState(
+        targetValue = if (started) 1f else 0.5f,
+        animationSpec = spring(
+            dampingRatio = Spring.DampingRatioMediumBouncy,
+            stiffness = Spring.StiffnessMediumLow,
+        ),
+        label = "scale",
     )
+    val alpha by animateFloatAsState(
+        targetValue = if (started) 1f else 0f,
+        animationSpec = tween(350, easing = FastOutSlowInEasing),
+        label = "alpha",
+    )
+
+    val confetti = remember(animKey) { buildConfetti() }
+    val inf = rememberInfiniteTransition(label = "confetti")
+    val progress by inf.animateFloat(
+        initialValue = 0f,
+        targetValue = 1f,
+        animationSpec = infiniteRepeatable(tween(2800, easing = LinearEasing), RepeatMode.Restart),
+        label = "fall",
+    )
+
+    Box(
+        modifier = Modifier
+            .fillMaxSize()
+            .background(Color(0xED000000))
+            .clickable(onClick = onDismiss),
+        contentAlignment = Alignment.Center,
+    ) {
+        Canvas(Modifier.fillMaxSize().graphicsLayer { this.alpha = alpha }) {
+            confetti.forEach { piece ->
+                val t = ((progress + piece.startOffset) * piece.speed) % 1.35f
+                val px = piece.xFrac * size.width + sin(t * 6.28f * 1.5f) * piece.wobble * size.width
+                val py = (t - 0.15f) * size.height * 1.15f
+                if (py < -piece.h || py > size.height + piece.h) return@forEach
+                rotate(degrees = t * 540f * piece.speed + piece.rot0, pivot = Offset(px, py)) {
+                    drawRect(
+                        color = piece.color,
+                        topLeft = Offset(px - piece.w / 2f, py - piece.h / 2f),
+                        size = Size(piece.w, piece.h),
+                    )
+                }
+            }
+        }
+
+        Column(
+            modifier = Modifier
+                .graphicsLayer { scaleX = contentScale; scaleY = contentScale; this.alpha = alpha }
+                .padding(horizontal = 40.dp),
+            horizontalAlignment = Alignment.CenterHorizontally,
+            verticalArrangement = Arrangement.spacedBy(10.dp),
+        ) {
+            Text("🏆", fontSize = 68.sp)
+            Text(
+                text = if (isDestinationPoll) "¡Nos vamos a" else "¡Vamos a",
+                style = MaterialTheme.typography.titleLarge,
+                color = Color.White.copy(alpha = 0.72f),
+                textAlign = TextAlign.Center,
+            )
+            Text(
+                text = "$winnerName!",
+                style = MaterialTheme.typography.displaySmall,
+                color = Color.White,
+                fontWeight = FontWeight.Bold,
+                fontFamily = FrauncesFamily,
+                textAlign = TextAlign.Center,
+            )
+            Spacer(Modifier.height(4.dp))
+            Surface(
+                shape = RoundedCornerShape(50),
+                color = Color(0xFF2563EB).copy(alpha = 0.30f),
+            ) {
+                Text(
+                    text = "👍  $voteCount de $totalVotes votos",
+                    modifier = Modifier.padding(horizontal = 22.dp, vertical = 9.dp),
+                    style = MaterialTheme.typography.bodyLarge,
+                    color = Color.White,
+                    fontWeight = FontWeight.Medium,
+                )
+            }
+            Spacer(Modifier.height(10.dp))
+            Text(
+                "Toca para continuar",
+                style = MaterialTheme.typography.bodySmall,
+                color = Color.White.copy(alpha = 0.38f),
+            )
+        }
+    }
+}
+
+private data class ConfettiPiece(
+    val xFrac: Float,
+    val startOffset: Float,
+    val color: Color,
+    val w: Float,
+    val h: Float,
+    val speed: Float,
+    val rot0: Float,
+    val wobble: Float,
+)
+
+private fun buildConfetti(): List<ConfettiPiece> {
+    val palette = listOf(
+        Color(0xFF2563EB), Color(0xFF7C3AED), Color(0xFFD97706),
+        Color(0xFF10B981), Color(0xFFEF4444), Color(0xFFEC4899),
+        Color(0xFFFFFFFF), Color(0xFF60A5FA), Color(0xFFFBB928),
+    )
+    return (0..80).map {
+        ConfettiPiece(
+            xFrac = Random.nextFloat(),
+            startOffset = Random.nextFloat(),
+            color = palette.random(),
+            w = Random.nextFloat() * 14f + 7f,
+            h = Random.nextFloat() * 9f + 5f,
+            speed = Random.nextFloat() * 0.38f + 0.78f,
+            rot0 = Random.nextFloat() * 360f,
+            wobble = Random.nextFloat() * 0.055f + 0.008f,
+        )
+    }
 }

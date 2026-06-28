@@ -77,8 +77,8 @@ class PollViewModel @Inject constructor(
         }
         .stateIn(viewModelScope, SharingStarted.WhileSubscribed(5000), null)
 
-    // Denominator for the vote progress bar: fraction of members who voted, not share of total votes.
-    private val memberCount: StateFlow<Int> = selectedGroupHolder.selectedGroupId
+    // Denominator for the vote progress bar and winner overlay "N de M votos" label.
+    val memberCount: StateFlow<Int> = selectedGroupHolder.selectedGroupId
         .flatMapLatest { groupId ->
             if (groupId == null) flowOf(0)
             else repository.observeMembers(groupId)
