@@ -34,7 +34,6 @@ import androidx.compose.material.icons.filled.QrCode
 import androidx.compose.material.icons.filled.Star
 import androidx.compose.material3.CircularProgressIndicator
 import androidx.compose.material3.ElevatedCard
-import androidx.compose.material3.HorizontalDivider
 import androidx.compose.material3.Icon
 import androidx.compose.material3.IconButton
 import androidx.compose.material3.MaterialTheme
@@ -71,7 +70,6 @@ import com.hllous.plantravel.domain.model.GroupMember
 import com.hllous.plantravel.domain.model.Poll
 import com.hllous.plantravel.domain.model.PollCandidate
 import com.hllous.plantravel.domain.model.PollState
-import com.hllous.plantravel.domain.model.PollType
 import com.hllous.plantravel.domain.model.StoredDestination
 import com.hllous.plantravel.domain.model.TravelGroup
 import com.hllous.plantravel.presentation.UiState
@@ -569,6 +567,8 @@ private fun HomeGroupContent(
 }
 
 // ── Poll summary cards (② and ③) ───────────────────────────────────────────────
+// Layout: colored Surface (primaryContainer / secondaryContainer) with horizontal row
+// icon-box (solid primary/secondary) | body | optional chevron
 
 @Composable
 private fun WhereAreWeGoingCard(
@@ -599,78 +599,50 @@ private fun WhereAreWeGoingCard(
         else -> true
     }
 
-    val body: @Composable () -> Unit = {
-        WhereAreWeGoingCardBody(
-            tripDestSet = tripDestSet,
-            latestDestPoll = latestDestPoll,
-            leader = leader,
-            isTied = isTied,
-            secondTiedName = secondTied?.name,
-            winnerCandidate = winnerCandidate,
-            isViaPool = isViaPool,
-            isCardClickable = isCardClickable,
-            onCreatePoll = onCreatePoll,
-        )
-    }
-
-    if (isCardClickable && pollId != null) {
-        ElevatedCard(
-            onClick = { onNavigateToPoll(pollId) },
-            modifier = Modifier.fillMaxWidth(),
-            shape = RoundedCornerShape(16.dp)
-        ) { body() }
-    } else {
-        ElevatedCard(
-            modifier = Modifier.fillMaxWidth(),
-            shape = RoundedCornerShape(16.dp)
-        ) { body() }
-    }
-}
-
-@Composable
-private fun WhereAreWeGoingCardBody(
-    tripDestSet: TripDestinationState.Set?,
-    latestDestPoll: Poll?,
-    leader: PollCandidate?,
-    isTied: Boolean,
-    secondTiedName: String?,
-    winnerCandidate: PollCandidate?,
-    isViaPool: Boolean,
-    isCardClickable: Boolean,
-    onCreatePoll: () -> Unit,
-) {
-    Column {
-        PollCardHeader(emoji = "🗺️", label = "¿A dónde vamos?", showArrow = isCardClickable)
-        HorizontalDivider(color = MaterialTheme.colorScheme.outlineVariant)
-        Column(
-            Modifier.padding(14.dp),
-            verticalArrangement = Arrangement.spacedBy(6.dp)
+    SectionCard(
+        isClickable = isCardClickable,
+        containerColor = MaterialTheme.colorScheme.primaryContainer,
+        onClick = { if (pollId != null) onNavigateToPoll(pollId) }
+    ) {
+        DestCardRow(
+            iconEmoji = "🗺️",
+            iconBgColor = MaterialTheme.colorScheme.primary,
+            label = "¿A dónde vamos?",
+            labelColor = MaterialTheme.colorScheme.onPrimaryContainer.copy(alpha = 0.65f),
+            showChevron = isCardClickable,
+            chevronColor = MaterialTheme.colorScheme.onPrimaryContainer.copy(alpha = 0.45f),
         ) {
             when {
                 tripDestSet != null && isViaPool -> {
-                    DestinationSetRow(name = tripDestSet.name, chipLabel = "Ver encuesta", viaPool = true)
+                    DestCardTitle(tripDestSet.name.let { "📍 $it" }, MaterialTheme.colorScheme.onPrimaryContainer)
+                    DestCardSub("Destino del viaje · Ver encuesta", MaterialTheme.colorScheme.onPrimaryContainer)
                 }
                 tripDestSet != null -> {
-                    DestinationSetRow(name = tripDestSet.name, chipLabel = "Destino del viaje", viaPool = false)
+                    DestCardTitle("📍 ${tripDestSet.name}", MaterialTheme.colorScheme.onPrimaryContainer)
+                    DestCardSub("Destino del viaje", MaterialTheme.colorScheme.onPrimaryContainer)
                 }
                 latestDestPoll == null -> {
-                    NoPollRow(onCreatePoll = onCreatePoll)
+                    DestCardTitle("Sin encuesta activa", MaterialTheme.colorScheme.onPrimaryContainer)
+                    DestCardSub("Creá una para votar en grupo", MaterialTheme.colorScheme.onPrimaryContainer)
+                    DestCardCta("Crear encuesta", MaterialTheme.colorScheme.primary, MaterialTheme.colorScheme.onPrimary, onCreatePoll)
+                }
+                latestDestPoll.state == PollState.OPEN && (leader == null || leader.voteCount == 0) -> {
+                    DestCardTitle("Sin candidatos aún", MaterialTheme.colorScheme.onPrimaryContainer)
                 }
                 latestDestPoll.state == PollState.OPEN -> {
-                    OpenPollRow(leader = leader, pollType = PollType.DESTINATION)
+                    DestCardTitle(leader!!.name, MaterialTheme.colorScheme.onPrimaryContainer)
+                    DestCardSub("🔥 ${leader.voteCount} voto${if (leader.voteCount != 1) "s" else ""} · líder actual", MaterialTheme.colorScheme.onPrimaryContainer)
                 }
                 winnerCandidate != null -> {
-                    WinnerRow(winnerName = winnerCandidate.name)
+                    DestCardTitle("🏆 ${winnerCandidate.name}", MaterialTheme.colorScheme.onPrimaryContainer)
+                    DestCardSub("Ganador de la encuesta", MaterialTheme.colorScheme.onPrimaryContainer)
                 }
                 leader != null -> {
-                    TiedRow(leaderName = leader.name, secondTiedName = secondTiedName)
+                    DestCardTitle(leader.name, MaterialTheme.colorScheme.onPrimaryContainer)
+                    DestCardEmpateBadge(secondTied?.name, MaterialTheme.colorScheme.onPrimaryContainer)
                 }
                 else -> {
-                    Text(
-                        text = "Sin resultados",
-                        style = MaterialTheme.typography.bodySmall,
-                        color = MaterialTheme.colorScheme.onSurfaceVariant
-                    )
+                    DestCardTitle("Sin resultados", MaterialTheme.colorScheme.onPrimaryContainer)
                 }
             }
         }
@@ -697,215 +669,175 @@ private fun WhatAreWeDoingCard(
     val pollId = latestActivityPoll?.id
     val isCardClickable = pollId != null
 
-    val body: @Composable () -> Unit = {
-        WhatAreWeDoingCardBody(
-            latestActivityPoll = latestActivityPoll,
-            leader = leader,
-            isTied = isTied,
-            secondTiedName = secondTied?.name,
-            winnerCandidate = winnerCandidate,
-            isCardClickable = isCardClickable,
-            onCreatePoll = onCreatePoll,
-        )
-    }
-
-    if (isCardClickable && pollId != null) {
-        ElevatedCard(
-            onClick = { onNavigateToPoll(pollId) },
-            modifier = Modifier.fillMaxWidth(),
-            shape = RoundedCornerShape(16.dp)
-        ) { body() }
-    } else {
-        ElevatedCard(
-            modifier = Modifier.fillMaxWidth(),
-            shape = RoundedCornerShape(16.dp)
-        ) { body() }
-    }
-}
-
-@Composable
-private fun WhatAreWeDoingCardBody(
-    latestActivityPoll: Poll?,
-    leader: PollCandidate?,
-    isTied: Boolean,
-    secondTiedName: String?,
-    winnerCandidate: PollCandidate?,
-    isCardClickable: Boolean,
-    onCreatePoll: () -> Unit,
-) {
-    Column {
-        PollCardHeader(emoji = "🎯", label = "¿Qué hacemos?", showArrow = isCardClickable)
-        HorizontalDivider(color = MaterialTheme.colorScheme.outlineVariant)
-        Column(
-            Modifier.padding(14.dp),
-            verticalArrangement = Arrangement.spacedBy(6.dp)
+    SectionCard(
+        isClickable = isCardClickable,
+        containerColor = MaterialTheme.colorScheme.secondaryContainer,
+        onClick = { if (pollId != null) onNavigateToPoll(pollId) }
+    ) {
+        DestCardRow(
+            iconEmoji = "✨",
+            iconBgColor = MaterialTheme.colorScheme.secondary,
+            label = "¿Qué hacemos?",
+            labelColor = MaterialTheme.colorScheme.onSecondaryContainer.copy(alpha = 0.65f),
+            showChevron = isCardClickable,
+            chevronColor = MaterialTheme.colorScheme.onSecondaryContainer.copy(alpha = 0.45f),
         ) {
             when {
                 latestActivityPoll == null -> {
-                    NoPollRow(onCreatePoll = onCreatePoll)
+                    DestCardTitle("Sin encuesta activa", MaterialTheme.colorScheme.onSecondaryContainer)
+                    DestCardSub("Creá una para votar en grupo", MaterialTheme.colorScheme.onSecondaryContainer)
+                    DestCardCta("Crear encuesta", MaterialTheme.colorScheme.secondary, MaterialTheme.colorScheme.onSecondary, onCreatePoll)
+                }
+                latestActivityPoll.state == PollState.OPEN && (leader == null || leader.voteCount == 0) -> {
+                    DestCardTitle("Sin candidatos aún", MaterialTheme.colorScheme.onSecondaryContainer)
                 }
                 latestActivityPoll.state == PollState.OPEN -> {
-                    OpenPollRow(leader = leader, pollType = PollType.ACTIVITY)
+                    DestCardTitle(leader!!.name, MaterialTheme.colorScheme.onSecondaryContainer)
+                    DestCardSub("🔥 ${leader.voteCount} voto${if (leader.voteCount != 1) "s" else ""} · líder actual", MaterialTheme.colorScheme.onSecondaryContainer)
                 }
                 winnerCandidate != null -> {
-                    WinnerRow(winnerName = winnerCandidate.name)
+                    DestCardTitle("🏆 ${winnerCandidate.name}", MaterialTheme.colorScheme.onSecondaryContainer)
+                    DestCardSub("Ganador de la encuesta", MaterialTheme.colorScheme.onSecondaryContainer)
                 }
                 leader != null -> {
-                    TiedRow(leaderName = leader.name, secondTiedName = secondTiedName)
+                    DestCardTitle(leader.name, MaterialTheme.colorScheme.onSecondaryContainer)
+                    DestCardEmpateBadge(secondTied?.name, MaterialTheme.colorScheme.onSecondaryContainer)
                 }
                 else -> {
-                    Text(
-                        text = "Sin resultados",
-                        style = MaterialTheme.typography.bodySmall,
-                        color = MaterialTheme.colorScheme.onSurfaceVariant
-                    )
+                    DestCardTitle("Sin resultados", MaterialTheme.colorScheme.onSecondaryContainer)
                 }
             }
         }
     }
 }
 
-// ── Poll card sub-composables ────────────────────────────────────────────────────
+// ── Section card primitives ──────────────────────────────────────────────────────
 
 @Composable
-private fun PollCardHeader(emoji: String, label: String, showArrow: Boolean) {
+private fun SectionCard(
+    isClickable: Boolean,
+    containerColor: Color,
+    onClick: () -> Unit,
+    content: @Composable () -> Unit,
+) {
+    if (isClickable) {
+        Surface(
+            onClick = onClick,
+            modifier = Modifier.fillMaxWidth(),
+            shape = RoundedCornerShape(18.dp),
+            color = containerColor,
+        ) { content() }
+    } else {
+        Surface(
+            modifier = Modifier.fillMaxWidth(),
+            shape = RoundedCornerShape(18.dp),
+            color = containerColor,
+        ) { content() }
+    }
+}
+
+@Composable
+private fun DestCardRow(
+    iconEmoji: String,
+    iconBgColor: Color,
+    label: String,
+    labelColor: Color,
+    showChevron: Boolean,
+    chevronColor: Color,
+    body: @Composable () -> Unit,
+) {
     Row(
-        Modifier
-            .fillMaxWidth()
-            .padding(horizontal = 14.dp, vertical = 10.dp),
+        Modifier.padding(16.dp),
         verticalAlignment = Alignment.CenterVertically,
-        horizontalArrangement = Arrangement.spacedBy(6.dp)
+        horizontalArrangement = Arrangement.spacedBy(14.dp)
     ) {
-        Text(emoji, fontSize = 14.sp)
-        Text(
-            text = label.uppercase(),
-            style = MaterialTheme.typography.labelSmall,
-            fontWeight = FontWeight.ExtraBold,
-            color = MaterialTheme.colorScheme.onSurfaceVariant,
-            letterSpacing = 1.sp,
-            fontSize = 10.sp,
-            modifier = Modifier.weight(1f)
-        )
-        if (showArrow) {
+        Box(
+            Modifier
+                .size(46.dp)
+                .background(iconBgColor, RoundedCornerShape(14.dp)),
+            contentAlignment = Alignment.Center
+        ) {
+            Text(iconEmoji, fontSize = 24.sp)
+        }
+        Column(
+            Modifier.weight(1f),
+            verticalArrangement = Arrangement.spacedBy(3.dp)
+        ) {
+            Text(
+                text = label.uppercase(),
+                style = MaterialTheme.typography.labelSmall,
+                fontWeight = FontWeight.ExtraBold,
+                color = labelColor,
+                letterSpacing = 1.sp,
+                fontSize = 10.sp
+            )
+            body()
+        }
+        if (showChevron) {
             Icon(
                 Icons.AutoMirrored.Filled.KeyboardArrowRight,
                 contentDescription = null,
-                tint = MaterialTheme.colorScheme.outline,
-                modifier = Modifier.size(16.dp)
+                tint = chevronColor,
+                modifier = Modifier.size(20.dp)
             )
         }
     }
 }
 
 @Composable
-private fun NoPollRow(onCreatePoll: () -> Unit) {
+private fun DestCardTitle(text: String, color: Color) {
     Text(
-        text = "Sin encuesta activa",
-        style = MaterialTheme.typography.bodySmall,
-        color = MaterialTheme.colorScheme.onSurfaceVariant
+        text = text,
+        style = MaterialTheme.typography.titleSmall,
+        fontFamily = FrauncesFamily,
+        fontWeight = FontWeight.Bold,
+        color = color,
+        maxLines = 1,
+        overflow = TextOverflow.Ellipsis
     )
+}
+
+@Composable
+private fun DestCardSub(text: String, color: Color) {
+    Text(
+        text = text,
+        style = MaterialTheme.typography.bodySmall,
+        color = color.copy(alpha = 0.7f),
+        maxLines = 1,
+        overflow = TextOverflow.Ellipsis
+    )
+}
+
+@Composable
+private fun DestCardCta(label: String, bgColor: Color, textColor: Color, onClick: () -> Unit) {
     Surface(
-        onClick = onCreatePoll,
-        shape = RoundedCornerShape(8.dp),
-        color = MaterialTheme.colorScheme.primaryContainer
+        onClick = onClick,
+        shape = RoundedCornerShape(100.dp),
+        color = bgColor,
+        modifier = Modifier.padding(top = 7.dp)
     ) {
         Text(
-            text = "Crear encuesta",
-            modifier = Modifier.padding(horizontal = 14.dp, vertical = 8.dp),
+            text = label,
+            modifier = Modifier.padding(horizontal = 16.dp, vertical = 7.dp),
             style = MaterialTheme.typography.labelMedium,
-            fontWeight = FontWeight.Bold,
-            color = MaterialTheme.colorScheme.onPrimaryContainer
+            fontWeight = FontWeight.SemiBold,
+            color = textColor
         )
     }
 }
 
 @Composable
-private fun OpenPollRow(leader: PollCandidate?, pollType: PollType) {
-    if (leader == null || leader.voteCount == 0) {
-        Text(
-            text = "Sin candidatos aún",
-            style = MaterialTheme.typography.bodySmall,
-            color = MaterialTheme.colorScheme.onSurfaceVariant
-        )
-    } else {
-        Text(
-            text = leader.name,
-            style = MaterialTheme.typography.titleSmall,
-            fontFamily = FrauncesFamily,
-            fontWeight = FontWeight.Bold,
-            color = MaterialTheme.colorScheme.onSurface,
-            maxLines = 1,
-            overflow = TextOverflow.Ellipsis
-        )
-        Text(
-            text = "${leader.voteCount} voto${if (leader.voteCount != 1) "s" else ""}",
-            style = MaterialTheme.typography.bodySmall,
-            color = MaterialTheme.colorScheme.onSurfaceVariant
-        )
-    }
-}
-
-@Composable
-private fun WinnerRow(winnerName: String) {
-    Text(
-        text = "🏆 $winnerName",
-        style = MaterialTheme.typography.titleSmall,
-        fontFamily = FrauncesFamily,
-        fontWeight = FontWeight.Bold,
-        color = MaterialTheme.colorScheme.onSurface,
-        maxLines = 1,
-        overflow = TextOverflow.Ellipsis
-    )
-}
-
-@Composable
-private fun TiedRow(leaderName: String, secondTiedName: String?) {
-    Text(
-        text = leaderName,
-        style = MaterialTheme.typography.titleSmall,
-        fontFamily = FrauncesFamily,
-        fontWeight = FontWeight.Bold,
-        color = MaterialTheme.colorScheme.onSurface,
-        maxLines = 1,
-        overflow = TextOverflow.Ellipsis
-    )
+private fun DestCardEmpateBadge(secondTiedName: String?, onContainerColor: Color) {
     Surface(
         shape = RoundedCornerShape(100.dp),
-        color = MaterialTheme.colorScheme.tertiaryContainer
+        color = onContainerColor.copy(alpha = 0.12f)
     ) {
         Text(
             text = "⚖️ Empate${secondTiedName?.let { " con $it" } ?: ""}",
             modifier = Modifier.padding(horizontal = 8.dp, vertical = 2.dp),
             style = MaterialTheme.typography.labelSmall,
-            color = MaterialTheme.colorScheme.onTertiaryContainer,
+            color = onContainerColor,
             fontSize = 10.sp
-        )
-    }
-}
-
-@Composable
-private fun DestinationSetRow(name: String, chipLabel: String, viaPool: Boolean) {
-    Text(
-        text = "📍 $name",
-        style = MaterialTheme.typography.titleSmall,
-        fontFamily = FrauncesFamily,
-        fontWeight = FontWeight.Bold,
-        color = MaterialTheme.colorScheme.onSurface,
-        maxLines = 1,
-        overflow = TextOverflow.Ellipsis
-    )
-    Surface(
-        shape = RoundedCornerShape(100.dp),
-        color = if (viaPool) MaterialTheme.colorScheme.primaryContainer
-                else MaterialTheme.colorScheme.surfaceVariant
-    ) {
-        Text(
-            text = chipLabel,
-            modifier = Modifier.padding(horizontal = 10.dp, vertical = 3.dp),
-            style = MaterialTheme.typography.labelSmall,
-            fontWeight = FontWeight.Bold,
-            color = if (viaPool) MaterialTheme.colorScheme.onPrimaryContainer
-                    else MaterialTheme.colorScheme.onSurfaceVariant
         )
     }
 }
@@ -1017,7 +949,7 @@ private fun HomeRecommendationCard(
 
     ElevatedCard(
         onClick = onClick,
-        modifier = Modifier.width(150.dp),
+        modifier = Modifier.width(130.dp),
         shape = RoundedCornerShape(18.dp)
     ) {
         Column {
@@ -1031,7 +963,7 @@ private fun HomeRecommendationCard(
                 contentDescription = item.place.name,
                 modifier = Modifier
                     .fillMaxWidth()
-                    .height(100.dp)
+                    .height(88.dp)
                     .clip(RoundedCornerShape(topStart = 18.dp, topEnd = 18.dp)),
                 contentScale = ContentScale.Crop,
             )
@@ -1097,7 +1029,7 @@ private fun HomeStoredDestinationCard(
 
     ElevatedCard(
         onClick = onClick,
-        modifier = Modifier.width(150.dp),
+        modifier = Modifier.width(130.dp),
         shape = RoundedCornerShape(18.dp)
     ) {
         Column {
@@ -1111,7 +1043,7 @@ private fun HomeStoredDestinationCard(
                 contentDescription = destination.name,
                 modifier = Modifier
                     .fillMaxWidth()
-                    .height(100.dp)
+                    .height(88.dp)
                     .clip(RoundedCornerShape(topStart = 18.dp, topEnd = 18.dp)),
                 contentScale = ContentScale.Crop,
             )
