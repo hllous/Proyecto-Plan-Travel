@@ -673,6 +673,7 @@ class DestinationViewModelTest {
                     emit(if (subscriptions >= 2) createdPoll else null)
                 }
             },
+            customObserveActiveActivityPolls = { flowOf(emptyList()) },
         )
         val holder = SelectedGroupHolder().also { it.selectedGroupId.value = "group-1" }
         val vm = viewModel(repo = repo, holder = holder)

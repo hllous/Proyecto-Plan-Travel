@@ -129,7 +129,7 @@ class DestinationViewModel @Inject constructor(
         .map { list -> list.firstOrNull { it.userId == sessionProvider.userId } }
         .stateIn(viewModelScope, SharingStarted.WhileSubscribed(5000), null)
 
-    val activePoll: StateFlow<Poll?> = combine(
+    private val _activeDestPoll: StateFlow<Poll?> = combine(
         selectedGroupHolder.selectedGroupId,
         _reloadTrigger,
     ) { groupId, _ -> groupId }
@@ -140,6 +140,23 @@ class DestinationViewModel @Inject constructor(
                 .catch { emit(null) }
         }
         .stateIn(viewModelScope, SharingStarted.WhileSubscribed(5000), null)
+
+    private val _activeActivityPoll: StateFlow<Poll?> = combine(
+        selectedGroupHolder.selectedGroupId,
+        _reloadTrigger,
+    ) { groupId, _ -> groupId }
+        .flatMapLatest { groupId ->
+            if (groupId == null) flowOf(null)
+            else repository.observeActiveActivityPolls(groupId)
+                .map { it.firstOrNull() }
+                .catch { emit(null) }
+        }
+        .stateIn(viewModelScope, SharingStarted.WhileSubscribed(5000), null)
+
+    // Activity polls take priority: if one is open, it's the "active" poll for the UI.
+    val activePoll: StateFlow<Poll?> = combine(_activeDestPoll, _activeActivityPoll) { dest, act ->
+        act ?: dest
+    }.stateIn(viewModelScope, SharingStarted.WhileSubscribed(5000), null)
 
     fun selectRegion(region: String) {
         viewModelScope.launch {
@@ -523,12 +540,15 @@ class DestinationViewModel @Inject constructor(
     }
 
     private suspend fun resolveActivePoll(expectedType: PollType? = null): Poll? {
-        activePoll.value?.let { poll ->
-            if (expectedType == null || poll.type == expectedType) return poll
+        when (expectedType) {
+            PollType.ACTIVITY -> return _activeActivityPoll.value
+            PollType.DESTINATION -> _activeDestPoll.value?.let { return it }
+            null -> activePoll.value?.let { poll ->
+                if (expectedType == null || poll.type == expectedType) return poll
+            }
         }
         val groupId = selectedGroupHolder.selectedGroupId.value ?: return null
-        val resolvedPoll = repository.fetchActivePoll(groupId)
-            ?.takeIf { it.state == PollState.OPEN }
+        val resolvedPoll = repository.fetchActivePoll(groupId)?.takeIf { it.state == PollState.OPEN }
         if (resolvedPoll != null) reloadGroups()
         return resolvedPoll?.takeIf { expectedType == null || it.type == expectedType }
     }

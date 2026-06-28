@@ -96,6 +96,8 @@ fun PollScreen(
 ) {
     val poll by viewModel.poll.collectAsState()
     val allPolls by viewModel.allPolls.collectAsState()
+    val activeActivityPolls by viewModel.activeActivityPolls.collectAsState()
+    val closedActivityPolls by viewModel.closedActivityPolls.collectAsState()
     val candidatesState by viewModel.candidates.collectAsState()
     val currentMember by viewModel.currentMember.collectAsState()
     val errorMessage by viewModel.errorMessage.collectAsState()
@@ -105,7 +107,8 @@ fun PollScreen(
     var showCreationSheet by rememberSaveable { mutableStateOf(false) }
     var showWinnerDialog by rememberSaveable { mutableStateOf(false) }
     var showDeleteDialog by rememberSaveable { mutableStateOf(false) }
-    var winnerSnackbarShown by rememberSaveable { mutableStateOf(false) }
+    // Poll whose candidates the winner dialog will display (null = destination poll)
+    var selectedPollForWinner by remember { mutableStateOf<Poll?>(null) }
 
     LaunchedEffect(errorMessage) {
         if (errorMessage != null) {
@@ -114,18 +117,13 @@ fun PollScreen(
         }
     }
 
-    val activePoll = poll
-    LaunchedEffect(activePoll?.winnerPlaceId) {
-        if (activePoll?.winnerPlaceId != null && !winnerSnackbarShown) {
-            winnerSnackbarShown = true
-            val msg = if (activePoll.type == PollType.DESTINATION) "¡Destino establecido!" else "¡Actividad seleccionada!"
-            snackbarHostState.showSnackbar(msg)
-        }
+    LaunchedEffect(showWinnerDialog, selectedPollForWinner) {
+        viewModel.setScreenPoll(if (showWinnerDialog) selectedPollForWinner else null)
     }
 
     val isAdmin = currentMember?.role == MemberRole.ADMIN
     val closedPolls = allPolls.filter { it.state == PollState.CLOSED }
-    val hasActivePoll = poll?.state == PollState.OPEN
+    val hasContent = poll != null || activeActivityPolls.isNotEmpty() || closedPolls.isNotEmpty()
 
     Scaffold(
         contentWindowInsets = WindowInsets(0),
@@ -151,10 +149,10 @@ fun PollScreen(
                     if (isAdmin && poll != null) {
                         if (poll?.state == PollState.OPEN) {
                             TextButton(
-                                onClick = { viewModel.closePoll() },
+                                onClick = { viewModel.setScreenPoll(null); viewModel.closePoll() },
                                 enabled = !isSubmitting,
                             ) {
-                                Text("Cerrar")
+                                Text("Finalizar")
                             }
                         }
                         TextButton(
@@ -174,36 +172,59 @@ fun PollScreen(
                 .padding(innerPadding),
         ) {
             when {
-                allPolls.isEmpty() && candidatesState is UiState.Loading -> {
+                !hasContent && candidatesState is UiState.Loading -> {
                     CircularProgressIndicator(modifier = Modifier.align(Alignment.Center))
                 }
 
-                allPolls.isEmpty() -> {
+                !hasContent -> {
                     PollEmptyState(
                         modifier = Modifier.align(Alignment.Center),
                         onCreatePoll = { showCreationSheet = true },
                     )
                 }
 
-                !hasActivePoll -> {
+                poll == null -> {
                     NoActivePollContent(
                         closedPolls = closedPolls,
+                        activeActivityPolls = activeActivityPolls,
                         isAdmin = isAdmin,
                         modifier = Modifier.fillMaxSize(),
                         onCreatePoll = { showCreationSheet = true },
+                        onCloseActivity = { ap ->
+                            viewModel.setScreenPoll(ap)
+                            viewModel.closePoll()
+                        },
+                        onSelectActivityWinner = { ap ->
+                            selectedPollForWinner = ap
+                            showWinnerDialog = true
+                        },
                     )
                 }
 
                 else -> {
-                    val currentPoll = poll!!
                     PollContent(
-                        poll = currentPoll,
+                        poll = poll!!,
                         candidatesState = candidatesState,
+                        activeActivityPolls = activeActivityPolls,
                         isAdmin = isAdmin,
                         isSubmitting = isSubmitting,
                         closedPolls = closedPolls,
-                        onToggleVote = { candidateId -> viewModel.toggleVote(candidateId) },
-                        onSelectWinner = { showWinnerDialog = true },
+                        onToggleVote = { candidateId ->
+                            viewModel.setScreenPoll(null)
+                            viewModel.toggleVote(candidateId)
+                        },
+                        onSelectWinner = {
+                            selectedPollForWinner = null
+                            showWinnerDialog = true
+                        },
+                        onCloseActivity = { ap ->
+                            viewModel.setScreenPoll(ap)
+                            viewModel.closePoll()
+                        },
+                        onSelectActivityWinner = { ap ->
+                            selectedPollForWinner = ap
+                            showWinnerDialog = true
+                        },
                     )
                 }
             }
@@ -221,13 +242,13 @@ fun PollScreen(
     }
 
     if (showWinnerDialog) {
-        val candidates = (candidatesState as? UiState.Success)?.data ?: emptyList()
         WinnerSelectionDialog(
-            candidates = candidates,
-            onDismiss = { showWinnerDialog = false },
+            candidates = (candidatesState as? UiState.Success)?.data ?: emptyList(),
+            onDismiss = { showWinnerDialog = false; selectedPollForWinner = null },
             onSelectWinner = { candidateId ->
                 viewModel.selectWinner(candidateId)
                 showWinnerDialog = false
+                selectedPollForWinner = null
             },
         )
     }
@@ -284,11 +305,14 @@ private fun PollEmptyState(
 private fun PollContent(
     poll: Poll,
     candidatesState: UiState<List<PollCandidateUiModel>>,
+    activeActivityPolls: List<Poll>,
     isAdmin: Boolean,
     isSubmitting: Boolean,
     closedPolls: List<Poll>,
     onToggleVote: (String) -> Unit,
     onSelectWinner: () -> Unit,
+    onCloseActivity: (Poll) -> Unit,
+    onSelectActivityWinner: (Poll) -> Unit,
 ) {
     val isClosed = poll.state == PollState.CLOSED
     var historialExpanded by rememberSaveable { mutableStateOf(false) }
@@ -387,6 +411,27 @@ private fun PollContent(
             }
         }
 
+        if (activeActivityPolls.isNotEmpty()) {
+            item {
+                Text(
+                    text = "Encuestas de actividad",
+                    style = MaterialTheme.typography.titleMedium,
+                    fontFamily = FrauncesFamily,
+                    fontWeight = FontWeight.SemiBold,
+                    modifier = Modifier.padding(horizontal = 16.dp, vertical = 12.dp),
+                )
+            }
+            items(activeActivityPolls, key = { "act-open-${it.id}" }) { activityPoll ->
+                ActivityPollCard(
+                    poll = activityPoll,
+                    isAdmin = isAdmin,
+                    isSubmitting = isSubmitting,
+                    onClose = { onCloseActivity(activityPoll) },
+                    onSelectWinner = { onSelectActivityWinner(activityPoll) },
+                )
+            }
+        }
+
         if (closedPolls.isNotEmpty()) {
             item {
                 TextButton(
@@ -413,14 +458,50 @@ private fun PollContent(
 @Composable
 private fun NoActivePollContent(
     closedPolls: List<Poll>,
+    activeActivityPolls: List<Poll>,
     isAdmin: Boolean,
     modifier: Modifier = Modifier,
     onCreatePoll: () -> Unit,
+    onCloseActivity: (Poll) -> Unit,
+    onSelectActivityWinner: (Poll) -> Unit,
 ) {
     LazyColumn(
         modifier = modifier,
         contentPadding = PaddingValues(bottom = 24.dp),
     ) {
+        if (activeActivityPolls.isNotEmpty()) {
+            item {
+                Text(
+                    text = "Encuestas de actividad",
+                    style = MaterialTheme.typography.titleMedium,
+                    fontFamily = FrauncesFamily,
+                    fontWeight = FontWeight.SemiBold,
+                    modifier = Modifier.padding(horizontal = 16.dp, vertical = 12.dp),
+                )
+            }
+            items(activeActivityPolls, key = { "act-${it.id}" }) { activityPoll ->
+                ActivityPollCard(
+                    poll = activityPoll,
+                    isAdmin = isAdmin,
+                    isSubmitting = false,
+                    onClose = { onCloseActivity(activityPoll) },
+                    onSelectWinner = { onSelectActivityWinner(activityPoll) },
+                )
+            }
+            item { Spacer(modifier = Modifier.height(8.dp)) }
+        }
+        if (isAdmin) {
+            item {
+                Button(
+                    onClick = onCreatePoll,
+                    modifier = Modifier
+                        .fillMaxWidth()
+                        .padding(horizontal = 16.dp, vertical = 8.dp),
+                ) {
+                    Text("Crear nueva encuesta")
+                }
+            }
+        }
         if (closedPolls.isNotEmpty()) {
             item {
                 Text(
@@ -433,19 +514,6 @@ private fun NoActivePollContent(
             }
             items(closedPolls, key = { it.id }) { poll ->
                 PollHistoryRow(poll = poll)
-            }
-            item { Spacer(modifier = Modifier.height(16.dp)) }
-        }
-        if (isAdmin) {
-            item {
-                Button(
-                    onClick = onCreatePoll,
-                    modifier = Modifier
-                        .fillMaxWidth()
-                        .padding(horizontal = 16.dp, vertical = 8.dp),
-                ) {
-                    Text("Crear nueva encuesta")
-                }
             }
         }
     }
@@ -485,6 +553,61 @@ private fun PollHistoryRow(poll: Poll) {
                     labelColor = MaterialTheme.colorScheme.onPrimaryContainer,
                 ),
             )
+        }
+    }
+}
+
+@Composable
+private fun ActivityPollCard(
+    poll: Poll,
+    isAdmin: Boolean,
+    isSubmitting: Boolean,
+    onClose: () -> Unit,
+    onSelectWinner: () -> Unit,
+) {
+    val isClosed = poll.state == PollState.CLOSED
+    OutlinedCard(
+        modifier = Modifier
+            .fillMaxWidth()
+            .padding(horizontal = 16.dp, vertical = 4.dp),
+        shape = RoundedCornerShape(12.dp),
+    ) {
+        Row(
+            modifier = Modifier
+                .fillMaxWidth()
+                .padding(horizontal = 12.dp, vertical = 10.dp),
+            verticalAlignment = Alignment.CenterVertically,
+            horizontalArrangement = Arrangement.spacedBy(8.dp),
+        ) {
+            SuggestionChip(
+                onClick = {},
+                label = { Text(if (isClosed) "Cerrada" else "Abierta", style = MaterialTheme.typography.labelSmall) },
+                colors = if (isClosed)
+                    SuggestionChipDefaults.suggestionChipColors(containerColor = MaterialTheme.colorScheme.surfaceVariant)
+                else
+                    SuggestionChipDefaults.suggestionChipColors(
+                        containerColor = MaterialTheme.colorScheme.secondaryContainer,
+                        labelColor = MaterialTheme.colorScheme.onSecondaryContainer,
+                    ),
+            )
+            Text(
+                text = poll.name.ifBlank { "Encuesta de actividad" },
+                style = MaterialTheme.typography.titleSmall,
+                fontFamily = FrauncesFamily,
+                modifier = Modifier.weight(1f),
+                maxLines = 1,
+                overflow = TextOverflow.Ellipsis,
+            )
+            if (isAdmin && !isClosed) {
+                TextButton(onClick = onClose, enabled = !isSubmitting) {
+                    Text("Finalizar")
+                }
+            }
+            if (isAdmin && isClosed && poll.winnerPlaceId == null) {
+                TextButton(onClick = onSelectWinner, enabled = !isSubmitting) {
+                    Text("Ganador")
+                }
+            }
         }
     }
 }
