@@ -51,7 +51,6 @@ import androidx.compose.material3.CircularProgressIndicator
 import androidx.compose.material3.DatePicker
 import androidx.compose.material3.DatePickerDialog
 import androidx.compose.material3.ExperimentalMaterial3Api
-import androidx.compose.material3.FilledTonalButton
 import androidx.compose.material3.Icon
 import androidx.compose.material3.IconButton
 import androidx.compose.material3.IconToggleButton
@@ -416,7 +415,7 @@ private fun PollListContent(
                     textAlign = TextAlign.Center,
                 )
                 if (isAdmin) {
-                    Button(onClick = onCreatePoll) { Text("Crear encuesta") }
+                    Button(onClick = onCreatePoll) { Text("Encuestas") }
                 }
             }
         }
@@ -485,7 +484,7 @@ private fun PollListCard(
     onDelete: () -> Unit,
 ) {
     val context = LocalContext.current
-    Card(
+    OutlinedCard(
         onClick = onViewDetails,
         modifier = Modifier
             .fillMaxWidth()
@@ -637,7 +636,7 @@ private fun PollDetailContent(
         if (isClosed && poll.winnerPlaceId != null && isAdmin && onSetAsDestination != null) {
             item {
                 val buttonLabel = if (poll.type == PollType.DESTINATION) "Establecer como destino" else "Agregar al itinerario"
-                FilledTonalButton(
+                Button(
                     onClick = onSetAsDestination,
                     enabled = !isSubmitting,
                     modifier = Modifier
@@ -1156,7 +1155,7 @@ private fun PollCreationBottomSheet(
 
             Row(modifier = Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.spacedBy(12.dp)) {
                 OutlinedButton(onClick = onDismiss, modifier = Modifier.weight(1f)) { Text("Cancelar") }
-                FilledTonalButton(onClick = { onCreate(selectedType, pollName, expiresAt) }, modifier = Modifier.weight(1f)) { Text("Crear") }
+                Button(onClick = { onCreate(selectedType, pollName, expiresAt) }, modifier = Modifier.weight(1f)) { Text("Crear") }
             }
         }
     }

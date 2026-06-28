@@ -56,7 +56,7 @@ import androidx.compose.material3.AlertDialog
 import androidx.compose.material3.Button
 import androidx.compose.material3.DropdownMenu
 import androidx.compose.material3.DropdownMenuItem
-import androidx.compose.material3.ElevatedCard
+import androidx.compose.material3.OutlinedCard
 import androidx.compose.material3.ExperimentalMaterial3Api
 import androidx.compose.material3.HorizontalDivider
 import androidx.compose.material3.Icon
@@ -961,7 +961,7 @@ private fun ExpenseRecentMovementCard(
         else -> "Al día"
     }
 
-    ElevatedCard(
+    OutlinedCard(
         modifier = Modifier
             .fillMaxWidth()
             .combinedClickable(
@@ -1114,7 +1114,7 @@ private fun ExpenseGroupCard(
     onClick: () -> Unit,
     onDelete: () -> Unit,
 ) {
-    ElevatedCard(
+    OutlinedCard(
         onClick = onClick,
         modifier = Modifier.fillMaxWidth(),
         shape = RoundedCornerShape(18.dp),
@@ -1476,7 +1476,7 @@ private fun ExpenseItemCard(
     val unitPrice = if (item.quantity > 0) item.totalPriceCents / item.quantity else item.totalPriceCents
     val assignedWithQuantity = itemAssignments.filter { it.quantity > 0 }
 
-    ElevatedCard(
+    OutlinedCard(
         modifier = Modifier.fillMaxWidth(),
         shape = RoundedCornerShape(18.dp),
     ) {
@@ -1839,7 +1839,7 @@ private fun AddExpenseItemPanel(
     onDismiss: () -> Unit,
     onConfirm: () -> Unit,
 ) {
-    ElevatedCard(modifier = Modifier.fillMaxWidth()) {
+    OutlinedCard(modifier = Modifier.fillMaxWidth()) {
         Column(
             modifier = Modifier.padding(16.dp),
             verticalArrangement = Arrangement.spacedBy(10.dp),
