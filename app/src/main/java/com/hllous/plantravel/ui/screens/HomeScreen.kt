@@ -34,6 +34,7 @@ import androidx.compose.material.icons.filled.QrCode
 import androidx.compose.material.icons.filled.Star
 import androidx.compose.material3.CircularProgressIndicator
 import androidx.compose.material3.ElevatedCard
+import androidx.compose.material3.HorizontalDivider
 import androidx.compose.material3.Icon
 import androidx.compose.material3.IconButton
 import androidx.compose.material3.MaterialTheme
@@ -67,7 +68,11 @@ import coil3.compose.AsyncImage
 import coil3.request.ImageRequest
 import coil3.request.allowHardware
 import com.hllous.plantravel.domain.model.GroupMember
+import com.hllous.plantravel.domain.model.Poll
+import com.hllous.plantravel.domain.model.PollCandidate
 import com.hllous.plantravel.domain.model.PollState
+import com.hllous.plantravel.domain.model.PollType
+import com.hllous.plantravel.domain.model.StoredDestination
 import com.hllous.plantravel.domain.model.TravelGroup
 import com.hllous.plantravel.presentation.UiState
 import com.hllous.plantravel.presentation.destination.DestinationViewModel
@@ -184,7 +189,11 @@ fun HomeScreen(
 
                 // Group block or no-group hint
                 if (currentGroup != null) {
-                    GroupHeaderBlock(group = currentGroup!!, members = members)
+                    GroupHeaderBlock(
+                        group = currentGroup!!,
+                        members = members,
+                        onTap = { navController.navigateSingleTopTo("groups") },
+                    )
                 } else {
                     NoGroupHeaderBlock()
                 }
@@ -216,10 +225,11 @@ fun HomeScreen(
 // ── Header blocks ───────────────────────────────────────────────────────────────
 
 @Composable
-private fun GroupHeaderBlock(group: TravelGroup, members: List<GroupMember>) {
+private fun GroupHeaderBlock(group: TravelGroup, members: List<GroupMember>, onTap: () -> Unit) {
     Column(
         Modifier
             .fillMaxWidth()
+            .clickable(onClick = onTap)
             .padding(top = 10.dp, bottom = 4.dp),
         horizontalAlignment = Alignment.CenterHorizontally,
         verticalArrangement = Arrangement.spacedBy(6.dp)
@@ -320,11 +330,23 @@ private fun HomeGroupContent(
 ) {
     val poll by pollViewModel.poll.collectAsState()
     val candidates by pollViewModel.candidates.collectAsState()
+    val latestDestPoll by pollViewModel.latestDestinationPoll.collectAsState()
+    val latestActivityPoll by pollViewModel.latestActivityPoll.collectAsState()
+    val destPollCandidates by pollViewModel.destPollCandidates.collectAsState()
+    val activityPollCandidates by pollViewModel.activityPollCandidates.collectAsState()
     val homeFeed by destinationViewModel.homeFeed.collectAsState()
     val tripDestination by destinationViewModel.tripDestination.collectAsState()
+    val recommendedDestinations by destinationViewModel.recommendedDestinations.collectAsState()
+    val destinationPhotoUrls by destinationViewModel.destinationPhotoUrls.collectAsState()
+
+    val tripDestSet = tripDestination as? TripDestinationState.Set
 
     LaunchedEffect(tripDestination) {
-        if (tripDestination is TripDestinationState.Set) destinationViewModel.loadHomeFeed()
+        if (tripDestination is TripDestinationState.Set) {
+            destinationViewModel.loadHomeFeed()
+        } else {
+            destinationViewModel.loadRecommendedDestinations()
+        }
     }
 
     Column(
@@ -335,7 +357,7 @@ private fun HomeGroupContent(
             .navigationBarsPadding(),
         verticalArrangement = Arrangement.spacedBy(20.dp)
     ) {
-        // ── Poll summary card ──────────────────────────────────────────────────
+        // ① Poll summary card (existing behaviour, kept as-is)
         if (poll != null && poll!!.state == PollState.OPEN) {
             val winningCandidate = (candidates as? UiState.Success)?.data
                 ?.maxByOrNull { it.voteCount }?.candidate
@@ -345,7 +367,7 @@ private fun HomeGroupContent(
                 "Sin votos aún"
             }
             ElevatedCard(
-                onClick = { navController.navigate("poll_detail") },
+                onClick = { navController.navigate("poll_detail?pollId=${poll!!.id}") },
                 modifier = Modifier.fillMaxWidth(),
                 shape = RoundedCornerShape(16.dp)
             ) {
@@ -396,7 +418,24 @@ private fun HomeGroupContent(
             }
         }
 
-        // ── Quick actions ──────────────────────────────────────────────────────
+        // ② ¿A dónde vamos?
+        WhereAreWeGoingCard(
+            tripDestination = tripDestination,
+            latestDestPoll = latestDestPoll,
+            destPollCandidates = destPollCandidates,
+            onNavigateToPoll = { pollId -> navController.navigate("poll_detail?pollId=$pollId") },
+            onCreatePoll = { navController.navigate("poll_detail") },
+        )
+
+        // ③ ¿Qué hacemos?
+        WhatAreWeDoingCard(
+            latestActivityPoll = latestActivityPoll,
+            activityPollCandidates = activityPollCandidates,
+            onNavigateToPoll = { pollId -> navController.navigate("poll_detail?pollId=$pollId") },
+            onCreatePoll = { navController.navigate("poll_detail") },
+        )
+
+        // ④ Quick-access buttons (contextual)
         Column(verticalArrangement = Arrangement.spacedBy(10.dp)) {
             HomeSectionLabel("Acciones rápidas")
             Row(
@@ -411,30 +450,50 @@ private fun HomeGroupContent(
                     modifier = Modifier.weight(1f),
                     onClick = { navController.navigateSingleTopTo("gastos") }
                 )
-                HomeActionButton(
-                    emoji = "📍",
-                    label = "Ver\ndestinos",
-                    containerColor = MaterialTheme.colorScheme.secondaryContainer,
-                    contentColor = MaterialTheme.colorScheme.onSecondaryContainer,
-                    modifier = Modifier.weight(1f),
-                    onClick = { navController.navigateSingleTopTo("destinations") }
-                )
-                HomeActionButton(
-                    emoji = "📨",
-                    label = "Invitar\npersona",
-                    containerColor = MaterialTheme.colorScheme.primaryContainer,
-                    contentColor = MaterialTheme.colorScheme.onPrimaryContainer,
-                    modifier = Modifier.weight(1f),
-                    onClick = { navController.navigateSingleTopTo("groups") }
-                )
+                if (tripDestSet == null) {
+                    HomeActionButton(
+                        emoji = "📍",
+                        label = "Ver\ndestinos",
+                        containerColor = MaterialTheme.colorScheme.secondaryContainer,
+                        contentColor = MaterialTheme.colorScheme.onSecondaryContainer,
+                        modifier = Modifier.weight(1f),
+                        onClick = { navController.navigateSingleTopTo("destinations") }
+                    )
+                    HomeActionButton(
+                        emoji = "📨",
+                        label = "Invitar\npersona",
+                        containerColor = MaterialTheme.colorScheme.primaryContainer,
+                        contentColor = MaterialTheme.colorScheme.onPrimaryContainer,
+                        modifier = Modifier.weight(1f),
+                        onClick = { navController.navigateSingleTopTo("groups") }
+                    )
+                } else {
+                    HomeActionButton(
+                        emoji = "🗺️",
+                        label = "Actividades",
+                        containerColor = MaterialTheme.colorScheme.secondaryContainer,
+                        contentColor = MaterialTheme.colorScheme.onSecondaryContainer,
+                        modifier = Modifier.weight(1f),
+                        onClick = { navController.navigateSingleTopTo("destinations") }
+                    )
+                    HomeActionButton(
+                        emoji = "📅",
+                        label = "Itinerario",
+                        containerColor = MaterialTheme.colorScheme.primaryContainer,
+                        contentColor = MaterialTheme.colorScheme.onPrimaryContainer,
+                        modifier = Modifier.weight(1f),
+                        onClick = { navController.navigate("itinerary") }
+                    )
+                }
             }
         }
 
-        // ── Recommendations section ────────────────────────────────────────────
-        when (homeFeed) {
-            is UiState.Loading -> if (tripDestination is TripDestinationState.Set) {
-                Column(verticalArrangement = Arrangement.spacedBy(10.dp)) {
-                    HomeSectionLabel("Para tu viaje")
+        // ⑤ Lateral scroll (contextual)
+        if (tripDestSet != null) {
+            // Trip destination set → show home feed
+            when (homeFeed) {
+                is UiState.Loading -> Column(verticalArrangement = Arrangement.spacedBy(10.dp)) {
+                    HomeSectionLabel("Qué hacer en ${tripDestSet.name}")
                     Box(
                         Modifier
                             .fillMaxWidth()
@@ -444,31 +503,410 @@ private fun HomeGroupContent(
                         CircularProgressIndicator(modifier = Modifier.size(28.dp))
                     }
                 }
-            }
-            is UiState.Success -> {
-                val places = (homeFeed as UiState.Success<List<HomeFeedItem>>).data
-                if (places.isNotEmpty()) {
-                    Column(verticalArrangement = Arrangement.spacedBy(10.dp)) {
-                        HomeSectionLabel("Para tu viaje")
-                        LazyRow(
-                            horizontalArrangement = Arrangement.spacedBy(10.dp),
-                            contentPadding = PaddingValues(horizontal = 1.dp)
-                        ) {
-                            items(places) { item ->
-                                HomeRecommendationCard(
-                                    item = item,
-                                    onClick = {
-                                        destinationViewModel.requestOpenPoi(item.place, item.category)
-                                        navController.navigateSingleTopTo("destinations")
-                                    }
-                                )
+                is UiState.Success -> {
+                    val places = (homeFeed as UiState.Success<List<HomeFeedItem>>).data
+                    if (places.isNotEmpty()) {
+                        Column(verticalArrangement = Arrangement.spacedBy(10.dp)) {
+                            HomeSectionLabel("Qué hacer en ${tripDestSet.name}")
+                            LazyRow(
+                                horizontalArrangement = Arrangement.spacedBy(10.dp),
+                                contentPadding = PaddingValues(horizontal = 1.dp)
+                            ) {
+                                items(places) { item ->
+                                    HomeRecommendationCard(
+                                        item = item,
+                                        onClick = {
+                                            destinationViewModel.requestOpenPoi(item.place, item.category)
+                                            navController.navigateSingleTopTo("destinations")
+                                        }
+                                    )
+                                }
                             }
                         }
                     }
                 }
+                else -> Unit
             }
-            else -> Unit
+        } else {
+            // No trip destination → show curated recommendations
+            when (recommendedDestinations) {
+                is UiState.Loading -> Column(verticalArrangement = Arrangement.spacedBy(10.dp)) {
+                    HomeSectionLabel("Destinos recomendados")
+                    Box(
+                        Modifier
+                            .fillMaxWidth()
+                            .height(160.dp),
+                        contentAlignment = Alignment.Center
+                    ) {
+                        CircularProgressIndicator(modifier = Modifier.size(28.dp))
+                    }
+                }
+                is UiState.Success -> {
+                    val destinations = (recommendedDestinations as UiState.Success<List<StoredDestination>>).data
+                    if (destinations.isNotEmpty()) {
+                        Column(verticalArrangement = Arrangement.spacedBy(10.dp)) {
+                            HomeSectionLabel("Destinos recomendados")
+                            LazyRow(
+                                horizontalArrangement = Arrangement.spacedBy(10.dp),
+                                contentPadding = PaddingValues(horizontal = 1.dp)
+                            ) {
+                                items(destinations) { dest ->
+                                    val photoKey = if (dest.id.isNotBlank()) dest.id else "${dest.source}:${dest.sourceId}"
+                                    HomeStoredDestinationCard(
+                                        destination = dest,
+                                        photoUrl = destinationPhotoUrls[photoKey] ?: dest.displayPhotoUrl,
+                                        onClick = { navController.navigateSingleTopTo("destinations") }
+                                    )
+                                }
+                            }
+                        }
+                    }
+                }
+                else -> Unit
+            }
         }
+    }
+}
+
+// ── Poll summary cards (② and ③) ───────────────────────────────────────────────
+
+@Composable
+private fun WhereAreWeGoingCard(
+    tripDestination: TripDestinationState,
+    latestDestPoll: Poll?,
+    destPollCandidates: List<PollCandidate>,
+    onNavigateToPoll: (String) -> Unit,
+    onCreatePoll: () -> Unit,
+) {
+    val tripDestSet = tripDestination as? TripDestinationState.Set
+    val leader = destPollCandidates.maxByOrNull { it.voteCount }
+    val isTied = leader != null && leader.voteCount > 0 &&
+        destPollCandidates.count { it.voteCount == leader.voteCount } >= 2
+    val secondTied = if (isTied)
+        destPollCandidates.firstOrNull { it !== leader && it.voteCount == leader!!.voteCount }
+    else null
+    val winnerCandidate = latestDestPoll?.winnerPlaceId?.let { wId ->
+        destPollCandidates.firstOrNull { it.placeId == wId }
+    }
+    val isViaPool = tripDestSet != null &&
+        latestDestPoll?.state == PollState.CLOSED &&
+        latestDestPoll.winnerPlaceId != null
+
+    val pollId = latestDestPoll?.id
+    val isCardClickable = when {
+        tripDestSet != null && !isViaPool -> false
+        latestDestPoll == null -> false
+        else -> true
+    }
+
+    val body: @Composable () -> Unit = {
+        WhereAreWeGoingCardBody(
+            tripDestSet = tripDestSet,
+            latestDestPoll = latestDestPoll,
+            leader = leader,
+            isTied = isTied,
+            secondTiedName = secondTied?.name,
+            winnerCandidate = winnerCandidate,
+            isViaPool = isViaPool,
+            isCardClickable = isCardClickable,
+            onCreatePoll = onCreatePoll,
+        )
+    }
+
+    if (isCardClickable && pollId != null) {
+        ElevatedCard(
+            onClick = { onNavigateToPoll(pollId) },
+            modifier = Modifier.fillMaxWidth(),
+            shape = RoundedCornerShape(16.dp)
+        ) { body() }
+    } else {
+        ElevatedCard(
+            modifier = Modifier.fillMaxWidth(),
+            shape = RoundedCornerShape(16.dp)
+        ) { body() }
+    }
+}
+
+@Composable
+private fun WhereAreWeGoingCardBody(
+    tripDestSet: TripDestinationState.Set?,
+    latestDestPoll: Poll?,
+    leader: PollCandidate?,
+    isTied: Boolean,
+    secondTiedName: String?,
+    winnerCandidate: PollCandidate?,
+    isViaPool: Boolean,
+    isCardClickable: Boolean,
+    onCreatePoll: () -> Unit,
+) {
+    Column {
+        PollCardHeader(emoji = "🗺️", label = "¿A dónde vamos?", showArrow = isCardClickable)
+        HorizontalDivider(color = MaterialTheme.colorScheme.outlineVariant)
+        Column(
+            Modifier.padding(14.dp),
+            verticalArrangement = Arrangement.spacedBy(6.dp)
+        ) {
+            when {
+                tripDestSet != null && isViaPool -> {
+                    DestinationSetRow(name = tripDestSet.name, chipLabel = "Ver encuesta", viaPool = true)
+                }
+                tripDestSet != null -> {
+                    DestinationSetRow(name = tripDestSet.name, chipLabel = "Destino del viaje", viaPool = false)
+                }
+                latestDestPoll == null -> {
+                    NoPollRow(onCreatePoll = onCreatePoll)
+                }
+                latestDestPoll.state == PollState.OPEN -> {
+                    OpenPollRow(leader = leader, pollType = PollType.DESTINATION)
+                }
+                winnerCandidate != null -> {
+                    WinnerRow(winnerName = winnerCandidate.name)
+                }
+                leader != null -> {
+                    TiedRow(leaderName = leader.name, secondTiedName = secondTiedName)
+                }
+                else -> {
+                    Text(
+                        text = "Sin resultados",
+                        style = MaterialTheme.typography.bodySmall,
+                        color = MaterialTheme.colorScheme.onSurfaceVariant
+                    )
+                }
+            }
+        }
+    }
+}
+
+@Composable
+private fun WhatAreWeDoingCard(
+    latestActivityPoll: Poll?,
+    activityPollCandidates: List<PollCandidate>,
+    onNavigateToPoll: (String) -> Unit,
+    onCreatePoll: () -> Unit,
+) {
+    val leader = activityPollCandidates.maxByOrNull { it.voteCount }
+    val isTied = leader != null && leader.voteCount > 0 &&
+        activityPollCandidates.count { it.voteCount == leader.voteCount } >= 2
+    val secondTied = if (isTied)
+        activityPollCandidates.firstOrNull { it !== leader && it.voteCount == leader!!.voteCount }
+    else null
+    val winnerCandidate = latestActivityPoll?.winnerPlaceId?.let { wId ->
+        activityPollCandidates.firstOrNull { it.placeId == wId }
+    }
+
+    val pollId = latestActivityPoll?.id
+    val isCardClickable = pollId != null
+
+    val body: @Composable () -> Unit = {
+        WhatAreWeDoingCardBody(
+            latestActivityPoll = latestActivityPoll,
+            leader = leader,
+            isTied = isTied,
+            secondTiedName = secondTied?.name,
+            winnerCandidate = winnerCandidate,
+            isCardClickable = isCardClickable,
+            onCreatePoll = onCreatePoll,
+        )
+    }
+
+    if (isCardClickable && pollId != null) {
+        ElevatedCard(
+            onClick = { onNavigateToPoll(pollId) },
+            modifier = Modifier.fillMaxWidth(),
+            shape = RoundedCornerShape(16.dp)
+        ) { body() }
+    } else {
+        ElevatedCard(
+            modifier = Modifier.fillMaxWidth(),
+            shape = RoundedCornerShape(16.dp)
+        ) { body() }
+    }
+}
+
+@Composable
+private fun WhatAreWeDoingCardBody(
+    latestActivityPoll: Poll?,
+    leader: PollCandidate?,
+    isTied: Boolean,
+    secondTiedName: String?,
+    winnerCandidate: PollCandidate?,
+    isCardClickable: Boolean,
+    onCreatePoll: () -> Unit,
+) {
+    Column {
+        PollCardHeader(emoji = "🎯", label = "¿Qué hacemos?", showArrow = isCardClickable)
+        HorizontalDivider(color = MaterialTheme.colorScheme.outlineVariant)
+        Column(
+            Modifier.padding(14.dp),
+            verticalArrangement = Arrangement.spacedBy(6.dp)
+        ) {
+            when {
+                latestActivityPoll == null -> {
+                    NoPollRow(onCreatePoll = onCreatePoll)
+                }
+                latestActivityPoll.state == PollState.OPEN -> {
+                    OpenPollRow(leader = leader, pollType = PollType.ACTIVITY)
+                }
+                winnerCandidate != null -> {
+                    WinnerRow(winnerName = winnerCandidate.name)
+                }
+                leader != null -> {
+                    TiedRow(leaderName = leader.name, secondTiedName = secondTiedName)
+                }
+                else -> {
+                    Text(
+                        text = "Sin resultados",
+                        style = MaterialTheme.typography.bodySmall,
+                        color = MaterialTheme.colorScheme.onSurfaceVariant
+                    )
+                }
+            }
+        }
+    }
+}
+
+// ── Poll card sub-composables ────────────────────────────────────────────────────
+
+@Composable
+private fun PollCardHeader(emoji: String, label: String, showArrow: Boolean) {
+    Row(
+        Modifier
+            .fillMaxWidth()
+            .padding(horizontal = 14.dp, vertical = 10.dp),
+        verticalAlignment = Alignment.CenterVertically,
+        horizontalArrangement = Arrangement.spacedBy(6.dp)
+    ) {
+        Text(emoji, fontSize = 14.sp)
+        Text(
+            text = label.uppercase(),
+            style = MaterialTheme.typography.labelSmall,
+            fontWeight = FontWeight.ExtraBold,
+            color = MaterialTheme.colorScheme.onSurfaceVariant,
+            letterSpacing = 1.sp,
+            fontSize = 10.sp,
+            modifier = Modifier.weight(1f)
+        )
+        if (showArrow) {
+            Icon(
+                Icons.AutoMirrored.Filled.KeyboardArrowRight,
+                contentDescription = null,
+                tint = MaterialTheme.colorScheme.outline,
+                modifier = Modifier.size(16.dp)
+            )
+        }
+    }
+}
+
+@Composable
+private fun NoPollRow(onCreatePoll: () -> Unit) {
+    Text(
+        text = "Sin encuesta activa",
+        style = MaterialTheme.typography.bodySmall,
+        color = MaterialTheme.colorScheme.onSurfaceVariant
+    )
+    Surface(
+        onClick = onCreatePoll,
+        shape = RoundedCornerShape(8.dp),
+        color = MaterialTheme.colorScheme.primaryContainer
+    ) {
+        Text(
+            text = "Crear encuesta",
+            modifier = Modifier.padding(horizontal = 14.dp, vertical = 8.dp),
+            style = MaterialTheme.typography.labelMedium,
+            fontWeight = FontWeight.Bold,
+            color = MaterialTheme.colorScheme.onPrimaryContainer
+        )
+    }
+}
+
+@Composable
+private fun OpenPollRow(leader: PollCandidate?, pollType: PollType) {
+    if (leader == null || leader.voteCount == 0) {
+        Text(
+            text = "Sin candidatos aún",
+            style = MaterialTheme.typography.bodySmall,
+            color = MaterialTheme.colorScheme.onSurfaceVariant
+        )
+    } else {
+        Text(
+            text = leader.name,
+            style = MaterialTheme.typography.titleSmall,
+            fontFamily = FrauncesFamily,
+            fontWeight = FontWeight.Bold,
+            color = MaterialTheme.colorScheme.onSurface,
+            maxLines = 1,
+            overflow = TextOverflow.Ellipsis
+        )
+        Text(
+            text = "${leader.voteCount} voto${if (leader.voteCount != 1) "s" else ""}",
+            style = MaterialTheme.typography.bodySmall,
+            color = MaterialTheme.colorScheme.onSurfaceVariant
+        )
+    }
+}
+
+@Composable
+private fun WinnerRow(winnerName: String) {
+    Text(
+        text = "🏆 $winnerName",
+        style = MaterialTheme.typography.titleSmall,
+        fontFamily = FrauncesFamily,
+        fontWeight = FontWeight.Bold,
+        color = MaterialTheme.colorScheme.onSurface,
+        maxLines = 1,
+        overflow = TextOverflow.Ellipsis
+    )
+}
+
+@Composable
+private fun TiedRow(leaderName: String, secondTiedName: String?) {
+    Text(
+        text = leaderName,
+        style = MaterialTheme.typography.titleSmall,
+        fontFamily = FrauncesFamily,
+        fontWeight = FontWeight.Bold,
+        color = MaterialTheme.colorScheme.onSurface,
+        maxLines = 1,
+        overflow = TextOverflow.Ellipsis
+    )
+    Surface(
+        shape = RoundedCornerShape(100.dp),
+        color = MaterialTheme.colorScheme.tertiaryContainer
+    ) {
+        Text(
+            text = "⚖️ Empate${secondTiedName?.let { " con $it" } ?: ""}",
+            modifier = Modifier.padding(horizontal = 8.dp, vertical = 2.dp),
+            style = MaterialTheme.typography.labelSmall,
+            color = MaterialTheme.colorScheme.onTertiaryContainer,
+            fontSize = 10.sp
+        )
+    }
+}
+
+@Composable
+private fun DestinationSetRow(name: String, chipLabel: String, viaPool: Boolean) {
+    Text(
+        text = "📍 $name",
+        style = MaterialTheme.typography.titleSmall,
+        fontFamily = FrauncesFamily,
+        fontWeight = FontWeight.Bold,
+        color = MaterialTheme.colorScheme.onSurface,
+        maxLines = 1,
+        overflow = TextOverflow.Ellipsis
+    )
+    Surface(
+        shape = RoundedCornerShape(100.dp),
+        color = if (viaPool) MaterialTheme.colorScheme.primaryContainer
+                else MaterialTheme.colorScheme.surfaceVariant
+    ) {
+        Text(
+            text = chipLabel,
+            modifier = Modifier.padding(horizontal = 10.dp, vertical = 3.dp),
+            style = MaterialTheme.typography.labelSmall,
+            fontWeight = FontWeight.Bold,
+            color = if (viaPool) MaterialTheme.colorScheme.onPrimaryContainer
+                    else MaterialTheme.colorScheme.onSurfaceVariant
+        )
     }
 }
 
@@ -571,56 +1009,6 @@ private fun HomeActionButton(
 }
 
 @Composable
-private fun HomeTileCard(
-    emoji: String,
-    tag: String,
-    title: String,
-    subtitle: String,
-    tagContainerColor: Color,
-    tagContentColor: Color,
-    onClick: () -> Unit,
-) {
-    ElevatedCard(
-        onClick = onClick,
-        modifier = Modifier.width(130.dp),
-        shape = RoundedCornerShape(18.dp)
-    ) {
-        Column(
-            Modifier.padding(14.dp),
-            verticalArrangement = Arrangement.spacedBy(6.dp)
-        ) {
-            Text(emoji, fontSize = 24.sp)
-            Surface(
-                shape = RoundedCornerShape(100.dp),
-                color = tagContainerColor
-            ) {
-                Text(
-                    text = tag.uppercase(),
-                    modifier = Modifier.padding(horizontal = 8.dp, vertical = 2.dp),
-                    style = MaterialTheme.typography.labelSmall,
-                    fontWeight = FontWeight.ExtraBold,
-                    color = tagContentColor,
-                    letterSpacing = 0.6.sp,
-                    fontSize = 9.sp
-                )
-            }
-            Text(
-                text = title,
-                style = MaterialTheme.typography.bodySmall,
-                fontWeight = FontWeight.SemiBold,
-                color = MaterialTheme.colorScheme.onSurface,
-                lineHeight = 16.sp
-            )
-            Text(
-                text = subtitle,
-                style = MaterialTheme.typography.labelSmall,
-                color = MaterialTheme.colorScheme.onSurfaceVariant
-            )
-        }
-    }
-}
-
-@Composable
 private fun HomeRecommendationCard(
     item: HomeFeedItem,
     onClick: () -> Unit,
@@ -694,6 +1082,74 @@ private fun HomeRecommendationCard(
                         )
                     }
                 }
+            }
+        }
+    }
+}
+
+@Composable
+private fun HomeStoredDestinationCard(
+    destination: StoredDestination,
+    photoUrl: String?,
+    onClick: () -> Unit,
+) {
+    val context = LocalContext.current
+
+    ElevatedCard(
+        onClick = onClick,
+        modifier = Modifier.width(150.dp),
+        shape = RoundedCornerShape(18.dp)
+    ) {
+        Column {
+            AsyncImage(
+                model = photoUrl?.ifBlank { null }?.let { url ->
+                    ImageRequest.Builder(context)
+                        .data(url)
+                        .allowHardware(false)
+                        .build()
+                },
+                contentDescription = destination.name,
+                modifier = Modifier
+                    .fillMaxWidth()
+                    .height(100.dp)
+                    .clip(RoundedCornerShape(topStart = 18.dp, topEnd = 18.dp)),
+                contentScale = ContentScale.Crop,
+            )
+            Column(
+                Modifier.padding(10.dp),
+                verticalArrangement = Arrangement.spacedBy(4.dp)
+            ) {
+                Surface(
+                    shape = RoundedCornerShape(100.dp),
+                    color = MaterialTheme.colorScheme.secondaryContainer
+                ) {
+                    Text(
+                        text = destination.region.uppercase(),
+                        modifier = Modifier.padding(horizontal = 7.dp, vertical = 2.dp),
+                        style = MaterialTheme.typography.labelSmall,
+                        fontWeight = FontWeight.ExtraBold,
+                        color = MaterialTheme.colorScheme.onSecondaryContainer,
+                        letterSpacing = 0.5.sp,
+                        fontSize = 9.sp
+                    )
+                }
+                Text(
+                    text = destination.name,
+                    style = MaterialTheme.typography.bodySmall,
+                    fontFamily = FrauncesFamily,
+                    fontWeight = FontWeight.SemiBold,
+                    color = MaterialTheme.colorScheme.onSurface,
+                    maxLines = 2,
+                    overflow = TextOverflow.Ellipsis,
+                    lineHeight = 15.sp
+                )
+                Text(
+                    text = destination.province,
+                    style = MaterialTheme.typography.labelSmall,
+                    color = MaterialTheme.colorScheme.onSurfaceVariant,
+                    maxLines = 1,
+                    overflow = TextOverflow.Ellipsis
+                )
             }
         }
     }

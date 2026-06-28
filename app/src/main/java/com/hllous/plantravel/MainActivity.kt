@@ -17,6 +17,7 @@ import androidx.compose.foundation.layout.padding
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.filled.AccountBalanceWallet
 import androidx.compose.material.icons.filled.Home
+import androidx.compose.material.icons.filled.LocalActivity
 import androidx.compose.material.icons.filled.LocationOn
 import androidx.compose.material.icons.filled.People
 import androidx.compose.material3.CircularProgressIndicator
@@ -62,6 +63,7 @@ import androidx.navigation.compose.rememberNavController
 import com.hllous.plantravel.presentation.MainViewModel
 import com.hllous.plantravel.presentation.auth.AuthState
 import com.hllous.plantravel.presentation.auth.AuthViewModel
+import com.hllous.plantravel.presentation.destination.TripDestinationState
 import com.hllous.plantravel.presentation.destination.DestinationViewModel
 import com.hllous.plantravel.presentation.expense.ExpenseViewModel
 import com.hllous.plantravel.presentation.group.GroupViewModel
@@ -343,6 +345,8 @@ fun MainAppContent(
 
     val currentBackStackEntry by navController.currentBackStackEntryAsState()
     val currentRoute = currentBackStackEntry?.destination?.route ?: "home"
+    val tripDestination by destinationViewModel.tripDestination.collectAsState()
+    val hasTripDestination = tripDestination is TripDestinationState.Set
 
     Scaffold(
         modifier = Modifier.fillMaxSize(),
@@ -350,7 +354,11 @@ fun MainAppContent(
         contentWindowInsets = WindowInsets(0, 0, 0, 0),
         bottomBar = {
             if (currentRoute != "qr_scanner" && currentRoute != "profile" && !currentRoute.startsWith("itinerary") && currentRoute != "poll_detail") {
-                BottomNavBar(currentRoute = currentRoute, navController = navController)
+                BottomNavBar(
+                    currentRoute = currentRoute,
+                    navController = navController,
+                    hasTripDestination = hasTripDestination,
+                )
             }
         },
         snackbarHost = { SnackbarHost(hostState = snackbarHostState) }
@@ -432,15 +440,28 @@ fun MainAppContent(
                     initialDraft = initialDraft,
                 )
             }
-            composable("poll_detail") {
+            composable(
+                route = "poll_detail?pollId={pollId}",
+                arguments = listOf(navArgument("pollId") {
+                    type = NavType.StringType
+                    nullable = true
+                    defaultValue = null
+                })
+            ) { backStackEntry ->
+                val requestedPollId = backStackEntry.arguments?.getString("pollId")
                 PollScreen(
                     viewModel = hiltViewModel<PollViewModel>(),
                     navController = navController,
+                    requestedPollId = requestedPollId,
                 )
             }
             // PROTOTYPE — delete after animation decisions are locked (#59)
             composable("prototype_poll_animation") {
                 com.hllous.plantravel.ui.prototype.PollAnimationPrototypeScreen()
+            }
+            // PROTOTYPE — delete after home layout decisions are locked (#58)
+            composable("prototype_home") {
+                com.hllous.plantravel.ui.prototype.HomePrototypeScreen()
             }
         }
     }
@@ -448,12 +469,19 @@ fun MainAppContent(
 
 
 @Composable
-fun BottomNavBar(currentRoute: String, navController: NavHostController) {
+fun BottomNavBar(
+    currentRoute: String,
+    navController: NavHostController,
+    hasTripDestination: Boolean,
+) {
+    val destinationsIcon = if (hasTripDestination) Icons.Default.LocalActivity else Icons.Default.LocationOn
+    val destinationsLabel = if (hasTripDestination) "Actividades" else "Destinos"
+
     NavigationBar(containerColor = MaterialTheme.colorScheme.surface) {
         listOf(
             Triple("home", Icons.Default.Home, "Inicio"),
-            Triple("groups", Icons.Default.People, "Grupos"),
-            Triple("destinations", Icons.Default.LocationOn, "Destinos"),
+            Triple("groups", Icons.Default.People, "Grupo"),
+            Triple("destinations", destinationsIcon, destinationsLabel),
             Triple("gastos", Icons.Default.AccountBalanceWallet, "Gastos"),
         ).forEach { (route, icon, label) ->
             NavigationBarItem(

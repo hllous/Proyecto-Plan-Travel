@@ -81,6 +81,10 @@ class DestinationViewModel @Inject constructor(
 
     private val _homeFeed = MutableStateFlow<UiState<List<HomeFeedItem>>>(UiState.Loading)
     val homeFeed: StateFlow<UiState<List<HomeFeedItem>>> = _homeFeed.asStateFlow()
+    private var _lastLoadedFeedPlaceId: String? = null
+
+    private val _recommendedDestinations = MutableStateFlow<UiState<List<StoredDestination>>>(UiState.Loading)
+    val recommendedDestinations: StateFlow<UiState<List<StoredDestination>>> = _recommendedDestinations.asStateFlow()
 
     private val _pendingPoi = MutableStateFlow<PlaceResult?>(null)
     val pendingPoi: StateFlow<PlaceResult?> = _pendingPoi.asStateFlow()
@@ -488,9 +492,23 @@ class DestinationViewModel @Inject constructor(
     private fun StoredDestination.photoKey(): String =
         if (id.isNotBlank()) id else "$source:$sourceId"
 
+    fun loadRecommendedDestinations() {
+        if (_recommendedDestinations.value is UiState.Success) return
+        viewModelScope.launch {
+            _recommendedDestinations.value = UiState.Loading
+            val destinations = mutableListOf<StoredDestination>()
+            runCatching { destinations.addAll(repository.browseDestinations("Patagonia")) }
+            runCatching { destinations.addAll(repository.browseDestinations("Buenos Aires")) }
+            val capped = destinations.take(10)
+            loadPhotosFor(capped)
+            _recommendedDestinations.value = UiState.Success(capped)
+        }
+    }
+
     fun loadHomeFeed() {
         val dest = tripDestination.value as? TripDestinationState.Set ?: return
-        if (_homeFeed.value is UiState.Success) return
+        if (_homeFeed.value is UiState.Success && _lastLoadedFeedPlaceId == dest.placeId) return
+        _lastLoadedFeedPlaceId = dest.placeId
         viewModelScope.launch {
             _homeFeed.value = UiState.Loading
             val categories = listOf("Alojamiento", "Gastronomía", "Actividades", "Naturaleza")
