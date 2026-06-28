@@ -37,6 +37,7 @@ import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.automirrored.filled.ArrowBack
+import androidx.compose.material.icons.filled.Delete
 import androidx.compose.material.icons.filled.EmojiEvents
 import androidx.compose.material.icons.filled.HowToVote
 import androidx.compose.material.icons.filled.ThumbUp
@@ -60,13 +61,13 @@ import androidx.compose.material3.ModalBottomSheet
 import androidx.compose.material3.OutlinedButton
 import androidx.compose.material3.OutlinedCard
 import androidx.compose.material3.OutlinedTextField
-import androidx.compose.material3.Surface
 import androidx.compose.material3.RadioButton
 import androidx.compose.material3.Scaffold
 import androidx.compose.material3.SnackbarHost
 import androidx.compose.material3.SnackbarHostState
 import androidx.compose.material3.SuggestionChip
 import androidx.compose.material3.SuggestionChipDefaults
+import androidx.compose.material3.Surface
 import androidx.compose.material3.Text
 import androidx.compose.material3.TextButton
 import androidx.compose.material3.TopAppBar
@@ -112,11 +113,14 @@ import com.hllous.plantravel.presentation.poll.PollCandidateUiModel
 import com.hllous.plantravel.presentation.poll.PollViewModel
 import com.hllous.plantravel.ui.theme.FrauncesFamily
 import java.time.Instant
-import java.time.LocalDate
 import java.time.ZoneOffset
 import kotlin.math.sin
 import kotlin.random.Random
 import kotlinx.coroutines.launch
+
+// ── State helpers ─────────────────────────────────────────────────────────────
+
+private enum class WinnerFlowStep { NONE, TIE_CHOICE, MANUAL_SELECT, COIN_FLIP }
 
 private data class WinnerOverlayData(
     val name: String,
@@ -126,16 +130,15 @@ private data class WinnerOverlayData(
     val key: Int,
 )
 
+// ── Screen ────────────────────────────────────────────────────────────────────
+
 @OptIn(ExperimentalMaterial3Api::class)
 @Composable
 fun PollScreen(
     viewModel: PollViewModel,
     navController: NavHostController,
 ) {
-    val poll by viewModel.poll.collectAsState()
     val allPolls by viewModel.allPolls.collectAsState()
-    val activeActivityPolls by viewModel.activeActivityPolls.collectAsState()
-    val closedActivityPolls by viewModel.closedActivityPolls.collectAsState()
     val candidatesState by viewModel.candidates.collectAsState()
     val currentMember by viewModel.currentMember.collectAsState()
     val errorMessage by viewModel.errorMessage.collectAsState()
@@ -145,11 +148,22 @@ fun PollScreen(
 
     val snackbarHostState = remember { SnackbarHostState() }
     var showCreationSheet by rememberSaveable { mutableStateOf(false) }
-    var showWinnerDialog by rememberSaveable { mutableStateOf(false) }
     var showDeleteDialog by rememberSaveable { mutableStateOf(false) }
-    // Poll whose candidates the winner dialog will display (null = destination poll)
-    var selectedPollForWinner by remember { mutableStateOf<Poll?>(null) }
+
+    // Level 1 → Level 2 navigation
+    var detailPollId by rememberSaveable { mutableStateOf<String?>(null) }
+    val detailPoll = detailPollId?.let { id -> allPolls.firstOrNull { it.id == id } }
+
+    // Winner selection flow (triggered by Finalizar)
+    var winnerFlowStep by remember { mutableStateOf(WinnerFlowStep.NONE) }
+    var pendingWinner by remember { mutableStateOf<PollCandidateUiModel?>(null) }
     var winnerOverlayData by remember { mutableStateOf<WinnerOverlayData?>(null) }
+    var showConfirmDestination by remember { mutableStateOf(false) }
+
+    // Keep screenPoll in sync with the Level 2 poll so candidatesState is correct
+    LaunchedEffect(detailPollId) {
+        viewModel.setScreenPoll(detailPoll)
+    }
 
     LaunchedEffect(errorMessage) {
         if (errorMessage != null) {
@@ -158,13 +172,28 @@ fun PollScreen(
         }
     }
 
-    LaunchedEffect(showWinnerDialog, selectedPollForWinner) {
-        viewModel.setScreenPoll(if (showWinnerDialog) selectedPollForWinner else null)
+    val isAdmin = currentMember?.role == MemberRole.ADMIN
+
+    fun onFinalizeTapped() {
+        val willBeTied = isTied
+        viewModel.closePoll()
+        winnerFlowStep = if (willBeTied) WinnerFlowStep.TIE_CHOICE else WinnerFlowStep.MANUAL_SELECT
     }
 
-    val isAdmin = currentMember?.role == MemberRole.ADMIN
-    val closedPolls = allPolls.filter { it.state == PollState.CLOSED }
-    val hasContent = poll != null || activeActivityPolls.isNotEmpty() || closedPolls.isNotEmpty()
+    fun onWinnerConfirmed(candidateId: String) {
+        val cs = candidatesState as? UiState.Success ?: return
+        val winner = cs.data.firstOrNull { it.candidate.id == candidateId } ?: return
+        pendingWinner = winner
+        viewModel.selectWinner(candidateId)
+        winnerFlowStep = WinnerFlowStep.NONE
+        winnerOverlayData = WinnerOverlayData(
+            name = winner.candidate.name,
+            voteCount = winner.voteCount,
+            totalVotes = memberCount,
+            isDestination = detailPoll?.type == PollType.DESTINATION,
+            key = System.currentTimeMillis().toInt(),
+        )
+    }
 
     Scaffold(
         contentWindowInsets = WindowInsets(0),
@@ -173,104 +202,74 @@ fun PollScreen(
             TopAppBar(
                 title = {
                     Text(
-                        "Encuesta",
+                        text = detailPoll?.name?.ifBlank { "Encuesta" } ?: "Encuestas",
                         fontFamily = FrauncesFamily,
                         fontWeight = FontWeight.Medium,
+                        maxLines = 1,
+                        overflow = TextOverflow.Ellipsis,
                     )
                 },
                 navigationIcon = {
-                    IconButton(onClick = { navController.popBackStack() }) {
-                        Icon(
-                            Icons.AutoMirrored.Filled.ArrowBack,
-                            contentDescription = "Volver",
-                        )
+                    IconButton(onClick = {
+                        if (detailPollId != null) {
+                            detailPollId = null
+                            winnerFlowStep = WinnerFlowStep.NONE
+                        } else {
+                            navController.popBackStack()
+                        }
+                    }) {
+                        Icon(Icons.AutoMirrored.Filled.ArrowBack, contentDescription = "Volver")
                     }
                 },
                 actions = {
-                    if (isAdmin && poll != null) {
-                        if (poll?.state == PollState.OPEN) {
+                    if (detailPoll != null && isAdmin) {
+                        if (detailPoll.state == PollState.OPEN) {
                             TextButton(
-                                onClick = { viewModel.setScreenPoll(null); viewModel.closePoll() },
+                                onClick = { onFinalizeTapped() },
                                 enabled = !isSubmitting,
-                            ) {
-                                Text("Finalizar")
-                            }
+                            ) { Text("Finalizar") }
                         }
                         TextButton(
                             onClick = { showDeleteDialog = true },
                             enabled = !isSubmitting,
-                        ) {
-                            Text("Eliminar", color = MaterialTheme.colorScheme.error)
-                        }
+                        ) { Text("Eliminar", color = MaterialTheme.colorScheme.error) }
                     }
                 },
             )
         },
     ) { innerPadding ->
-        Box(
-            modifier = Modifier
-                .fillMaxSize()
-                .padding(innerPadding),
-        ) {
-            when {
-                !hasContent && candidatesState is UiState.Loading -> {
-                    CircularProgressIndicator(modifier = Modifier.align(Alignment.Center))
-                }
-
-                !hasContent -> {
-                    PollEmptyState(
-                        modifier = Modifier.align(Alignment.Center),
-                        onCreatePoll = { showCreationSheet = true },
-                    )
-                }
-
-                poll == null -> {
-                    NoActivePollContent(
-                        closedPolls = closedPolls,
-                        activeActivityPolls = activeActivityPolls,
-                        isAdmin = isAdmin,
-                        modifier = Modifier.fillMaxSize(),
-                        onCreatePoll = { showCreationSheet = true },
-                        onCloseActivity = { ap ->
-                            viewModel.setScreenPoll(ap)
-                            viewModel.closePoll()
-                        },
-                        onSelectActivityWinner = { ap ->
-                            selectedPollForWinner = ap
-                            showWinnerDialog = true
-                        },
-                    )
-                }
-
-                else -> {
-                    PollContent(
-                        poll = poll!!,
-                        candidatesState = candidatesState,
-                        activeActivityPolls = activeActivityPolls,
-                        isAdmin = isAdmin,
-                        isSubmitting = isSubmitting,
-                        closedPolls = closedPolls,
-                        onToggleVote = { candidateId ->
-                            viewModel.setScreenPoll(null)
-                            viewModel.toggleVote(candidateId)
-                        },
-                        onSelectWinner = {
-                            selectedPollForWinner = null
-                            showWinnerDialog = true
-                        },
-                        onCloseActivity = { ap ->
-                            viewModel.setScreenPoll(ap)
-                            viewModel.closePoll()
-                        },
-                        onSelectActivityWinner = { ap ->
-                            selectedPollForWinner = ap
-                            showWinnerDialog = true
-                        },
-                    )
-                }
+        Box(modifier = Modifier.fillMaxSize().padding(innerPadding)) {
+            if (detailPoll == null) {
+                PollListContent(
+                    allPolls = allPolls,
+                    isAdmin = isAdmin,
+                    modifier = Modifier.fillMaxSize(),
+                    onViewDetails = { poll ->
+                        detailPollId = poll.id
+                    },
+                    onDelete = { poll ->
+                        detailPollId = poll.id
+                        showDeleteDialog = true
+                    },
+                    onCreatePoll = { showCreationSheet = true },
+                )
+            } else {
+                PollDetailContent(
+                    poll = detailPoll,
+                    candidatesState = candidatesState,
+                    isAdmin = isAdmin,
+                    isSubmitting = isSubmitting,
+                    modifier = Modifier.fillMaxSize(),
+                    onToggleVote = { candidateId ->
+                        viewModel.setScreenPoll(detailPoll)
+                        viewModel.toggleVote(candidateId)
+                    },
+                )
             }
         }
     }
+
+    // ── Dialogs (outside Scaffold so they float above everything) ────────────
 
     if (showCreationSheet) {
         PollCreationBottomSheet(
@@ -282,29 +281,48 @@ fun PollScreen(
         )
     }
 
-    if (showWinnerDialog) {
-        val dialogCandidates = (candidatesState as? UiState.Success)?.data ?: emptyList()
-        WinnerSelectionDialog(
-            candidates = dialogCandidates,
-            isTied = isTied,
-            onDismiss = { showWinnerDialog = false; selectedPollForWinner = null },
-            onSelectWinner = { candidateId ->
-                val winner = dialogCandidates.firstOrNull { it.candidate.id == candidateId }
-                viewModel.selectWinner(candidateId)
-                if (winner != null) {
-                    val isDestination = selectedPollForWinner?.type != PollType.ACTIVITY
-                    winnerOverlayData = WinnerOverlayData(
-                        name = winner.candidate.name,
-                        voteCount = winner.voteCount,
-                        totalVotes = memberCount,
-                        isDestination = isDestination,
-                        key = System.currentTimeMillis().toInt(),
-                    )
-                }
-                showWinnerDialog = false
-                selectedPollForWinner = null
+    if (showDeleteDialog) {
+        AlertDialog(
+            onDismissRequest = { showDeleteDialog = false },
+            title = { Text("Eliminar encuesta") },
+            text = { Text("¿Eliminar esta encuesta y todos sus candidatos? Esta acción no se puede deshacer.") },
+            confirmButton = {
+                TextButton(onClick = {
+                    viewModel.setScreenPoll(detailPoll)
+                    viewModel.deletePoll()
+                    showDeleteDialog = false
+                    detailPollId = null
+                }) { Text("Eliminar", color = MaterialTheme.colorScheme.error) }
+            },
+            dismissButton = {
+                TextButton(onClick = { showDeleteDialog = false }) { Text("Cancelar") }
             },
         )
+    }
+
+    // Winner flow dialogs
+    val dialogCandidates = (candidatesState as? UiState.Success)?.data ?: emptyList()
+
+    when (winnerFlowStep) {
+        WinnerFlowStep.TIE_CHOICE -> TieChoiceDialog(
+            onDismiss = { winnerFlowStep = WinnerFlowStep.NONE },
+            onManual = { winnerFlowStep = WinnerFlowStep.MANUAL_SELECT },
+            onCoinFlip = { winnerFlowStep = WinnerFlowStep.COIN_FLIP },
+        )
+        WinnerFlowStep.MANUAL_SELECT -> WinnerSelectionDialog(
+            candidates = dialogCandidates,
+            onDismiss = { winnerFlowStep = WinnerFlowStep.NONE },
+            onSelectWinner = { candidateId -> onWinnerConfirmed(candidateId) },
+        )
+        WinnerFlowStep.COIN_FLIP -> {
+            val maxVotes = dialogCandidates.maxOfOrNull { it.voteCount } ?: 0
+            TiedCoinFlipDialog(
+                tiedCandidates = dialogCandidates.filter { it.voteCount == maxVotes }.shuffled(),
+                onDismiss = { winnerFlowStep = WinnerFlowStep.NONE },
+                onSelectWinner = { candidateId -> onWinnerConfirmed(candidateId) },
+            )
+        }
+        WinnerFlowStep.NONE -> Unit
     }
 
     winnerOverlayData?.let { data ->
@@ -314,78 +332,272 @@ fun PollScreen(
             voteCount = data.voteCount,
             totalVotes = data.totalVotes,
             animKey = data.key,
-            onDismiss = { winnerOverlayData = null },
+            onDismiss = {
+                winnerOverlayData = null
+                val pw = pendingWinner
+                if (data.isDestination && pw != null) {
+                    showConfirmDestination = true
+                } else {
+                    pendingWinner = null
+                }
+            },
         )
     }
 
-    if (showDeleteDialog) {
+    if (showConfirmDestination) {
+        val pw = pendingWinner
         AlertDialog(
-            onDismissRequest = { showDeleteDialog = false },
-            title = { Text("Eliminar encuesta") },
-            text = { Text("¿Eliminar esta encuesta y todos sus candidatos? Esta acción no se puede deshacer.") },
+            onDismissRequest = { showConfirmDestination = false; pendingWinner = null },
+            title = { Text("¿Seleccionar destino?") },
+            text = {
+                Text("¿Querés seleccionar ${pw?.candidate?.name ?: "el ganador"} como destino del viaje?")
+            },
             confirmButton = {
-                TextButton(onClick = {
-                    viewModel.deletePoll()
-                    showDeleteDialog = false
-                }) { Text("Eliminar", color = MaterialTheme.colorScheme.error) }
+                Button(onClick = {
+                    if (pw != null) {
+                        viewModel.setWinnerAsDestination(
+                            placeId = pw.candidate.placeId,
+                            name = pw.candidate.name,
+                            lat = pw.candidate.lat,
+                            lng = pw.candidate.lng,
+                        )
+                    }
+                    showConfirmDestination = false
+                    pendingWinner = null
+                }) { Text("Confirmar") }
             },
             dismissButton = {
-                TextButton(onClick = { showDeleteDialog = false }) { Text("Cancelar") }
+                TextButton(onClick = { showConfirmDestination = false; pendingWinner = null }) {
+                    Text("No por ahora")
+                }
             },
         )
     }
 }
 
+// ── Level 1: Poll list ────────────────────────────────────────────────────────
+
 @Composable
-private fun PollEmptyState(
+private fun PollListContent(
+    allPolls: List<Poll>,
+    isAdmin: Boolean,
     modifier: Modifier = Modifier,
+    onViewDetails: (Poll) -> Unit,
+    onDelete: (Poll) -> Unit,
     onCreatePoll: () -> Unit,
 ) {
-    Column(
-        modifier = modifier.padding(32.dp),
-        horizontalAlignment = Alignment.CenterHorizontally,
-        verticalArrangement = Arrangement.Center,
-    ) {
-        Icon(
-            imageVector = Icons.Default.HowToVote,
-            contentDescription = null,
-            tint = MaterialTheme.colorScheme.onSurfaceVariant,
-            modifier = Modifier.size(64.dp),
-        )
-        Spacer(modifier = Modifier.height(16.dp))
-        Text(
-            text = "No hay ninguna encuesta activa. ¡Creá una para que el grupo vote!",
-            style = MaterialTheme.typography.bodyMedium,
-            color = MaterialTheme.colorScheme.onSurfaceVariant,
-            textAlign = TextAlign.Center,
-        )
-        Spacer(modifier = Modifier.height(24.dp))
-        Button(onClick = onCreatePoll) {
-            Text("Crear encuesta")
+    val activePolls = allPolls.filter { it.state == PollState.OPEN }
+    val finalizedPolls = allPolls.filter { it.state == PollState.CLOSED }
+
+    if (allPolls.isEmpty()) {
+        Box(modifier = modifier, contentAlignment = Alignment.Center) {
+            Column(
+                horizontalAlignment = Alignment.CenterHorizontally,
+                verticalArrangement = Arrangement.spacedBy(16.dp),
+                modifier = Modifier.padding(32.dp),
+            ) {
+                Icon(
+                    Icons.Default.HowToVote,
+                    contentDescription = null,
+                    tint = MaterialTheme.colorScheme.onSurfaceVariant,
+                    modifier = Modifier.size(64.dp),
+                )
+                Text(
+                    "No hay encuestas todavía.",
+                    style = MaterialTheme.typography.bodyMedium,
+                    color = MaterialTheme.colorScheme.onSurfaceVariant,
+                    textAlign = TextAlign.Center,
+                )
+                if (isAdmin) {
+                    Button(onClick = onCreatePoll) { Text("Crear encuesta") }
+                }
+            }
+        }
+        return
+    }
+
+    LazyColumn(modifier = modifier, contentPadding = PaddingValues(bottom = 24.dp)) {
+        if (isAdmin) {
+            item {
+                Button(
+                    onClick = onCreatePoll,
+                    modifier = Modifier
+                        .fillMaxWidth()
+                        .padding(horizontal = 16.dp, vertical = 12.dp),
+                ) { Text("+ Nueva encuesta") }
+            }
+        }
+
+        if (activePolls.isNotEmpty()) {
+            item {
+                Text(
+                    "Activas",
+                    style = MaterialTheme.typography.titleMedium,
+                    fontFamily = FrauncesFamily,
+                    fontWeight = FontWeight.SemiBold,
+                    modifier = Modifier.padding(horizontal = 16.dp, vertical = 4.dp),
+                )
+            }
+            items(activePolls, key = { "active-${it.id}" }) { poll ->
+                PollListCard(
+                    poll = poll,
+                    isAdmin = isAdmin,
+                    onViewDetails = { onViewDetails(poll) },
+                    onDelete = { onDelete(poll) },
+                )
+            }
+        }
+
+        if (finalizedPolls.isNotEmpty()) {
+            item {
+                Text(
+                    "Finalizadas",
+                    style = MaterialTheme.typography.titleMedium,
+                    fontFamily = FrauncesFamily,
+                    fontWeight = FontWeight.SemiBold,
+                    modifier = Modifier.padding(horizontal = 16.dp, vertical = 4.dp).padding(top = 8.dp),
+                )
+            }
+            items(finalizedPolls, key = { "final-${it.id}" }) { poll ->
+                PollListCard(
+                    poll = poll,
+                    isAdmin = isAdmin,
+                    onViewDetails = { onViewDetails(poll) },
+                    onDelete = { onDelete(poll) },
+                )
+            }
         }
     }
 }
 
 @Composable
-private fun PollContent(
+private fun PollListCard(
+    poll: Poll,
+    isAdmin: Boolean,
+    onViewDetails: () -> Unit,
+    onDelete: () -> Unit,
+) {
+    val context = LocalContext.current
+    Card(
+        onClick = onViewDetails,
+        modifier = Modifier
+            .fillMaxWidth()
+            .padding(horizontal = 16.dp, vertical = 4.dp),
+        shape = RoundedCornerShape(12.dp),
+    ) {
+        Row(
+            modifier = Modifier
+                .fillMaxWidth()
+                .padding(12.dp),
+            verticalAlignment = Alignment.CenterVertically,
+            horizontalArrangement = Arrangement.spacedBy(12.dp),
+        ) {
+            // Thumbnail: winner photo or placeholder
+            Box(
+                modifier = Modifier
+                    .size(72.dp)
+                    .clip(RoundedCornerShape(8.dp))
+                    .background(MaterialTheme.colorScheme.surfaceVariant),
+                contentAlignment = Alignment.Center,
+            ) {
+                if (poll.winnerPhotoUrl != null) {
+                    AsyncImage(
+                        model = ImageRequest.Builder(context)
+                            .data(poll.winnerPhotoUrl)
+                            .allowHardware(false)
+                            .build(),
+                        contentDescription = null,
+                        contentScale = ContentScale.Crop,
+                        modifier = Modifier.fillMaxSize(),
+                    )
+                } else {
+                    Icon(
+                        Icons.Default.HowToVote,
+                        contentDescription = null,
+                        tint = MaterialTheme.colorScheme.onSurfaceVariant,
+                        modifier = Modifier.size(32.dp),
+                    )
+                }
+            }
+
+            Column(modifier = Modifier.weight(1f), verticalArrangement = Arrangement.spacedBy(4.dp)) {
+                Text(
+                    text = poll.name.ifBlank { if (poll.type == PollType.DESTINATION) "¿A dónde vamos?" else "¿Qué hacemos?" },
+                    style = MaterialTheme.typography.titleSmall,
+                    fontFamily = FrauncesFamily,
+                    fontWeight = FontWeight.Medium,
+                    maxLines = 2,
+                    overflow = TextOverflow.Ellipsis,
+                )
+                Row(horizontalArrangement = Arrangement.spacedBy(4.dp)) {
+                    SuggestionChip(
+                        onClick = {},
+                        label = {
+                            Text(
+                                if (poll.type == PollType.DESTINATION) "Destino" else "Actividad",
+                                style = MaterialTheme.typography.labelSmall,
+                            )
+                        },
+                        colors = SuggestionChipDefaults.suggestionChipColors(
+                            containerColor = if (poll.type == PollType.DESTINATION)
+                                MaterialTheme.colorScheme.primaryContainer
+                            else
+                                MaterialTheme.colorScheme.secondaryContainer,
+                            labelColor = if (poll.type == PollType.DESTINATION)
+                                MaterialTheme.colorScheme.onPrimaryContainer
+                            else
+                                MaterialTheme.colorScheme.onSecondaryContainer,
+                        ),
+                    )
+                    if (poll.winnerPlaceId != null) {
+                        SuggestionChip(
+                            onClick = {},
+                            label = {
+                                Row(
+                                    verticalAlignment = Alignment.CenterVertically,
+                                    horizontalArrangement = Arrangement.spacedBy(2.dp),
+                                ) {
+                                    Icon(Icons.Default.EmojiEvents, null, modifier = Modifier.size(12.dp))
+                                    Text("Con ganador", style = MaterialTheme.typography.labelSmall)
+                                }
+                            },
+                            colors = SuggestionChipDefaults.suggestionChipColors(
+                                containerColor = MaterialTheme.colorScheme.tertiaryContainer,
+                                labelColor = MaterialTheme.colorScheme.onTertiaryContainer,
+                            ),
+                        )
+                    }
+                }
+            }
+
+            if (isAdmin) {
+                IconButton(onClick = onDelete, modifier = Modifier.size(36.dp)) {
+                    Icon(
+                        Icons.Default.Delete,
+                        contentDescription = "Eliminar",
+                        tint = MaterialTheme.colorScheme.error,
+                        modifier = Modifier.size(20.dp),
+                    )
+                }
+            }
+        }
+    }
+}
+
+// ── Level 2: Poll detail ──────────────────────────────────────────────────────
+
+@Composable
+private fun PollDetailContent(
     poll: Poll,
     candidatesState: UiState<List<PollCandidateUiModel>>,
-    activeActivityPolls: List<Poll>,
     isAdmin: Boolean,
     isSubmitting: Boolean,
-    closedPolls: List<Poll>,
+    modifier: Modifier = Modifier,
     onToggleVote: (String) -> Unit,
-    onSelectWinner: () -> Unit,
-    onCloseActivity: (Poll) -> Unit,
-    onSelectActivityWinner: (Poll) -> Unit,
 ) {
     val isClosed = poll.state == PollState.CLOSED
-    var historialExpanded by rememberSaveable { mutableStateOf(false) }
 
-    LazyColumn(
-        modifier = Modifier.fillMaxSize(),
-        contentPadding = PaddingValues(bottom = 24.dp),
-    ) {
+    LazyColumn(modifier = modifier, contentPadding = PaddingValues(bottom = 24.dp)) {
         item {
             Row(
                 modifier = Modifier
@@ -395,16 +607,14 @@ private fun PollContent(
                 horizontalArrangement = Arrangement.spacedBy(8.dp),
             ) {
                 val chipLabel = when {
-                    isClosed -> if (poll.type == PollType.DESTINATION) "Destino · Cerrada" else "Actividad · Cerrada"
+                    isClosed -> if (poll.type == PollType.DESTINATION) "Destino · Finalizada" else "Actividad · Finalizada"
                     else -> if (poll.type == PollType.DESTINATION) "Encuesta de Destino" else "Encuesta de Actividad"
                 }
                 SuggestionChip(
                     onClick = {},
                     label = { Text(chipLabel) },
                     colors = if (isClosed)
-                        SuggestionChipDefaults.suggestionChipColors(
-                            containerColor = MaterialTheme.colorScheme.surfaceVariant,
-                        )
+                        SuggestionChipDefaults.suggestionChipColors(containerColor = MaterialTheme.colorScheme.surfaceVariant)
                     else
                         SuggestionChipDefaults.suggestionChipColors(
                             containerColor = MaterialTheme.colorScheme.primaryContainer,
@@ -415,31 +625,31 @@ private fun PollContent(
         }
 
         when (candidatesState) {
-            is UiState.Loading -> {
-                item {
-                    Box(
-                        modifier = Modifier
-                            .fillMaxWidth()
-                            .padding(32.dp),
-                        contentAlignment = Alignment.Center,
-                    ) {
-                        CircularProgressIndicator()
+            is UiState.Loading -> item {
+                Box(
+                    modifier = Modifier.fillMaxWidth().padding(32.dp),
+                    contentAlignment = Alignment.Center,
+                ) { CircularProgressIndicator() }
+            }
+            is UiState.Error -> item {
+                Text(
+                    candidatesState.message,
+                    style = MaterialTheme.typography.bodyMedium,
+                    color = MaterialTheme.colorScheme.error,
+                    modifier = Modifier.padding(24.dp),
+                )
+            }
+            is UiState.Success -> {
+                if (candidatesState.data.isEmpty()) {
+                    item {
+                        Text(
+                            "Todavía no hay candidatos.",
+                            style = MaterialTheme.typography.bodyMedium,
+                            color = MaterialTheme.colorScheme.onSurfaceVariant,
+                            modifier = Modifier.padding(horizontal = 16.dp, vertical = 8.dp),
+                        )
                     }
                 }
-            }
-
-            is UiState.Error -> {
-                item {
-                    Text(
-                        text = candidatesState.message,
-                        style = MaterialTheme.typography.bodyMedium,
-                        color = MaterialTheme.colorScheme.error,
-                        modifier = Modifier.padding(24.dp),
-                    )
-                }
-            }
-
-            is UiState.Success -> {
                 items(candidatesState.data, key = { it.candidate.id }) { uiModel ->
                     PollCandidateCard(
                         uiModel = uiModel,
@@ -448,234 +658,12 @@ private fun PollContent(
                         onToggleVote = { onToggleVote(uiModel.candidate.id) },
                     )
                 }
-
-                if (candidatesState.data.isEmpty()) {
-                    item {
-                        Text(
-                            text = "Todavía no hay candidatos.",
-                            style = MaterialTheme.typography.bodyMedium,
-                            color = MaterialTheme.colorScheme.onSurfaceVariant,
-                            modifier = Modifier.padding(horizontal = 16.dp, vertical = 8.dp),
-                        )
-                    }
-                }
-            }
-        }
-
-        if (isClosed && isAdmin && poll.winnerPlaceId == null) {
-            item {
-                FilledTonalButton(
-                    onClick = onSelectWinner,
-                    enabled = !isSubmitting,
-                    modifier = Modifier
-                        .fillMaxWidth()
-                        .padding(horizontal = 16.dp, vertical = 8.dp),
-                ) {
-                    Text("Seleccionar ganador")
-                }
-            }
-        }
-
-        if (activeActivityPolls.isNotEmpty()) {
-            item {
-                Text(
-                    text = "Encuestas de actividad",
-                    style = MaterialTheme.typography.titleMedium,
-                    fontFamily = FrauncesFamily,
-                    fontWeight = FontWeight.SemiBold,
-                    modifier = Modifier.padding(horizontal = 16.dp, vertical = 12.dp),
-                )
-            }
-            items(activeActivityPolls, key = { "act-open-${it.id}" }) { activityPoll ->
-                ActivityPollCard(
-                    poll = activityPoll,
-                    isAdmin = isAdmin,
-                    isSubmitting = isSubmitting,
-                    onClose = { onCloseActivity(activityPoll) },
-                    onSelectWinner = { onSelectActivityWinner(activityPoll) },
-                )
-            }
-        }
-
-        if (closedPolls.isNotEmpty()) {
-            item {
-                TextButton(
-                    onClick = { historialExpanded = !historialExpanded },
-                    modifier = Modifier
-                        .fillMaxWidth()
-                        .padding(horizontal = 16.dp, vertical = 4.dp),
-                ) {
-                    Text(
-                        if (historialExpanded) "Ocultar historial" else "Ver historial (${closedPolls.size})",
-                        style = MaterialTheme.typography.labelLarge,
-                    )
-                }
-            }
-            if (historialExpanded) {
-                items(closedPolls, key = { "history-${it.id}" }) { closedPoll ->
-                    PollHistoryRow(poll = closedPoll)
-                }
             }
         }
     }
 }
 
-@Composable
-private fun NoActivePollContent(
-    closedPolls: List<Poll>,
-    activeActivityPolls: List<Poll>,
-    isAdmin: Boolean,
-    modifier: Modifier = Modifier,
-    onCreatePoll: () -> Unit,
-    onCloseActivity: (Poll) -> Unit,
-    onSelectActivityWinner: (Poll) -> Unit,
-) {
-    LazyColumn(
-        modifier = modifier,
-        contentPadding = PaddingValues(bottom = 24.dp),
-    ) {
-        if (activeActivityPolls.isNotEmpty()) {
-            item {
-                Text(
-                    text = "Encuestas de actividad",
-                    style = MaterialTheme.typography.titleMedium,
-                    fontFamily = FrauncesFamily,
-                    fontWeight = FontWeight.SemiBold,
-                    modifier = Modifier.padding(horizontal = 16.dp, vertical = 12.dp),
-                )
-            }
-            items(activeActivityPolls, key = { "act-${it.id}" }) { activityPoll ->
-                ActivityPollCard(
-                    poll = activityPoll,
-                    isAdmin = isAdmin,
-                    isSubmitting = false,
-                    onClose = { onCloseActivity(activityPoll) },
-                    onSelectWinner = { onSelectActivityWinner(activityPoll) },
-                )
-            }
-            item { Spacer(modifier = Modifier.height(8.dp)) }
-        }
-        if (isAdmin) {
-            item {
-                Button(
-                    onClick = onCreatePoll,
-                    modifier = Modifier
-                        .fillMaxWidth()
-                        .padding(horizontal = 16.dp, vertical = 8.dp),
-                ) {
-                    Text("Crear nueva encuesta")
-                }
-            }
-        }
-        if (closedPolls.isNotEmpty()) {
-            item {
-                Text(
-                    text = "Historial",
-                    style = MaterialTheme.typography.titleMedium,
-                    fontFamily = FrauncesFamily,
-                    fontWeight = FontWeight.SemiBold,
-                    modifier = Modifier.padding(horizontal = 16.dp, vertical = 12.dp),
-                )
-            }
-            items(closedPolls, key = { it.id }) { poll ->
-                PollHistoryRow(poll = poll)
-            }
-        }
-    }
-}
-
-@Composable
-private fun PollHistoryRow(poll: Poll) {
-    Row(
-        modifier = Modifier
-            .fillMaxWidth()
-            .padding(horizontal = 16.dp, vertical = 4.dp),
-        verticalAlignment = Alignment.CenterVertically,
-        horizontalArrangement = Arrangement.spacedBy(8.dp),
-    ) {
-        SuggestionChip(
-            onClick = {},
-            label = {
-                Text(
-                    if (poll.type == PollType.DESTINATION) "Destino" else "Actividad",
-                    style = MaterialTheme.typography.labelSmall,
-                )
-            },
-        )
-        SuggestionChip(
-            onClick = {},
-            label = { Text("Cerrada", style = MaterialTheme.typography.labelSmall) },
-            colors = SuggestionChipDefaults.suggestionChipColors(
-                containerColor = MaterialTheme.colorScheme.surfaceVariant,
-            ),
-        )
-        if (poll.winnerPlaceId != null) {
-            SuggestionChip(
-                onClick = {},
-                label = { Text("Con ganador", style = MaterialTheme.typography.labelSmall) },
-                colors = SuggestionChipDefaults.suggestionChipColors(
-                    containerColor = MaterialTheme.colorScheme.primaryContainer,
-                    labelColor = MaterialTheme.colorScheme.onPrimaryContainer,
-                ),
-            )
-        }
-    }
-}
-
-@Composable
-private fun ActivityPollCard(
-    poll: Poll,
-    isAdmin: Boolean,
-    isSubmitting: Boolean,
-    onClose: () -> Unit,
-    onSelectWinner: () -> Unit,
-) {
-    val isClosed = poll.state == PollState.CLOSED
-    OutlinedCard(
-        modifier = Modifier
-            .fillMaxWidth()
-            .padding(horizontal = 16.dp, vertical = 4.dp),
-        shape = RoundedCornerShape(12.dp),
-    ) {
-        Row(
-            modifier = Modifier
-                .fillMaxWidth()
-                .padding(horizontal = 12.dp, vertical = 10.dp),
-            verticalAlignment = Alignment.CenterVertically,
-            horizontalArrangement = Arrangement.spacedBy(8.dp),
-        ) {
-            SuggestionChip(
-                onClick = {},
-                label = { Text(if (isClosed) "Cerrada" else "Abierta", style = MaterialTheme.typography.labelSmall) },
-                colors = if (isClosed)
-                    SuggestionChipDefaults.suggestionChipColors(containerColor = MaterialTheme.colorScheme.surfaceVariant)
-                else
-                    SuggestionChipDefaults.suggestionChipColors(
-                        containerColor = MaterialTheme.colorScheme.secondaryContainer,
-                        labelColor = MaterialTheme.colorScheme.onSecondaryContainer,
-                    ),
-            )
-            Text(
-                text = poll.name.ifBlank { "Encuesta de actividad" },
-                style = MaterialTheme.typography.titleSmall,
-                fontFamily = FrauncesFamily,
-                modifier = Modifier.weight(1f),
-                maxLines = 1,
-                overflow = TextOverflow.Ellipsis,
-            )
-            if (isAdmin && !isClosed) {
-                TextButton(onClick = onClose, enabled = !isSubmitting) {
-                    Text("Finalizar")
-                }
-            }
-            if (isAdmin && isClosed && poll.winnerPlaceId == null) {
-                TextButton(onClick = onSelectWinner, enabled = !isSubmitting) {
-                    Text("Ganador")
-                }
-            }
-        }
-    }
-}
+// ── Shared composables ────────────────────────────────────────────────────────
 
 @Composable
 private fun PollCandidateCard(
@@ -726,7 +714,7 @@ private fun PollCandidateCard(
                         )
                         Spacer(modifier = Modifier.width(4.dp))
                         Text(
-                            text = "Ganador",
+                            "Ganador",
                             style = MaterialTheme.typography.labelSmall,
                             color = MaterialTheme.colorScheme.primary,
                             fontWeight = FontWeight.Bold,
@@ -735,7 +723,7 @@ private fun PollCandidateCard(
                     Spacer(modifier = Modifier.height(2.dp))
                 }
                 Text(
-                    text = candidate.name,
+                    candidate.name,
                     style = MaterialTheme.typography.titleMedium,
                     maxLines = 2,
                     overflow = TextOverflow.Ellipsis,
@@ -755,10 +743,7 @@ private fun PollCandidateCard(
                         )
                     }
                     Spacer(modifier = Modifier.width(4.dp))
-                    Text(
-                        text = "${uiModel.voteCount}",
-                        style = MaterialTheme.typography.bodyMedium,
-                    )
+                    Text("${uiModel.voteCount}", style = MaterialTheme.typography.bodyMedium)
                 }
                 Spacer(modifier = Modifier.height(6.dp))
                 LinearProgressIndicator(
@@ -770,212 +755,90 @@ private fun PollCandidateCard(
     }
 }
 
-@OptIn(ExperimentalMaterial3Api::class)
+// ── Winner flow dialogs ───────────────────────────────────────────────────────
+
 @Composable
-private fun PollCreationBottomSheet(
+private fun TieChoiceDialog(
     onDismiss: () -> Unit,
-    onCreate: (type: PollType, name: String, expiresAt: String?) -> Unit,
+    onManual: () -> Unit,
+    onCoinFlip: () -> Unit,
 ) {
-    val sheetState = rememberModalBottomSheetState(skipPartiallyExpanded = true)
-    var selectedType by rememberSaveable { mutableStateOf(PollType.DESTINATION) }
-    var pollName by rememberSaveable { mutableStateOf("¿A dónde vamos?") }
-    var showDatePicker by rememberSaveable { mutableStateOf(false) }
-    var expiresAt by rememberSaveable { mutableStateOf<String?>(null) }
-    val datePickerState = rememberDatePickerState()
-
-    ModalBottomSheet(
+    AlertDialog(
         onDismissRequest = onDismiss,
-        sheetState = sheetState,
-    ) {
-        Column(
-            modifier = Modifier
-                .fillMaxWidth()
-                .padding(horizontal = 24.dp)
-                .padding(bottom = 32.dp),
-            verticalArrangement = Arrangement.spacedBy(8.dp),
-        ) {
-            Text(
-                text = "Nueva encuesta",
-                style = MaterialTheme.typography.titleLarge,
-                fontFamily = FrauncesFamily,
-                fontWeight = FontWeight.Medium,
-            )
-
-            Spacer(modifier = Modifier.height(4.dp))
-
-            Text(
-                text = "Tipo de encuesta",
-                style = MaterialTheme.typography.labelLarge,
-                color = MaterialTheme.colorScheme.onSurfaceVariant,
-            )
-
-            Column(modifier = Modifier.selectableGroup()) {
-                listOf(PollType.DESTINATION to "Destino", PollType.ACTIVITY to "Actividad")
-                    .forEach { (type, label) ->
-                        Row(
-                            modifier = Modifier
-                                .fillMaxWidth()
-                                .selectable(
-                                    selected = selectedType == type,
-                                    onClick = {
-                                        selectedType = type
-                                        pollName = if (type == PollType.DESTINATION) "¿A dónde vamos?" else "¿Qué hacemos?"
-                                    },
-                                    role = Role.RadioButton,
-                                )
-                                .padding(vertical = 4.dp),
-                            verticalAlignment = Alignment.CenterVertically,
-                        ) {
-                            RadioButton(
-                                selected = selectedType == type,
-                                onClick = null,
-                            )
-                            Spacer(modifier = Modifier.width(8.dp))
-                            Text(text = label, style = MaterialTheme.typography.bodyLarge)
-                        }
-                    }
-            }
-
-            OutlinedTextField(
-                value = pollName,
-                onValueChange = { pollName = it },
-                label = { Text("Nombre de la encuesta") },
-                singleLine = true,
-                modifier = Modifier.fillMaxWidth(),
-            )
-
-            Spacer(modifier = Modifier.height(4.dp))
-
-            Text(
-                text = "Vencimiento (opcional)",
-                style = MaterialTheme.typography.labelLarge,
-                color = MaterialTheme.colorScheme.onSurfaceVariant,
-            )
-
-            OutlinedButton(
-                onClick = { showDatePicker = true },
+        title = { Text("¡Hay un empate! 🤝") },
+        text = { Text("¿Cómo querés elegir el ganador?") },
+        confirmButton = {
+            Column(
+                verticalArrangement = Arrangement.spacedBy(8.dp),
                 modifier = Modifier.fillMaxWidth(),
             ) {
-                Text(expiresAt ?: "Seleccionar fecha de vencimiento")
-            }
-
-            Spacer(modifier = Modifier.height(8.dp))
-
-            Row(
-                modifier = Modifier.fillMaxWidth(),
-                horizontalArrangement = Arrangement.spacedBy(12.dp),
-            ) {
-                OutlinedButton(
-                    onClick = onDismiss,
-                    modifier = Modifier.weight(1f),
-                ) {
-                    Text("Cancelar")
+                Button(onClick = onCoinFlip, modifier = Modifier.fillMaxWidth()) {
+                    Text("🪙  Tirar la moneda")
                 }
-                FilledTonalButton(
-                    onClick = { onCreate(selectedType, pollName, expiresAt) },
-                    modifier = Modifier.weight(1f),
-                ) {
-                    Text("Crear")
+                OutlinedButton(onClick = onManual, modifier = Modifier.fillMaxWidth()) {
+                    Text("Seleccionar manualmente")
                 }
             }
-        }
-    }
-
-    if (showDatePicker) {
-        DatePickerDialog(
-            onDismissRequest = { showDatePicker = false },
-            confirmButton = {
-                TextButton(
-                    onClick = {
-                        datePickerState.selectedDateMillis?.let { millis ->
-                            val localDate = Instant.ofEpochMilli(millis)
-                                .atZone(ZoneOffset.UTC)
-                                .toLocalDate()
-                            expiresAt = localDate.atTime(23, 59, 59)
-                                .atOffset(ZoneOffset.UTC)
-                                .format(java.time.format.DateTimeFormatter.ISO_OFFSET_DATE_TIME)
-                        }
-                        showDatePicker = false
-                    },
-                ) { Text("Aceptar") }
-            },
-            dismissButton = {
-                TextButton(onClick = { showDatePicker = false }) { Text("Cancelar") }
-            },
-        ) {
-            DatePicker(state = datePickerState)
-        }
-    }
+        },
+        dismissButton = {
+            TextButton(onClick = onDismiss) { Text("Cancelar") }
+        },
+    )
 }
 
 @Composable
 private fun WinnerSelectionDialog(
     candidates: List<PollCandidateUiModel>,
-    isTied: Boolean,
     onDismiss: () -> Unit,
     onSelectWinner: (String) -> Unit,
 ) {
-    if (isTied) {
-        val maxVotes = candidates.maxOfOrNull { it.voteCount } ?: 0
-        val tiedCandidates = candidates.filter { it.voteCount == maxVotes }.shuffled()
-        TiedCoinFlipDialog(
-            tiedCandidates = tiedCandidates,
-            onDismiss = onDismiss,
-            onSelectWinner = onSelectWinner,
-        )
-    } else {
-        AlertDialog(
-            onDismissRequest = onDismiss,
-            title = { Text("Seleccionar ganador") },
-            text = {
-                Column(verticalArrangement = Arrangement.spacedBy(8.dp)) {
-                    candidates.forEach { uiModel ->
-                        Card(
-                            onClick = { onSelectWinner(uiModel.candidate.id) },
-                            modifier = Modifier.fillMaxWidth(),
-                            shape = RoundedCornerShape(8.dp),
+    AlertDialog(
+        onDismissRequest = onDismiss,
+        title = { Text("Seleccionar ganador") },
+        text = {
+            Column(verticalArrangement = Arrangement.spacedBy(8.dp)) {
+                candidates.forEach { uiModel ->
+                    Card(
+                        onClick = { onSelectWinner(uiModel.candidate.id) },
+                        modifier = Modifier.fillMaxWidth(),
+                        shape = RoundedCornerShape(8.dp),
+                    ) {
+                        Row(
+                            modifier = Modifier.fillMaxWidth().padding(12.dp),
+                            verticalAlignment = Alignment.CenterVertically,
+                            horizontalArrangement = Arrangement.SpaceBetween,
                         ) {
-                            Row(
-                                modifier = Modifier
-                                    .fillMaxWidth()
-                                    .padding(12.dp),
-                                verticalAlignment = Alignment.CenterVertically,
-                                horizontalArrangement = Arrangement.SpaceBetween,
-                            ) {
-                                Text(
-                                    text = uiModel.candidate.name,
-                                    style = MaterialTheme.typography.bodyMedium,
-                                    fontWeight = FontWeight.Medium,
-                                    modifier = Modifier.weight(1f),
-                                    maxLines = 1,
-                                    overflow = TextOverflow.Ellipsis,
+                            Text(
+                                uiModel.candidate.name,
+                                style = MaterialTheme.typography.bodyMedium,
+                                fontWeight = FontWeight.Medium,
+                                modifier = Modifier.weight(1f),
+                                maxLines = 1,
+                                overflow = TextOverflow.Ellipsis,
+                            )
+                            Spacer(modifier = Modifier.width(8.dp))
+                            Row(verticalAlignment = Alignment.CenterVertically) {
+                                Icon(
+                                    Icons.Default.ThumbUp,
+                                    contentDescription = null,
+                                    modifier = Modifier.size(14.dp),
+                                    tint = MaterialTheme.colorScheme.onSurfaceVariant,
                                 )
-                                Spacer(modifier = Modifier.width(8.dp))
-                                Row(verticalAlignment = Alignment.CenterVertically) {
-                                    Icon(
-                                        Icons.Default.ThumbUp,
-                                        contentDescription = null,
-                                        modifier = Modifier.size(14.dp),
-                                        tint = MaterialTheme.colorScheme.onSurfaceVariant,
-                                    )
-                                    Spacer(modifier = Modifier.width(4.dp))
-                                    Text(
-                                        text = "${uiModel.voteCount}",
-                                        style = MaterialTheme.typography.labelMedium,
-                                        color = MaterialTheme.colorScheme.onSurfaceVariant,
-                                    )
-                                }
+                                Spacer(modifier = Modifier.width(4.dp))
+                                Text(
+                                    "${uiModel.voteCount}",
+                                    style = MaterialTheme.typography.labelMedium,
+                                    color = MaterialTheme.colorScheme.onSurfaceVariant,
+                                )
                             }
                         }
                     }
                 }
-            },
-            confirmButton = {},
-            dismissButton = {
-                TextButton(onClick = onDismiss) { Text("Cancelar") }
-            },
-        )
-    }
+            }
+        },
+        confirmButton = {},
+        dismissButton = { TextButton(onClick = onDismiss) { Text("Cancelar") } },
+    )
 }
 
 @Composable
@@ -1004,8 +867,7 @@ private fun TiedCoinFlipDialog(
             coinScale.snapTo(0.72f)
             launch { coinScale.animateTo(1f, tween(750, easing = FastOutSlowInEasing)) }
             val landFront = Random.nextBoolean()
-            val landing = if (landFront) 0f else 180f
-            rotation.animateTo(1440f + landing, tween(2600, easing = LinearOutSlowInEasing))
+            rotation.animateTo(1440f + if (landFront) 0f else 180f, tween(2600, easing = LinearOutSlowInEasing))
             winner = if (landFront) front else back
             winAlpha.animateTo(1f, tween(480, easing = FastOutSlowInEasing))
             isFlipping = false
@@ -1013,22 +875,13 @@ private fun TiedCoinFlipDialog(
     }
 
     Dialog(onDismissRequest = onDismiss) {
-        Surface(
-            shape = RoundedCornerShape(28.dp),
-            color = MaterialTheme.colorScheme.surface,
-            tonalElevation = 6.dp,
-        ) {
+        Surface(shape = RoundedCornerShape(28.dp), color = MaterialTheme.colorScheme.surface, tonalElevation = 6.dp) {
             Column(
                 modifier = Modifier.padding(24.dp),
                 horizontalAlignment = Alignment.CenterHorizontally,
                 verticalArrangement = Arrangement.spacedBy(16.dp),
             ) {
-                Text(
-                    "¡Hay un empate! 🤝",
-                    style = MaterialTheme.typography.titleLarge,
-                    fontWeight = FontWeight.Bold,
-                    textAlign = TextAlign.Center,
-                )
+                Text("¡Hay un empate! 🤝", style = MaterialTheme.typography.titleLarge, fontWeight = FontWeight.Bold, textAlign = TextAlign.Center)
                 Text(
                     tiedCandidates.joinToString("  ·  ") { it.candidate.name.take(14) },
                     style = MaterialTheme.typography.bodyMedium,
@@ -1045,11 +898,7 @@ private fun TiedCoinFlipDialog(
                 Box(
                     modifier = Modifier
                         .size(148.dp)
-                        .graphicsLayer {
-                            rotationY = rotation.value
-                            scaleX = coinScale.value
-                            scaleY = coinScale.value
-                        }
+                        .graphicsLayer { rotationY = rotation.value; scaleX = coinScale.value; scaleY = coinScale.value }
                         .clip(CircleShape)
                         .background(Brush.radialGradient(if (showFront) coinFront else coinBack)),
                     contentAlignment = Alignment.Center,
@@ -1058,63 +907,42 @@ private fun TiedCoinFlipDialog(
                         horizontalAlignment = Alignment.CenterHorizontally,
                         modifier = Modifier.graphicsLayer { scaleX = if (showFront) 1f else -1f },
                     ) {
-                        Text(
-                            faceName.first().toString(),
-                            fontSize = 52.sp,
-                            fontWeight = FontWeight.ExtraBold,
-                            color = Color(0xFF7A4200),
-                        )
-                        Text(
-                            faceName.take(4).uppercase(),
-                            fontSize = 11.sp,
-                            fontWeight = FontWeight.Bold,
-                            color = Color(0xFF7A4200).copy(alpha = 0.6f),
-                            letterSpacing = 2.sp,
-                        )
+                        Text(faceName.first().toString(), fontSize = 52.sp, fontWeight = FontWeight.ExtraBold, color = Color(0xFF7A4200))
+                        Text(faceName.take(4).uppercase(), fontSize = 11.sp, fontWeight = FontWeight.Bold, color = Color(0xFF7A4200).copy(alpha = 0.6f), letterSpacing = 2.sp)
                     }
                 }
 
                 when {
-                    winner != null -> {
-                        Column(
-                            horizontalAlignment = Alignment.CenterHorizontally,
-                            verticalArrangement = Arrangement.spacedBy(8.dp),
-                            modifier = Modifier.graphicsLayer { this.alpha = winAlpha.value },
-                        ) {
-                            Text("🎉", fontSize = 40.sp)
-                            Text(
-                                "¡Ganó ${winner!!.candidate.name}!",
-                                style = MaterialTheme.typography.titleMedium,
-                                fontWeight = FontWeight.Bold,
-                                textAlign = TextAlign.Center,
-                                color = MaterialTheme.colorScheme.primary,
-                            )
-                            Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
-                                TextButton(onClick = {
-                                    scope.launch {
-                                        winner = null
-                                        winAlpha.snapTo(0f)
-                                        rotation.snapTo(0f)
-                                        coinScale.snapTo(0.72f)
-                                    }
-                                }) { Text("↺  Volver a tirar") }
-                                Button(onClick = { onSelectWinner(winner!!.candidate.id) }) {
-                                    Text("Confirmar")
+                    winner != null -> Column(
+                        horizontalAlignment = Alignment.CenterHorizontally,
+                        verticalArrangement = Arrangement.spacedBy(8.dp),
+                        modifier = Modifier.graphicsLayer { this.alpha = winAlpha.value },
+                    ) {
+                        Text("🎉", fontSize = 40.sp)
+                        Text(
+                            "¡Ganó ${winner!!.candidate.name}!",
+                            style = MaterialTheme.typography.titleMedium,
+                            fontWeight = FontWeight.Bold,
+                            textAlign = TextAlign.Center,
+                            color = MaterialTheme.colorScheme.primary,
+                        )
+                        Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
+                            TextButton(onClick = {
+                                scope.launch {
+                                    winner = null
+                                    winAlpha.snapTo(0f)
+                                    rotation.snapTo(0f)
+                                    coinScale.snapTo(0.72f)
                                 }
-                            }
+                            }) { Text("↺  Volver a tirar") }
+                            Button(onClick = { onSelectWinner(winner!!.candidate.id) }) { Text("Confirmar") }
                         }
                     }
-                    isFlipping -> Text(
-                        "Girando...",
-                        style = MaterialTheme.typography.bodyMedium,
-                        color = MaterialTheme.colorScheme.onSurfaceVariant,
-                    )
+                    isFlipping -> Text("Girando...", style = MaterialTheme.typography.bodyMedium, color = MaterialTheme.colorScheme.onSurfaceVariant)
                     else -> Button(
                         onClick = { flip() },
                         colors = ButtonDefaults.buttonColors(containerColor = Color(0xFFE6A000)),
-                    ) {
-                        Text("🪙  Tirar moneda", color = Color.White, fontWeight = FontWeight.Bold)
-                    }
+                    ) { Text("🪙  Tirar moneda", color = Color.White, fontWeight = FontWeight.Bold) }
                 }
 
                 TextButton(onClick = onDismiss) { Text("Cancelar") }
@@ -1122,6 +950,8 @@ private fun TiedCoinFlipDialog(
         }
     }
 }
+
+// ── Winner overlay (confetti) ─────────────────────────────────────────────────
 
 @Composable
 private fun WinnerOverlay(
@@ -1143,10 +973,7 @@ private fun WinnerOverlay(
 
     val contentScale by animateFloatAsState(
         targetValue = if (started) 1f else 0.5f,
-        animationSpec = spring(
-            dampingRatio = Spring.DampingRatioMediumBouncy,
-            stiffness = Spring.StiffnessMediumLow,
-        ),
+        animationSpec = spring(dampingRatio = Spring.DampingRatioMediumBouncy, stiffness = Spring.StiffnessMediumLow),
         label = "scale",
     )
     val alpha by animateFloatAsState(
@@ -1158,17 +985,13 @@ private fun WinnerOverlay(
     val confetti = remember(animKey) { buildConfetti() }
     val inf = rememberInfiniteTransition(label = "confetti")
     val progress by inf.animateFloat(
-        initialValue = 0f,
-        targetValue = 1f,
+        initialValue = 0f, targetValue = 1f,
         animationSpec = infiniteRepeatable(tween(2800, easing = LinearEasing), RepeatMode.Restart),
         label = "fall",
     )
 
     Box(
-        modifier = Modifier
-            .fillMaxSize()
-            .background(Color(0xED000000))
-            .clickable(onClick = onDismiss),
+        modifier = Modifier.fillMaxSize().background(Color(0xED000000)).clickable(onClick = onDismiss),
         contentAlignment = Alignment.Center,
     ) {
         Canvas(Modifier.fillMaxSize().graphicsLayer { this.alpha = alpha }) {
@@ -1178,11 +1001,7 @@ private fun WinnerOverlay(
                 val py = (t - 0.15f) * size.height * 1.15f
                 if (py < -piece.h || py > size.height + piece.h) return@forEach
                 rotate(degrees = t * 540f * piece.speed + piece.rot0, pivot = Offset(px, py)) {
-                    drawRect(
-                        color = piece.color,
-                        topLeft = Offset(px - piece.w / 2f, py - piece.h / 2f),
-                        size = Size(piece.w, piece.h),
-                    )
+                    drawRect(piece.color, topLeft = Offset(px - piece.w / 2f, py - piece.h / 2f), size = Size(piece.w, piece.h))
                 }
             }
         }
@@ -1196,13 +1015,13 @@ private fun WinnerOverlay(
         ) {
             Text("🏆", fontSize = 68.sp)
             Text(
-                text = if (isDestinationPoll) "¡Nos vamos a" else "¡Vamos a",
+                if (isDestinationPoll) "¡Nos vamos a" else "¡Vamos a",
                 style = MaterialTheme.typography.titleLarge,
                 color = Color.White.copy(alpha = 0.72f),
                 textAlign = TextAlign.Center,
             )
             Text(
-                text = "$winnerName!",
+                "$winnerName!",
                 style = MaterialTheme.typography.displaySmall,
                 color = Color.White,
                 fontWeight = FontWeight.Bold,
@@ -1210,12 +1029,9 @@ private fun WinnerOverlay(
                 textAlign = TextAlign.Center,
             )
             Spacer(Modifier.height(4.dp))
-            Surface(
-                shape = RoundedCornerShape(50),
-                color = Color(0xFF2563EB).copy(alpha = 0.30f),
-            ) {
+            Surface(shape = RoundedCornerShape(50), color = Color(0xFF2563EB).copy(alpha = 0.30f)) {
                 Text(
-                    text = "👍  $voteCount de $totalVotes votos",
+                    "👍  $voteCount de $totalVotes votos",
                     modifier = Modifier.padding(horizontal = 22.dp, vertical = 9.dp),
                     style = MaterialTheme.typography.bodyLarge,
                     color = Color.White,
@@ -1223,24 +1039,14 @@ private fun WinnerOverlay(
                 )
             }
             Spacer(Modifier.height(10.dp))
-            Text(
-                "Toca para continuar",
-                style = MaterialTheme.typography.bodySmall,
-                color = Color.White.copy(alpha = 0.38f),
-            )
+            Text("Toca para continuar", style = MaterialTheme.typography.bodySmall, color = Color.White.copy(alpha = 0.38f))
         }
     }
 }
 
 private data class ConfettiPiece(
-    val xFrac: Float,
-    val startOffset: Float,
-    val color: Color,
-    val w: Float,
-    val h: Float,
-    val speed: Float,
-    val rot0: Float,
-    val wobble: Float,
+    val xFrac: Float, val startOffset: Float, val color: Color,
+    val w: Float, val h: Float, val speed: Float, val rot0: Float, val wobble: Float,
 )
 
 private fun buildConfetti(): List<ConfettiPiece> {
@@ -1251,14 +1057,98 @@ private fun buildConfetti(): List<ConfettiPiece> {
     )
     return (0..80).map {
         ConfettiPiece(
-            xFrac = Random.nextFloat(),
-            startOffset = Random.nextFloat(),
+            xFrac = Random.nextFloat(), startOffset = Random.nextFloat(),
             color = palette.random(),
-            w = Random.nextFloat() * 14f + 7f,
-            h = Random.nextFloat() * 9f + 5f,
+            w = Random.nextFloat() * 14f + 7f, h = Random.nextFloat() * 9f + 5f,
             speed = Random.nextFloat() * 0.38f + 0.78f,
             rot0 = Random.nextFloat() * 360f,
             wobble = Random.nextFloat() * 0.055f + 0.008f,
         )
+    }
+}
+
+// ── Poll creation bottom sheet ────────────────────────────────────────────────
+
+@OptIn(ExperimentalMaterial3Api::class)
+@Composable
+private fun PollCreationBottomSheet(
+    onDismiss: () -> Unit,
+    onCreate: (type: PollType, name: String, expiresAt: String?) -> Unit,
+) {
+    val sheetState = rememberModalBottomSheetState(skipPartiallyExpanded = true)
+    var selectedType by rememberSaveable { mutableStateOf(PollType.DESTINATION) }
+    var pollName by rememberSaveable { mutableStateOf("¿A dónde vamos?") }
+    var showDatePicker by rememberSaveable { mutableStateOf(false) }
+    var expiresAt by rememberSaveable { mutableStateOf<String?>(null) }
+    val datePickerState = rememberDatePickerState()
+
+    ModalBottomSheet(onDismissRequest = onDismiss, sheetState = sheetState) {
+        Column(
+            modifier = Modifier.fillMaxWidth().padding(horizontal = 24.dp).padding(bottom = 32.dp),
+            verticalArrangement = Arrangement.spacedBy(8.dp),
+        ) {
+            Text("Nueva encuesta", style = MaterialTheme.typography.titleLarge, fontFamily = FrauncesFamily, fontWeight = FontWeight.Medium)
+            Spacer(modifier = Modifier.height(4.dp))
+            Text("Tipo de encuesta", style = MaterialTheme.typography.labelLarge, color = MaterialTheme.colorScheme.onSurfaceVariant)
+
+            Column(modifier = Modifier.selectableGroup()) {
+                listOf(PollType.DESTINATION to "Destino", PollType.ACTIVITY to "Actividad").forEach { (type, label) ->
+                    Row(
+                        modifier = Modifier
+                            .fillMaxWidth()
+                            .selectable(
+                                selected = selectedType == type,
+                                onClick = {
+                                    selectedType = type
+                                    pollName = if (type == PollType.DESTINATION) "¿A dónde vamos?" else "¿Qué hacemos?"
+                                },
+                                role = Role.RadioButton,
+                            )
+                            .padding(vertical = 4.dp),
+                        verticalAlignment = Alignment.CenterVertically,
+                    ) {
+                        RadioButton(selected = selectedType == type, onClick = null)
+                        Spacer(modifier = Modifier.width(8.dp))
+                        Text(label, style = MaterialTheme.typography.bodyLarge)
+                    }
+                }
+            }
+
+            OutlinedTextField(
+                value = pollName, onValueChange = { pollName = it },
+                label = { Text("Nombre de la encuesta") },
+                singleLine = true, modifier = Modifier.fillMaxWidth(),
+            )
+
+            Spacer(modifier = Modifier.height(4.dp))
+            Text("Vencimiento (opcional)", style = MaterialTheme.typography.labelLarge, color = MaterialTheme.colorScheme.onSurfaceVariant)
+            OutlinedButton(onClick = { showDatePicker = true }, modifier = Modifier.fillMaxWidth()) {
+                Text(expiresAt ?: "Seleccionar fecha de vencimiento")
+            }
+            Spacer(modifier = Modifier.height(8.dp))
+
+            Row(modifier = Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.spacedBy(12.dp)) {
+                OutlinedButton(onClick = onDismiss, modifier = Modifier.weight(1f)) { Text("Cancelar") }
+                FilledTonalButton(onClick = { onCreate(selectedType, pollName, expiresAt) }, modifier = Modifier.weight(1f)) { Text("Crear") }
+            }
+        }
+    }
+
+    if (showDatePicker) {
+        DatePickerDialog(
+            onDismissRequest = { showDatePicker = false },
+            confirmButton = {
+                TextButton(onClick = {
+                    datePickerState.selectedDateMillis?.let { millis ->
+                        expiresAt = Instant.ofEpochMilli(millis)
+                            .atZone(ZoneOffset.UTC).toLocalDate()
+                            .atTime(23, 59, 59).atOffset(ZoneOffset.UTC)
+                            .format(java.time.format.DateTimeFormatter.ISO_OFFSET_DATE_TIME)
+                    }
+                    showDatePicker = false
+                }) { Text("Aceptar") }
+            },
+            dismissButton = { TextButton(onClick = { showDatePicker = false }) { Text("Cancelar") } },
+        ) { DatePicker(state = datePickerState) }
     }
 }

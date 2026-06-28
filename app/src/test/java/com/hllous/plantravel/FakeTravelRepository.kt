@@ -449,9 +449,9 @@ class FakeTravelRepository(
         }
     }
 
-    override suspend fun setPollWinner(pollId: String, placeId: String) {
+    override suspend fun setPollWinner(pollId: String, placeId: String, photoUrl: String?) {
         _pollsByGroup.value = _pollsByGroup.value.mapValues { (_, polls) ->
-            polls.map { if (it.id == pollId) it.copy(winnerPlaceId = placeId) else it }
+            polls.map { if (it.id == pollId) it.copy(winnerPlaceId = placeId, winnerPhotoUrl = photoUrl) else it }
         }
     }
 
@@ -481,6 +481,8 @@ class FakeTravelRepository(
     fun simulateItineraryEventPush(groupId: String, events: List<ItineraryEvent>) {
         _itineraryEvents.value = _itineraryEvents.value.toMutableMap().also { it[groupId] = events }
     }
+
+    fun getPollsForGroup(groupId: String): List<Poll> = _pollsByGroup.value[groupId] ?: emptyList()
 
     fun simulatePollUpdate(groupId: String, poll: Poll?) {
         val current = _pollsByGroup.value.toMutableMap()

@@ -69,7 +69,7 @@ interface TravelRepository {
     suspend fun addPollCandidate(pollId: String, placeId: String, name: String, photoUrl: String, lat: Double = 0.0, lng: Double = 0.0): String
     suspend fun toggleVote(candidateId: String, memberId: String, pollId: String)
     suspend fun closePoll(pollId: String)
-    suspend fun setPollWinner(pollId: String, placeId: String)
+    suspend fun setPollWinner(pollId: String, placeId: String, photoUrl: String? = null)
     suspend fun deletePoll(pollId: String)
     fun observePollCandidates(pollId: String): Flow<List<PollCandidate>>
 

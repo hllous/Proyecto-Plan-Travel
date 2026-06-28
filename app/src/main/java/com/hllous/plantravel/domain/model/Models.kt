@@ -114,6 +114,7 @@ data class Poll(
     val name: String = "",
     val expiresAt: String? = null,
     val winnerPlaceId: String? = null,
+    val winnerPhotoUrl: String? = null,
 )
 
 data class PollCandidate(

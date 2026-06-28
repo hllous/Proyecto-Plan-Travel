@@ -306,6 +306,7 @@ class SupabaseTravelRepositoryImpl @Inject constructor(
         val name: String = "",
         @SerialName("expires_at") val expiresAt: String? = null,
         @SerialName("winner_place_id") val winnerPlaceId: String? = null,
+        @SerialName("winner_photo_url") val winnerPhotoUrl: String? = null,
         @SerialName("created_at") val createdAt: String? = null,
     ) {
         fun toDomain() = Poll(
@@ -313,7 +314,9 @@ class SupabaseTravelRepositoryImpl @Inject constructor(
             type = if (type.equals("destination", ignoreCase = true)) PollType.DESTINATION else PollType.ACTIVITY,
             state = if (state.equals("closed", ignoreCase = true)) PollState.CLOSED else PollState.OPEN,
             name = name,
-            expiresAt = expiresAt, winnerPlaceId = winnerPlaceId,
+            expiresAt = expiresAt,
+            winnerPlaceId = winnerPlaceId,
+            winnerPhotoUrl = winnerPhotoUrl,
         )
     }
 
@@ -1113,13 +1116,14 @@ class SupabaseTravelRepositoryImpl @Inject constructor(
         sendBroadcast("group-polls-broadcast-$groupId", "poll_changed")
     }
 
-    override suspend fun setPollWinner(pollId: String, placeId: String) {
+    override suspend fun setPollWinner(pollId: String, placeId: String, photoUrl: String?) {
         val groupId = supabase.from("group_polls")
             .select { filter { eq("id", pollId) } }
             .decodeList<PollDto>().firstOrNull()?.groupId ?: return
-        supabase.from("group_polls").update({ set("winner_place_id", placeId) }) {
-            filter { eq("id", pollId) }
-        }
+        supabase.from("group_polls").update({
+            set("winner_place_id", placeId)
+            set("winner_photo_url", photoUrl)
+        }) { filter { eq("id", pollId) } }
         sendBroadcast("group-polls-broadcast-$groupId", "poll_changed")
     }
 

@@ -191,16 +191,16 @@ class PollViewModelTest {
         job.cancel()
     }
 
-    // ── Test 5: selectWinner calls setPollWinner AND setTripDestination ───────
+    // ── Test 5: selectWinner calls setPollWinner only; setTripDestination is a separate step ──
 
     @Test
-    fun selectWinnerOnDestinationPollCallsBothRepositoryMethods() {
+    fun selectWinnerCallsSetPollWinnerAndDoesNotAutoSetTripDestination() {
         val repo = FakeTravelRepository()
         val holder = SelectedGroupHolder().also { it.selectedGroupId.value = "group-1" }
         repo.simulatePollUpdate("group-1", openPoll)
         val winnerCandidate = PollCandidate(
             id = "cand-win", pollId = "poll-1", placeId = "place-win",
-            name = "Ganador", photoUrl = "", addedByMemberId = "m1",
+            name = "Ganador", photoUrl = "http://photo.com/img.jpg", addedByMemberId = "m1",
         )
         repo.simulateCandidatesUpdate("poll-1", listOf(winnerCandidate))
 
@@ -209,9 +209,28 @@ class PollViewModelTest {
 
         vm.selectWinner("cand-win")
 
+        assertEquals(0, repo.setTripDestinationCallCount)
+        val updatedPoll = repo.getPollsForGroup("group-1").firstOrNull { it.id == "poll-1" }
+        assertEquals("place-win", updatedPoll?.winnerPlaceId)
+        assertEquals("http://photo.com/img.jpg", updatedPoll?.winnerPhotoUrl)
+        job.cancel()
+    }
+
+    @Test
+    fun setWinnerAsDestinationCallsSetTripDestination() {
+        val repo = FakeTravelRepository()
+        val holder = SelectedGroupHolder().also { it.selectedGroupId.value = "group-1" }
+        val vm = viewModel(repo = repo, holder = holder)
+
+        vm.setWinnerAsDestination(
+            placeId = "place-win",
+            name = "Bariloche",
+            lat = -41.1,
+            lng = -71.3,
+        )
+
         assertEquals(1, repo.setTripDestinationCallCount)
         assertEquals("place-win", repo.lastTripDestinationPlaceId)
-        job.cancel()
     }
 
     // ── Test 6: createPoll when already active surfaces error message ─────────

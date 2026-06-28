@@ -236,7 +236,6 @@ class PollViewModel @Inject constructor(
 
     fun selectWinner(candidateId: String) {
         val activePoll = screenPoll.value ?: return
-        val groupId = selectedGroupHolder.selectedGroupId.value ?: return
         val winner = (candidates.value as? UiState.Success)
             ?.data?.firstOrNull { it.candidate.id == candidateId }
             ?.candidate ?: return
@@ -244,18 +243,23 @@ class PollViewModel @Inject constructor(
             _isSubmitting.value = true
             try {
                 runCatching {
-                    repository.setPollWinner(activePoll.id, winner.placeId)
-                    if (activePoll.type == PollType.DESTINATION) {
-                        repository.setTripDestination(
-                            groupId = groupId,
-                            placeId = winner.placeId,
-                            name = winner.name,
-                            lat = winner.lat,
-                            lng = winner.lng,
-                        )
-                    }
+                    repository.setPollWinner(activePoll.id, winner.placeId, winner.photoUrl)
                 }
                 reloadPoll()
+            } finally {
+                _isSubmitting.value = false
+            }
+        }
+    }
+
+    fun setWinnerAsDestination(placeId: String, name: String, lat: Double, lng: Double) {
+        val groupId = selectedGroupHolder.selectedGroupId.value ?: return
+        viewModelScope.launch {
+            _isSubmitting.value = true
+            try {
+                runCatching {
+                    repository.setTripDestination(groupId, placeId, name, lat, lng)
+                }.onFailure { _errorMessage.value = "Error al seleccionar destino" }
             } finally {
                 _isSubmitting.value = false
             }
