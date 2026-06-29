@@ -1,0 +1,665 @@
+<!DOCTYPE html>
+<html lang="es">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=390, initial-scale=1.0">
+<title>Prototype — Rec Cards</title>
+<!-- PROTOTYPE — throwaway. Question: how should the recommendation scroll cards look? -->
+<link href="https://fonts.googleapis.com/css2?family=Fraunces:ital,opsz,wght@0,9..144,600;0,9..144,700&family=Inter:wght@400;500;600;700&display=swap" rel="stylesheet">
+<style>
+  *, *::before, *::after { box-sizing: border-box; margin: 0; padding: 0; }
+
+  /* ── M3 tokens — light ──────────────────────────────────────────── */
+  :root {
+    --primary:               #3B5BDB;
+    --on-primary:            #FFFFFF;
+    --primary-container:     #DBE4FF;
+    --on-primary-container:  #00175C;
+    --secondary:             #0077B6;
+    --on-secondary:          #FFFFFF;
+    --secondary-container:   #CCEEFF;
+    --on-secondary-container:#002F44;
+    --tertiary:              #9C5700;
+    --on-tertiary:           #FFFFFF;
+    --tertiary-container:    #FFDDB5;
+    --on-tertiary-container: #311400;
+    --surface:               #FFFFFF;
+    --surface-container-low: #F4F4FA;
+    --on-surface:            #1A1A2E;
+    --on-surface-variant:    #666680;
+    --outline:               #999AAD;
+    --background:            #F4F4FA;
+    --page-bg:               #E0E0EC;
+  }
+
+  .dark {
+    --primary:               #ADC0FF;
+    --on-primary:            #002299;
+    --primary-container:     #1E3BBF;
+    --on-primary-container:  #DBE4FF;
+    --secondary:             #72CFFF;
+    --on-secondary:          #003D5C;
+    --secondary-container:   #005580;
+    --on-secondary-container:#CCEEFF;
+    --tertiary:              #FFB770;
+    --on-tertiary:           #522300;
+    --tertiary-container:    #743200;
+    --on-tertiary-container: #FFDDB5;
+    --surface:               #1C1C2A;
+    --surface-container-low: #141420;
+    --on-surface:            #E5E5F0;
+    --on-surface-variant:    #A0A0BC;
+    --outline:               #606078;
+    --background:            #141420;
+    --page-bg:               #0A0A14;
+  }
+
+  html, body { height: 100%; }
+  body {
+    background: var(--page-bg);
+    min-height: 100vh;
+    font-family: 'Inter', sans-serif;
+    padding: 24px 0 120px;
+    transition: background .3s;
+  }
+
+  /* ── Section title ──────────────────────────────────────────────── */
+  .section-label {
+    font-size: 10px;
+    font-weight: 800;
+    letter-spacing: 1.2px;
+    text-transform: uppercase;
+    color: var(--on-surface-variant);
+    padding: 0 20px 10px;
+  }
+
+  /* ── Scroll row ─────────────────────────────────────────────────── */
+  .scroll-row {
+    display: flex;
+    gap: 10px;
+    overflow-x: auto;
+    padding: 0 20px 4px;
+    scrollbar-width: none;
+  }
+  .scroll-row::-webkit-scrollbar { display: none; }
+
+  /* ── Variant panel ──────────────────────────────────────────────── */
+  .variant { display: none; padding-top: 28px; }
+  .variant.active { display: block; }
+
+  /* ── Variant header ─────────────────────────────────────────────── */
+  .variant-header {
+    padding: 0 20px 18px;
+    color: var(--on-surface);
+  }
+  .variant-header h2 {
+    font-family: 'Fraunces', serif;
+    font-size: 20px;
+    font-weight: 700;
+    margin-bottom: 4px;
+  }
+  .variant-header p {
+    font-size: 13px;
+    color: var(--on-surface-variant);
+    line-height: 1.5;
+  }
+
+  /* ════════════════════════════════════════════════════════════════
+     VARIANT A — Blanco clásico
+     Card body: white surface, gradient image placeholder, colored pill
+  ════════════════════════════════════════════════════════════════ */
+  .card-a {
+    width: 130px;
+    flex-shrink: 0;
+    border-radius: 18px;
+    background: var(--surface);
+    box-shadow: 0 1px 3px rgba(0,0,0,.12), 0 1px 2px rgba(0,0,0,.08);
+    overflow: hidden;
+    cursor: pointer;
+    transition: box-shadow .15s;
+  }
+  .card-a:hover { box-shadow: 0 4px 12px rgba(0,0,0,.18); }
+
+  .card-a .img {
+    width: 100%;
+    height: 88px;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    font-size: 28px;
+  }
+  .card-a.dest-rec .img { background: linear-gradient(135deg, var(--primary-container), var(--secondary-container)); }
+  .card-a.act-rec  .img { background: linear-gradient(135deg, var(--tertiary-container), var(--primary-container)); }
+
+  .card-a .body { padding: 10px; display: flex; flex-direction: column; gap: 4px; }
+
+  .card-a .pill {
+    align-self: flex-start;
+    font-size: 9px;
+    font-weight: 800;
+    letter-spacing: 0.5px;
+    text-transform: uppercase;
+    padding: 2px 7px;
+    border-radius: 100px;
+  }
+  .card-a.dest-rec .pill { background: var(--secondary-container); color: var(--on-secondary-container); }
+  .card-a.act-rec  .pill { background: var(--primary-container);   color: var(--on-primary-container); }
+
+  .card-a .name {
+    font-family: 'Fraunces', serif;
+    font-size: 12px;
+    font-weight: 600;
+    color: var(--on-surface);
+    line-height: 1.25;
+    display: -webkit-box;
+    -webkit-line-clamp: 2;
+    -webkit-box-orient: vertical;
+    overflow: hidden;
+  }
+  .card-a .meta {
+    font-size: 10px;
+    color: var(--on-surface-variant);
+    display: flex;
+    align-items: center;
+    gap: 2px;
+  }
+  .card-a .meta .star { color: var(--primary); font-size: 10px; }
+
+  /* ════════════════════════════════════════════════════════════════
+     VARIANT B — Contenedor de color
+     Card body: full primaryContainer / tertiaryContainer background,
+     contrasting pill and text colors
+  ════════════════════════════════════════════════════════════════ */
+  .card-b {
+    width: 130px;
+    flex-shrink: 0;
+    border-radius: 18px;
+    overflow: hidden;
+    cursor: pointer;
+    transition: opacity .15s;
+  }
+  .card-b:hover { opacity: .9; }
+
+  .card-b.dest-rec { background: var(--primary-container); }
+  .card-b.act-rec  { background: var(--tertiary-container); }
+
+  .card-b .img {
+    width: 100%;
+    height: 88px;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    font-size: 28px;
+  }
+  .card-b.dest-rec .img { background: linear-gradient(135deg, var(--primary), var(--secondary-container)); }
+  .card-b.act-rec  .img { background: linear-gradient(135deg, var(--tertiary), var(--primary-container)); }
+
+  .card-b .body { padding: 10px; display: flex; flex-direction: column; gap: 4px; }
+
+  .card-b .pill {
+    align-self: flex-start;
+    font-size: 9px;
+    font-weight: 800;
+    letter-spacing: 0.5px;
+    text-transform: uppercase;
+    padding: 2px 7px;
+    border-radius: 100px;
+  }
+  .card-b.dest-rec .pill { background: var(--secondary-container); color: var(--on-secondary-container); }
+  .card-b.act-rec  .pill { background: var(--primary-container);   color: var(--on-primary-container); }
+
+  .card-b .name {
+    font-family: 'Fraunces', serif;
+    font-size: 12px;
+    font-weight: 600;
+    line-height: 1.25;
+    display: -webkit-box;
+    -webkit-line-clamp: 2;
+    -webkit-box-orient: vertical;
+    overflow: hidden;
+  }
+  .card-b.dest-rec .name { color: var(--on-primary-container); }
+  .card-b.act-rec  .name { color: var(--on-tertiary-container); }
+
+  .card-b .meta { font-size: 10px; display: flex; align-items: center; gap: 2px; }
+  .card-b.dest-rec .meta { color: var(--on-primary-container); opacity: .7; }
+  .card-b.act-rec  .meta { color: var(--on-tertiary-container); opacity: .7; }
+  .card-b .meta .star { font-size: 10px; opacity: 1; }
+
+  /* ════════════════════════════════════════════════════════════════
+     VARIANT C — Imagen dominante con overlay
+     Full-height image, text overlaid at bottom with gradient fade,
+     category pill floating top-left. No separate body area.
+  ════════════════════════════════════════════════════════════════ */
+  .card-c {
+    width: 130px;
+    height: 160px;
+    flex-shrink: 0;
+    border-radius: 18px;
+    overflow: hidden;
+    cursor: pointer;
+    position: relative;
+    transition: transform .15s;
+  }
+  .card-c:hover { transform: scale(1.02); }
+
+  .card-c .img {
+    position: absolute;
+    inset: 0;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    font-size: 40px;
+  }
+  .card-c.dest-rec .img { background: linear-gradient(135deg, var(--primary-container), var(--secondary-container)); }
+  .card-c.act-rec  .img { background: linear-gradient(135deg, var(--tertiary-container), var(--primary-container)); }
+
+  .card-c .overlay {
+    position: absolute;
+    inset: 0;
+    background: linear-gradient(to top, rgba(10,10,30,.75) 0%, transparent 55%);
+  }
+
+  .card-c .pill-top {
+    position: absolute;
+    top: 9px;
+    left: 9px;
+    font-size: 8px;
+    font-weight: 800;
+    letter-spacing: 0.5px;
+    text-transform: uppercase;
+    padding: 2px 7px;
+    border-radius: 100px;
+    backdrop-filter: blur(6px);
+    -webkit-backdrop-filter: blur(6px);
+  }
+  .card-c.dest-rec .pill-top { background: rgba(219,228,255,.85); color: var(--on-primary-container); }
+  .card-c.act-rec  .pill-top { background: rgba(255,221,181,.85); color: var(--on-tertiary-container); }
+
+  .card-c .text {
+    position: absolute;
+    bottom: 0;
+    left: 0;
+    right: 0;
+    padding: 10px;
+  }
+  .card-c .name {
+    font-family: 'Fraunces', serif;
+    font-size: 12px;
+    font-weight: 700;
+    color: #FFFFFF;
+    line-height: 1.25;
+    display: -webkit-box;
+    -webkit-line-clamp: 2;
+    -webkit-box-orient: vertical;
+    overflow: hidden;
+    margin-bottom: 3px;
+  }
+  .card-c .meta { font-size: 10px; color: rgba(255,255,255,.75); display: flex; align-items: center; gap: 2px; }
+  .card-c .meta .star { color: #FFD166; }
+
+  /* ── Floating switcher ──────────────────────────────────────────── */
+  .switcher {
+    position: fixed;
+    bottom: 28px;
+    left: 50%;
+    transform: translateX(-50%);
+    display: flex;
+    align-items: center;
+    gap: 0;
+    background: var(--on-surface);
+    color: var(--surface);
+    border-radius: 100px;
+    padding: 10px 6px;
+    box-shadow: 0 4px 20px rgba(0,0,0,.35);
+    font-size: 13px;
+    font-weight: 600;
+    white-space: nowrap;
+    z-index: 999;
+    user-select: none;
+  }
+  .switcher button {
+    background: none;
+    border: none;
+    color: inherit;
+    font-size: 18px;
+    cursor: pointer;
+    padding: 0 10px;
+    line-height: 1;
+    opacity: .7;
+    transition: opacity .15s;
+  }
+  .switcher button:hover { opacity: 1; }
+  .switcher .label { padding: 0 6px; }
+
+  /* ── Dark toggle ────────────────────────────────────────────────── */
+  .dark-btn {
+    position: fixed;
+    top: 16px;
+    right: 16px;
+    background: var(--surface);
+    border: 1.5px solid var(--outline);
+    border-radius: 50%;
+    width: 36px;
+    height: 36px;
+    font-size: 16px;
+    cursor: pointer;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    z-index: 999;
+    transition: background .3s;
+  }
+</style>
+</head>
+<body>
+
+<!-- Dark mode toggle -->
+<button class="dark-btn" id="darkBtn" title="Toggle dark mode">🌙</button>
+
+<!-- ── VARIANT A — Blanco clásico ─────────────────────────────────── -->
+<div class="variant active" id="varA">
+  <div class="variant-header">
+    <h2>A — Blanco clásico</h2>
+    <p>Card blanca con sombra. Imagen con gradiente de placeholder. Pill de categoría con color de la app.</p>
+  </div>
+
+  <div class="section-label">QUÉ HACER EN BARILOCHE</div>
+  <div class="scroll-row">
+    <div class="card-a act-rec">
+      <div class="img">⛷️</div>
+      <div class="body">
+        <span class="pill">Turismo</span>
+        <div class="name">Cerro Catedral</div>
+        <div class="meta"><span class="star">★</span> 4.7</div>
+      </div>
+    </div>
+    <div class="card-a act-rec">
+      <div class="img">🍺</div>
+      <div class="body">
+        <span class="pill">Gastronomía</span>
+        <div class="name">Cervecería Blest</div>
+        <div class="meta"><span class="star">★</span> 4.5</div>
+      </div>
+    </div>
+    <div class="card-a act-rec">
+      <div class="img">🚤</div>
+      <div class="body">
+        <span class="pill">Naturaleza</span>
+        <div class="name">Lago Nahuel Huapi</div>
+        <div class="meta"><span class="star">★</span> 4.9</div>
+      </div>
+    </div>
+    <div class="card-a act-rec">
+      <div class="img">🎿</div>
+      <div class="body">
+        <span class="pill">Turismo</span>
+        <div class="name">Circuito Chico</div>
+        <div class="meta"><span class="star">★</span> 4.6</div>
+      </div>
+    </div>
+  </div>
+
+  <br>
+
+  <div class="section-label">DESTINOS RECOMENDADOS</div>
+  <div class="scroll-row">
+    <div class="card-a dest-rec">
+      <div class="img">🏔️</div>
+      <div class="body">
+        <span class="pill">Patagonia</span>
+        <div class="name">Bariloche</div>
+        <div class="meta">Río Negro</div>
+      </div>
+    </div>
+    <div class="card-a dest-rec">
+      <div class="img">🌊</div>
+      <div class="body">
+        <span class="pill">Buenos Aires</span>
+        <div class="name">Mar del Plata</div>
+        <div class="meta">Buenos Aires</div>
+      </div>
+    </div>
+    <div class="card-a dest-rec">
+      <div class="img">🌿</div>
+      <div class="body">
+        <span class="pill">Litoral</span>
+        <div class="name">Iguazú</div>
+        <div class="meta">Misiones</div>
+      </div>
+    </div>
+    <div class="card-a dest-rec">
+      <div class="img">🏜️</div>
+      <div class="body">
+        <span class="pill">Cuyo</span>
+        <div class="name">Mendoza</div>
+        <div class="meta">Mendoza</div>
+      </div>
+    </div>
+  </div>
+</div>
+
+<!-- ── VARIANT B — Contenedor de color ────────────────────────────── -->
+<div class="variant" id="varB">
+  <div class="variant-header">
+    <h2>B — Contenedor de color</h2>
+    <p>Card con fondo primaryContainer / tertiaryContainer. Más color, sin fondo blanco.</p>
+  </div>
+
+  <div class="section-label">QUÉ HACER EN BARILOCHE</div>
+  <div class="scroll-row">
+    <div class="card-b act-rec">
+      <div class="img">⛷️</div>
+      <div class="body">
+        <span class="pill">Turismo</span>
+        <div class="name">Cerro Catedral</div>
+        <div class="meta"><span class="star">★</span> 4.7</div>
+      </div>
+    </div>
+    <div class="card-b act-rec">
+      <div class="img">🍺</div>
+      <div class="body">
+        <span class="pill">Gastronomía</span>
+        <div class="name">Cervecería Blest</div>
+        <div class="meta"><span class="star">★</span> 4.5</div>
+      </div>
+    </div>
+    <div class="card-b act-rec">
+      <div class="img">🚤</div>
+      <div class="body">
+        <span class="pill">Naturaleza</span>
+        <div class="name">Lago Nahuel Huapi</div>
+        <div class="meta"><span class="star">★</span> 4.9</div>
+      </div>
+    </div>
+    <div class="card-b act-rec">
+      <div class="img">🎿</div>
+      <div class="body">
+        <span class="pill">Turismo</span>
+        <div class="name">Circuito Chico</div>
+        <div class="meta"><span class="star">★</span> 4.6</div>
+      </div>
+    </div>
+  </div>
+
+  <br>
+
+  <div class="section-label">DESTINOS RECOMENDADOS</div>
+  <div class="scroll-row">
+    <div class="card-b dest-rec">
+      <div class="img">🏔️</div>
+      <div class="body">
+        <span class="pill">Patagonia</span>
+        <div class="name">Bariloche</div>
+        <div class="meta">Río Negro</div>
+      </div>
+    </div>
+    <div class="card-b dest-rec">
+      <div class="img">🌊</div>
+      <div class="body">
+        <span class="pill">Buenos Aires</span>
+        <div class="name">Mar del Plata</div>
+        <div class="meta">Buenos Aires</div>
+      </div>
+    </div>
+    <div class="card-b dest-rec">
+      <div class="img">🌿</div>
+      <div class="body">
+        <span class="pill">Litoral</span>
+        <div class="name">Iguazú</div>
+        <div class="meta">Misiones</div>
+      </div>
+    </div>
+    <div class="card-b dest-rec">
+      <div class="img">🏜️</div>
+      <div class="body">
+        <span class="pill">Cuyo</span>
+        <div class="name">Mendoza</div>
+        <div class="meta">Mendoza</div>
+      </div>
+    </div>
+  </div>
+</div>
+
+<!-- ── VARIANT C — Imagen dominante ───────────────────────────────── -->
+<div class="variant" id="varC">
+  <div class="variant-header">
+    <h2>C — Imagen dominante</h2>
+    <p>Card más alta (160px), toda la imagen, texto e ícono superpuesto con overlay oscuro. Sin área de cuerpo separada.</p>
+  </div>
+
+  <div class="section-label">QUÉ HACER EN BARILOCHE</div>
+  <div class="scroll-row">
+    <div class="card-c act-rec">
+      <div class="img">⛷️</div>
+      <div class="overlay"></div>
+      <span class="pill-top">Turismo</span>
+      <div class="text">
+        <div class="name">Cerro Catedral</div>
+        <div class="meta"><span class="star">★</span> 4.7</div>
+      </div>
+    </div>
+    <div class="card-c act-rec">
+      <div class="img">🍺</div>
+      <div class="overlay"></div>
+      <span class="pill-top">Gastronomía</span>
+      <div class="text">
+        <div class="name">Cervecería Blest</div>
+        <div class="meta"><span class="star">★</span> 4.5</div>
+      </div>
+    </div>
+    <div class="card-c act-rec">
+      <div class="img">🚤</div>
+      <div class="overlay"></div>
+      <span class="pill-top">Naturaleza</span>
+      <div class="text">
+        <div class="name">Lago Nahuel Huapi</div>
+        <div class="meta"><span class="star">★</span> 4.9</div>
+      </div>
+    </div>
+    <div class="card-c act-rec">
+      <div class="img">🎿</div>
+      <div class="overlay"></div>
+      <span class="pill-top">Turismo</span>
+      <div class="text">
+        <div class="name">Circuito Chico</div>
+        <div class="meta"><span class="star">★</span> 4.6</div>
+      </div>
+    </div>
+  </div>
+
+  <br>
+
+  <div class="section-label">DESTINOS RECOMENDADOS</div>
+  <div class="scroll-row">
+    <div class="card-c dest-rec">
+      <div class="img">🏔️</div>
+      <div class="overlay"></div>
+      <span class="pill-top">Patagonia</span>
+      <div class="text">
+        <div class="name">Bariloche</div>
+        <div class="meta">Río Negro</div>
+      </div>
+    </div>
+    <div class="card-c dest-rec">
+      <div class="img">🌊</div>
+      <div class="overlay"></div>
+      <span class="pill-top">Buenos Aires</span>
+      <div class="text">
+        <div class="name">Mar del Plata</div>
+        <div class="meta">Buenos Aires</div>
+      </div>
+    </div>
+    <div class="card-c dest-rec">
+      <div class="img">🌿</div>
+      <div class="overlay"></div>
+      <span class="pill-top">Litoral</span>
+      <div class="text">
+        <div class="name">Iguazú</div>
+        <div class="meta">Misiones</div>
+      </div>
+    </div>
+    <div class="card-c dest-rec">
+      <div class="img">🏜️</div>
+      <div class="overlay"></div>
+      <span class="pill-top">Cuyo</span>
+      <div class="text">
+        <div class="name">Mendoza</div>
+        <div class="meta">Mendoza</div>
+      </div>
+    </div>
+  </div>
+</div>
+
+<!-- ── Floating switcher ─────────────────────────────────────────── -->
+<div class="switcher" id="switcher">
+  <button id="prev">‹</button>
+  <span class="label" id="switcherLabel">A — Blanco clásico</span>
+  <button id="next">›</button>
+</div>
+
+<script>
+  const variants = [
+    { id: 'varA', label: 'A — Blanco clásico' },
+    { id: 'varB', label: 'B — Contenedor de color' },
+    { id: 'varC', label: 'C — Imagen dominante' },
+  ];
+  let current = 0;
+
+  // Read ?variant= from URL on load
+  const urlVariant = new URLSearchParams(location.search).get('variant');
+  if (urlVariant) {
+    const idx = variants.findIndex(v => v.id === 'var' + urlVariant.toUpperCase());
+    if (idx >= 0) current = idx;
+  }
+
+  function show(idx) {
+    variants.forEach((v, i) => {
+      document.getElementById(v.id).classList.toggle('active', i === idx);
+    });
+    document.getElementById('switcherLabel').textContent = variants[idx].label;
+    const params = new URLSearchParams(location.search);
+    params.set('variant', variants[idx].id.replace('var', ''));
+    history.replaceState(null, '', '?' + params.toString());
+  }
+
+  document.getElementById('prev').addEventListener('click', () => { current = (current - 1 + variants.length) % variants.length; show(current); });
+  document.getElementById('next').addEventListener('click', () => { current = (current + 1) % variants.length; show(current); });
+
+  document.addEventListener('keydown', e => {
+    if (['INPUT','TEXTAREA'].includes(document.activeElement?.tagName)) return;
+    if (e.key === 'ArrowLeft')  { current = (current - 1 + variants.length) % variants.length; show(current); }
+    if (e.key === 'ArrowRight') { current = (current + 1) % variants.length; show(current); }
+  });
+
+  // Dark mode
+  const darkBtn = document.getElementById('darkBtn');
+  darkBtn.addEventListener('click', () => {
+    document.body.classList.toggle('dark');
+    darkBtn.textContent = document.body.classList.contains('dark') ? '☀️' : '🌙';
+  });
+
+  show(current);
+</script>
+</body>
+</html>
