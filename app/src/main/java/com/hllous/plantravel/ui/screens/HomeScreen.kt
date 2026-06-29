@@ -101,10 +101,7 @@ fun HomeScreen(
     val hour = LocalTime.now().hour
     val greeting = greetingForHour(hour)
     var themeToggleCenter by remember { mutableStateOf<Offset?>(null) }
-    // PROTOTYPE — remove when design is decided
-    var protoCardVariant by remember { mutableStateOf("A") }
 
-    Box(Modifier.fillMaxSize()) {
     Column(Modifier.fillMaxSize()) {
         // ── Immersive primary header ───────────────────────────────
         Box(
@@ -216,20 +213,12 @@ fun HomeScreen(
                     currentGroup = currentGroup!!,
                     pollViewModel = pollViewModel,
                     destinationViewModel = destinationViewModel,
-                    protoCardVariant = protoCardVariant,
                 )
             } else {
                 HomeNoGroupContent(navController = navController)
             }
         }
     }
-    // PROTOTYPE switcher overlay — remove when design is decided
-    ProtoCardSwitcher(
-        current = protoCardVariant,
-        onSwitch = { protoCardVariant = it },
-        modifier = Modifier.align(Alignment.BottomCenter),
-    )
-    } // end Box
 }
 
 // ── Header blocks ───────────────────────────────────────────────────────────────
@@ -337,7 +326,6 @@ private fun HomeGroupContent(
     currentGroup: TravelGroup,
     pollViewModel: PollViewModel,
     destinationViewModel: DestinationViewModel,
-    protoCardVariant: String = "A",
 ) {
     val poll by pollViewModel.poll.collectAsState()
     val candidates by pollViewModel.candidates.collectAsState()
@@ -524,18 +512,15 @@ private fun HomeGroupContent(
                                 contentPadding = PaddingValues(horizontal = 1.dp)
                             ) {
                                 items(places) { item ->
-                                    val onClick = {
-                                        destinationViewModel.requestOpenPoi(item.place, item.category)
-                                        navController.navigateSingleTopTo("destinations")
-                                    }
-                                    if (protoCardVariant == "C") {
-                                        HomeRecommendationCardC(item = item, onClick = onClick)
-                                    } else {
-                                        HomeRecommendationCard(item = item, onClick = onClick)
-                                    }
+                                    HomeRecommendationCard(
+                                        item = item,
+                                        onClick = {
+                                            destinationViewModel.requestOpenPoi(item.place, item.category)
+                                            navController.navigateSingleTopTo("destinations")
+                                        }
+                                    )
                                 }
                             }
-                            Spacer(Modifier.height(72.dp))
                         }
                     }
                 }
@@ -566,23 +551,13 @@ private fun HomeGroupContent(
                             ) {
                                 items(destinations) { dest ->
                                     val photoKey = if (dest.id.isNotBlank()) dest.id else "${dest.source}:${dest.sourceId}"
-                                    val photoUrl = destinationPhotoUrls[photoKey] ?: dest.displayPhotoUrl
-                                    if (protoCardVariant == "C") {
-                                        HomeStoredDestinationCardC(
-                                            destination = dest,
-                                            photoUrl = photoUrl,
-                                            onClick = { navController.navigateSingleTopTo("destinations") }
-                                        )
-                                    } else {
-                                        HomeStoredDestinationCard(
-                                            destination = dest,
-                                            photoUrl = photoUrl,
-                                            onClick = { navController.navigateSingleTopTo("destinations") }
-                                        )
-                                    }
+                                    HomeStoredDestinationCard(
+                                        destination = dest,
+                                        photoUrl = destinationPhotoUrls[photoKey] ?: dest.displayPhotoUrl,
+                                        onClick = { navController.navigateSingleTopTo("destinations") }
+                                    )
                                 }
                             }
-                            Spacer(Modifier.height(72.dp))
                         }
                     }
                 }
@@ -967,82 +942,64 @@ private fun HomeActionButton(
 }
 
 @Composable
-private fun HomeRecommendationCard(
-    item: HomeFeedItem,
-    onClick: () -> Unit,
-) {
+private fun HomeRecommendationCard(item: HomeFeedItem, onClick: () -> Unit) {
     val context = LocalContext.current
-
-    ElevatedCard(
+    val tertiaryContainer = MaterialTheme.colorScheme.tertiaryContainer
+    val primaryContainer = MaterialTheme.colorScheme.primaryContainer
+    Surface(
         onClick = onClick,
-        modifier = Modifier.width(130.dp),
-        shape = RoundedCornerShape(18.dp)
+        modifier = Modifier.width(130.dp).height(160.dp),
+        shape = RoundedCornerShape(18.dp),
+        color = tertiaryContainer,
     ) {
-        Column {
+        Box(Modifier.fillMaxSize()) {
             Box(
-                modifier = Modifier
-                    .fillMaxWidth()
-                    .height(88.dp)
-                    .clip(RoundedCornerShape(topStart = 18.dp, topEnd = 18.dp))
-                    .background(Brush.linearGradient(listOf(MaterialTheme.colorScheme.tertiaryContainer, MaterialTheme.colorScheme.primaryContainer)))
+                Modifier.fillMaxSize()
+                    .background(Brush.linearGradient(listOf(tertiaryContainer, primaryContainer)))
             ) {
                 AsyncImage(
                     model = item.place.photoUrl.ifBlank { null }?.let { url ->
-                        ImageRequest.Builder(context)
-                            .data(url)
-                            .allowHardware(false)
-                            .build()
+                        ImageRequest.Builder(context).data(url).allowHardware(false).build()
                     },
                     contentDescription = item.place.name,
                     modifier = Modifier.fillMaxSize(),
                     contentScale = ContentScale.Crop,
                 )
             }
-            Column(
-                Modifier.padding(10.dp),
-                verticalArrangement = Arrangement.spacedBy(4.dp)
+            Box(Modifier.fillMaxSize().background(Brush.verticalGradient(listOf(Color.Transparent, Color(0xBF0A0A1E)))))
+            Surface(
+                modifier = Modifier.align(Alignment.TopStart).padding(9.dp),
+                shape = RoundedCornerShape(100.dp),
+                color = primaryContainer.copy(alpha = 0.85f),
             ) {
-                Surface(
-                    shape = RoundedCornerShape(100.dp),
-                    color = MaterialTheme.colorScheme.primaryContainer
-                ) {
-                    Text(
-                        text = item.category.uppercase(),
-                        modifier = Modifier.padding(horizontal = 7.dp, vertical = 2.dp),
-                        style = MaterialTheme.typography.labelSmall,
-                        fontWeight = FontWeight.ExtraBold,
-                        color = MaterialTheme.colorScheme.onPrimaryContainer,
-                        letterSpacing = 0.5.sp,
-                        fontSize = 9.sp
-                    )
-                }
+                Text(
+                    text = item.category.uppercase(),
+                    modifier = Modifier.padding(horizontal = 7.dp, vertical = 2.dp),
+                    style = MaterialTheme.typography.labelSmall,
+                    fontWeight = FontWeight.ExtraBold,
+                    color = MaterialTheme.colorScheme.onPrimaryContainer,
+                    letterSpacing = 0.5.sp,
+                    fontSize = 9.sp,
+                )
+            }
+            Column(
+                Modifier.align(Alignment.BottomStart).padding(10.dp),
+                verticalArrangement = Arrangement.spacedBy(3.dp),
+            ) {
                 Text(
                     text = item.place.name,
                     style = MaterialTheme.typography.bodySmall,
                     fontFamily = FrauncesFamily,
                     fontWeight = FontWeight.SemiBold,
-                    color = MaterialTheme.colorScheme.onSurface,
+                    color = Color.White,
                     maxLines = 2,
                     overflow = TextOverflow.Ellipsis,
-                    lineHeight = 15.sp
+                    lineHeight = 15.sp,
                 )
                 if (item.place.rating > 0.0) {
-                    Row(
-                        verticalAlignment = Alignment.CenterVertically,
-                        horizontalArrangement = Arrangement.spacedBy(2.dp)
-                    ) {
-                        Icon(
-                            Icons.Default.Star,
-                            contentDescription = null,
-                            modifier = Modifier.size(11.dp),
-                            tint = MaterialTheme.colorScheme.primary
-                        )
-                        Text(
-                            text = "%.1f".format(item.place.rating),
-                            style = MaterialTheme.typography.labelSmall,
-                            color = MaterialTheme.colorScheme.onSurfaceVariant,
-                            fontSize = 10.sp
-                        )
+                    Row(verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(2.dp)) {
+                        Icon(Icons.Default.Star, contentDescription = null, modifier = Modifier.size(11.dp), tint = Color(0xFFFFD166))
+                        Text("%.1f".format(item.place.rating), style = MaterialTheme.typography.labelSmall, color = Color.White.copy(alpha = 0.75f), fontSize = 10.sp)
                     }
                 }
             }
@@ -1051,72 +1008,66 @@ private fun HomeRecommendationCard(
 }
 
 @Composable
-private fun HomeStoredDestinationCard(
-    destination: StoredDestination,
-    photoUrl: String?,
-    onClick: () -> Unit,
-) {
+private fun HomeStoredDestinationCard(destination: StoredDestination, photoUrl: String?, onClick: () -> Unit) {
     val context = LocalContext.current
-
-    ElevatedCard(
+    val primaryContainer = MaterialTheme.colorScheme.primaryContainer
+    val secondaryContainer = MaterialTheme.colorScheme.secondaryContainer
+    Surface(
         onClick = onClick,
-        modifier = Modifier.width(130.dp),
-        shape = RoundedCornerShape(18.dp)
+        modifier = Modifier.width(130.dp).height(160.dp),
+        shape = RoundedCornerShape(18.dp),
+        color = primaryContainer,
     ) {
-        Column {
+        Box(Modifier.fillMaxSize()) {
             Box(
-                modifier = Modifier
-                    .fillMaxWidth()
-                    .height(88.dp)
-                    .clip(RoundedCornerShape(topStart = 18.dp, topEnd = 18.dp))
-                    .background(Brush.linearGradient(listOf(MaterialTheme.colorScheme.primaryContainer, MaterialTheme.colorScheme.secondaryContainer)))
+                Modifier.fillMaxSize()
+                    .background(Brush.linearGradient(listOf(primaryContainer, secondaryContainer)))
             ) {
                 AsyncImage(
                     model = photoUrl?.ifBlank { null }?.let { url ->
-                        ImageRequest.Builder(context)
-                            .data(url)
-                            .allowHardware(false)
-                            .build()
+                        ImageRequest.Builder(context).data(url).allowHardware(false).build()
                     },
                     contentDescription = destination.name,
                     modifier = Modifier.fillMaxSize(),
                     contentScale = ContentScale.Crop,
                 )
             }
-            Column(
-                Modifier.padding(10.dp),
-                verticalArrangement = Arrangement.spacedBy(4.dp)
+            Box(Modifier.fillMaxSize().background(Brush.verticalGradient(listOf(Color.Transparent, Color(0xBF0A0A1E)))))
+            Surface(
+                modifier = Modifier.align(Alignment.TopStart).padding(9.dp),
+                shape = RoundedCornerShape(100.dp),
+                color = secondaryContainer.copy(alpha = 0.85f),
             ) {
-                Surface(
-                    shape = RoundedCornerShape(100.dp),
-                    color = MaterialTheme.colorScheme.secondaryContainer
-                ) {
-                    Text(
-                        text = destination.region.uppercase(),
-                        modifier = Modifier.padding(horizontal = 7.dp, vertical = 2.dp),
-                        style = MaterialTheme.typography.labelSmall,
-                        fontWeight = FontWeight.ExtraBold,
-                        color = MaterialTheme.colorScheme.onSecondaryContainer,
-                        letterSpacing = 0.5.sp,
-                        fontSize = 9.sp
-                    )
-                }
+                Text(
+                    text = destination.region.uppercase(),
+                    modifier = Modifier.padding(horizontal = 7.dp, vertical = 2.dp),
+                    style = MaterialTheme.typography.labelSmall,
+                    fontWeight = FontWeight.ExtraBold,
+                    color = MaterialTheme.colorScheme.onSecondaryContainer,
+                    letterSpacing = 0.5.sp,
+                    fontSize = 9.sp,
+                )
+            }
+            Column(
+                Modifier.align(Alignment.BottomStart).padding(10.dp),
+                verticalArrangement = Arrangement.spacedBy(3.dp),
+            ) {
                 Text(
                     text = destination.name,
                     style = MaterialTheme.typography.bodySmall,
                     fontFamily = FrauncesFamily,
                     fontWeight = FontWeight.SemiBold,
-                    color = MaterialTheme.colorScheme.onSurface,
+                    color = Color.White,
                     maxLines = 2,
                     overflow = TextOverflow.Ellipsis,
-                    lineHeight = 15.sp
+                    lineHeight = 15.sp,
                 )
                 Text(
                     text = destination.province,
                     style = MaterialTheme.typography.labelSmall,
-                    color = MaterialTheme.colorScheme.onSurfaceVariant,
+                    color = Color.White.copy(alpha = 0.75f),
                     maxLines = 1,
-                    overflow = TextOverflow.Ellipsis
+                    overflow = TextOverflow.Ellipsis,
                 )
             }
         }
@@ -1168,187 +1119,6 @@ private fun HomeCTACard(
                 tint = MaterialTheme.colorScheme.outline,
                 modifier = Modifier.size(20.dp)
             )
-        }
-    }
-}
-
-// ── PROTOTYPE composables — delete once design decision is made ──────────────
-
-@Composable
-private fun HomeRecommendationCardC(item: HomeFeedItem, onClick: () -> Unit) {
-    val context = LocalContext.current
-    val tertiaryContainer = MaterialTheme.colorScheme.tertiaryContainer
-    val primaryContainer = MaterialTheme.colorScheme.primaryContainer
-    Surface(
-        onClick = onClick,
-        modifier = Modifier.width(130.dp).height(160.dp),
-        shape = RoundedCornerShape(18.dp),
-        color = tertiaryContainer,
-    ) {
-        Box(Modifier.fillMaxSize()) {
-            Box(
-                Modifier.fillMaxSize()
-                    .background(Brush.linearGradient(listOf(tertiaryContainer, primaryContainer)))
-            ) {
-                AsyncImage(
-                    model = item.place.photoUrl.ifBlank { null }?.let { url ->
-                        ImageRequest.Builder(context).data(url).allowHardware(false).build()
-                    },
-                    contentDescription = item.place.name,
-                    modifier = Modifier.fillMaxSize(),
-                    contentScale = ContentScale.Crop,
-                )
-            }
-            Box(
-                Modifier.fillMaxSize().background(
-                    Brush.verticalGradient(listOf(Color.Transparent, Color(0xBF0A0A1E)))
-                )
-            )
-            Surface(
-                modifier = Modifier.align(Alignment.TopStart).padding(9.dp),
-                shape = RoundedCornerShape(100.dp),
-                color = primaryContainer.copy(alpha = 0.85f),
-            ) {
-                Text(
-                    text = item.category.uppercase(),
-                    modifier = Modifier.padding(horizontal = 7.dp, vertical = 2.dp),
-                    style = MaterialTheme.typography.labelSmall,
-                    fontWeight = FontWeight.ExtraBold,
-                    color = MaterialTheme.colorScheme.onPrimaryContainer,
-                    letterSpacing = 0.5.sp,
-                    fontSize = 9.sp,
-                )
-            }
-            Column(
-                Modifier.align(Alignment.BottomStart).padding(10.dp),
-                verticalArrangement = Arrangement.spacedBy(3.dp),
-            ) {
-                Text(
-                    text = item.place.name,
-                    style = MaterialTheme.typography.bodySmall,
-                    fontFamily = FrauncesFamily,
-                    fontWeight = FontWeight.SemiBold,
-                    color = Color.White,
-                    maxLines = 2,
-                    overflow = TextOverflow.Ellipsis,
-                    lineHeight = 15.sp,
-                )
-                if (item.place.rating > 0.0) {
-                    Row(verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(2.dp)) {
-                        Icon(Icons.Default.Star, contentDescription = null, modifier = Modifier.size(11.dp), tint = Color(0xFFFFD166))
-                        Text("%.1f".format(item.place.rating), style = MaterialTheme.typography.labelSmall, color = Color.White.copy(alpha = 0.75f), fontSize = 10.sp)
-                    }
-                }
-            }
-        }
-    }
-}
-
-@Composable
-private fun HomeStoredDestinationCardC(destination: StoredDestination, photoUrl: String?, onClick: () -> Unit) {
-    val context = LocalContext.current
-    val primaryContainer = MaterialTheme.colorScheme.primaryContainer
-    val secondaryContainer = MaterialTheme.colorScheme.secondaryContainer
-    Surface(
-        onClick = onClick,
-        modifier = Modifier.width(130.dp).height(160.dp),
-        shape = RoundedCornerShape(18.dp),
-        color = primaryContainer,
-    ) {
-        Box(Modifier.fillMaxSize()) {
-            Box(
-                Modifier.fillMaxSize()
-                    .background(Brush.linearGradient(listOf(primaryContainer, secondaryContainer)))
-            ) {
-                AsyncImage(
-                    model = photoUrl?.ifBlank { null }?.let { url ->
-                        ImageRequest.Builder(context).data(url).allowHardware(false).build()
-                    },
-                    contentDescription = destination.name,
-                    modifier = Modifier.fillMaxSize(),
-                    contentScale = ContentScale.Crop,
-                )
-            }
-            Box(
-                Modifier.fillMaxSize().background(
-                    Brush.verticalGradient(listOf(Color.Transparent, Color(0xBF0A0A1E)))
-                )
-            )
-            Surface(
-                modifier = Modifier.align(Alignment.TopStart).padding(9.dp),
-                shape = RoundedCornerShape(100.dp),
-                color = secondaryContainer.copy(alpha = 0.85f),
-            ) {
-                Text(
-                    text = destination.region.uppercase(),
-                    modifier = Modifier.padding(horizontal = 7.dp, vertical = 2.dp),
-                    style = MaterialTheme.typography.labelSmall,
-                    fontWeight = FontWeight.ExtraBold,
-                    color = MaterialTheme.colorScheme.onSecondaryContainer,
-                    letterSpacing = 0.5.sp,
-                    fontSize = 9.sp,
-                )
-            }
-            Column(
-                Modifier.align(Alignment.BottomStart).padding(10.dp),
-                verticalArrangement = Arrangement.spacedBy(3.dp),
-            ) {
-                Text(
-                    text = destination.name,
-                    style = MaterialTheme.typography.bodySmall,
-                    fontFamily = FrauncesFamily,
-                    fontWeight = FontWeight.SemiBold,
-                    color = Color.White,
-                    maxLines = 2,
-                    overflow = TextOverflow.Ellipsis,
-                    lineHeight = 15.sp,
-                )
-                Text(
-                    text = destination.province,
-                    style = MaterialTheme.typography.labelSmall,
-                    color = Color.White.copy(alpha = 0.75f),
-                    maxLines = 1,
-                    overflow = TextOverflow.Ellipsis,
-                )
-            }
-        }
-    }
-}
-
-@Composable
-private fun ProtoCardSwitcher(current: String, onSwitch: (String) -> Unit, modifier: Modifier = Modifier) {
-    val variants = listOf("A", "C")
-    Box(modifier.fillMaxWidth().navigationBarsPadding().padding(bottom = 20.dp), contentAlignment = Alignment.Center) {
-        Surface(
-            shape = RoundedCornerShape(100.dp),
-            color = MaterialTheme.colorScheme.onSurface,
-            shadowElevation = 8.dp,
-        ) {
-            Row(
-                Modifier.padding(vertical = 6.dp, horizontal = 4.dp),
-                verticalAlignment = Alignment.CenterVertically,
-            ) {
-                IconButton(onClick = {
-                    val idx = variants.indexOf(current)
-                    onSwitch(variants[(idx - 1 + variants.size) % variants.size])
-                }) {
-                    Text("‹", fontSize = 20.sp, color = MaterialTheme.colorScheme.surface, fontWeight = FontWeight.Bold)
-                }
-                Text(
-                    "PROTO · Card $current",
-                    color = MaterialTheme.colorScheme.surface,
-                    fontSize = 12.sp,
-                    fontWeight = FontWeight.Bold,
-                    letterSpacing = 0.5.sp,
-                    modifier = Modifier.padding(horizontal = 4.dp),
-                )
-                IconButton(onClick = {
-                    val idx = variants.indexOf(current)
-                    onSwitch(variants[(idx + 1) % variants.size])
-                }) {
-                    Text("›", fontSize = 20.sp, color = MaterialTheme.colorScheme.surface, fontWeight = FontWeight.Bold)
-                }
-            }
         }
     }
 }
