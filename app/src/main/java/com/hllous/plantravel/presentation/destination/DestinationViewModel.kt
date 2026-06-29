@@ -133,7 +133,7 @@ class DestinationViewModel @Inject constructor(
         .map { list -> list.firstOrNull { it.userId == sessionProvider.userId } }
         .stateIn(viewModelScope, SharingStarted.WhileSubscribed(5000), null)
 
-    private val _activeDestPoll: StateFlow<Poll?> = combine(
+    val activeDestPoll: StateFlow<Poll?> = combine(
         selectedGroupHolder.selectedGroupId,
         _reloadTrigger,
     ) { groupId, _ -> groupId }
@@ -145,7 +145,7 @@ class DestinationViewModel @Inject constructor(
         }
         .stateIn(viewModelScope, SharingStarted.WhileSubscribed(5000), null)
 
-    private val _activeActivityPoll: StateFlow<Poll?> = combine(
+    val activeActivityPoll: StateFlow<Poll?> = combine(
         selectedGroupHolder.selectedGroupId,
         _reloadTrigger,
     ) { groupId, _ -> groupId }
@@ -157,8 +157,8 @@ class DestinationViewModel @Inject constructor(
         }
         .stateIn(viewModelScope, SharingStarted.WhileSubscribed(5000), null)
 
-    // Activity polls take priority: if one is open, it's the "active" poll for the UI.
-    val activePoll: StateFlow<Poll?> = combine(_activeDestPoll, _activeActivityPoll) { dest, act ->
+    // Any active poll (activity takes priority) — used for the tab bar indicator and banners.
+    val activePoll: StateFlow<Poll?> = combine(activeDestPoll, activeActivityPoll) { dest, act ->
         act ?: dest
     }.stateIn(viewModelScope, SharingStarted.WhileSubscribed(5000), null)
 
@@ -373,19 +373,19 @@ class DestinationViewModel @Inject constructor(
                 )
             }
             if (result.isSuccess) onNavigate()
+            else _message.value = "Error al agregar a la encuesta"
         }
     }
 
     fun createPollWithPoi(place: PlaceResult, onNavigate: () -> Unit) {
         val groupId = selectedGroupHolder.selectedGroupId.value ?: return
         viewModelScope.launch {
-            val existingPoll = resolveActivePoll()
+            val existingActivityPoll = activeActivityPoll.value
             val pollId = when {
-                existingPoll == null -> runCatching {
+                existingActivityPoll == null -> runCatching {
                     repository.createPoll(groupId, PollType.ACTIVITY, "¿Qué hacemos?", null)
                 }.onSuccess { reloadGroups() }.getOrNull()
-                existingPoll.type == PollType.ACTIVITY -> existingPoll.id
-                else -> null
+                else -> existingActivityPoll.id
             } ?: return@launch
             onNavigate()
             runCatching {
@@ -559,8 +559,8 @@ class DestinationViewModel @Inject constructor(
 
     private suspend fun resolveActivePoll(expectedType: PollType? = null): Poll? {
         when (expectedType) {
-            PollType.ACTIVITY -> return _activeActivityPoll.value
-            PollType.DESTINATION -> _activeDestPoll.value?.let { return it }
+            PollType.ACTIVITY -> return activeActivityPoll.value
+            PollType.DESTINATION -> activeDestPoll.value?.let { return it }
             null -> activePoll.value?.let { poll ->
                 if (expectedType == null || poll.type == expectedType) return poll
             }

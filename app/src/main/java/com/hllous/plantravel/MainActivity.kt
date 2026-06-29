@@ -353,7 +353,7 @@ fun MainAppContent(
         containerColor = MaterialTheme.colorScheme.background,
         contentWindowInsets = WindowInsets(0, 0, 0, 0),
         bottomBar = {
-            if (currentRoute != "qr_scanner" && currentRoute != "profile" && !currentRoute.startsWith("itinerary") && currentRoute != "poll_detail") {
+            if (currentRoute != "qr_scanner" && currentRoute != "profile" && !currentRoute.startsWith("itinerary")) {
                 BottomNavBar(
                     currentRoute = currentRoute,
                     navController = navController,
@@ -455,14 +455,7 @@ fun MainAppContent(
                     requestedPollId = requestedPollId,
                 )
             }
-            // PROTOTYPE — delete after animation decisions are locked (#59)
-            composable("prototype_poll_animation") {
-                com.hllous.plantravel.ui.prototype.PollAnimationPrototypeScreen()
-            }
-            // PROTOTYPE — delete after home layout decisions are locked (#58)
-            composable("prototype_home") {
-                com.hllous.plantravel.ui.prototype.HomePrototypeScreen()
-            }
+
         }
     }
 }
@@ -496,12 +489,15 @@ fun BottomNavBar(
                     unselectedTextColor = MaterialTheme.colorScheme.onSurfaceVariant,
                 ),
                 onClick = {
-                    navController.navigate(route) {
-                        popUpTo(navController.graph.findStartDestination().id) {
-                            saveState = true
+                    val startDestId = navController.graph.findStartDestination().id
+                    if (route == "home") {
+                        navController.popBackStack(startDestId, inclusive = false)
+                    } else {
+                        navController.navigate(route) {
+                            popUpTo(startDestId) { saveState = true }
+                            launchSingleTop = true
+                            restoreState = true
                         }
-                        launchSingleTop = true
-                        restoreState = true
                     }
                 },
             )

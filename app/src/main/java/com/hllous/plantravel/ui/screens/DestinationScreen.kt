@@ -196,6 +196,7 @@ private fun Level2Content(
 ) {
     val poisByCategory by viewModel.poisByCategory.collectAsState()
     val activePoll by viewModel.activePoll.collectAsState()
+    val activeActivityPoll by viewModel.activeActivityPoll.collectAsState()
     val currentMember by viewModel.currentMember.collectAsState()
     val pendingPoi by viewModel.pendingPoi.collectAsState()
     val pendingCategory by viewModel.pendingCategory.collectAsState()
@@ -324,7 +325,7 @@ private fun Level2Content(
     selectedPoi?.let { poi ->
         PoiBottomSheet(
             place = poi,
-            activePollType = activePoll?.type,
+            activePollType = activeActivityPoll?.type,
             onDismiss = { selectedPoi = null },
             onAddToItinerary = {
                 val draft = ItineraryEventDraft(
@@ -338,19 +339,19 @@ private fun Level2Content(
             },
             onAddToPoll = {
                 viewModel.addPoiToPoll(poi) {
-                    navController.navigate("poll_detail")
                     selectedPoi = null
+                    navController.navigate("poll_detail")
                 }
             },
             onCreatePoll = {
                 viewModel.createPollWithPoi(poi) {
-                    navController.navigate("poll_detail")
                     selectedPoi = null
+                    navController.navigate("poll_detail")
                 }
             },
             onViewPoll = {
-                navController.navigate("poll_detail")
                 selectedPoi = null
+                navController.navigate("poll_detail")
             },
         )
     }
@@ -675,26 +676,12 @@ private fun PoiBottomSheet(
                             Text("Añadir a encuesta")
                         }
                     }
-                    PollType.DESTINATION -> {
-                        OutlinedButton(
-                            onClick = onViewPoll,
-                            modifier = Modifier.fillMaxWidth(),
-                        ) {
-                            Text("Ver encuesta activa")
-                        }
-                        Spacer(modifier = Modifier.height(6.dp))
-                        Text(
-                            text = "La encuesta activa es de destino. Cerrala antes de votar actividades.",
-                            style = MaterialTheme.typography.bodySmall,
-                            color = MaterialTheme.colorScheme.onSurfaceVariant,
-                        )
-                    }
-                    null -> {
+                    else -> {
                         OutlinedButton(
                             onClick = onCreatePoll,
                             modifier = Modifier.fillMaxWidth(),
                         ) {
-                            Text("Crear encuesta primero")
+                            Text("Crear encuesta de actividades")
                         }
                     }
                 }
@@ -734,6 +721,7 @@ private fun Level1BrowseContent(
     val searchDestinations by viewModel.searchDestinations.collectAsState()
     val destinationPhotoUrls by viewModel.destinationPhotoUrls.collectAsState()
     val activePoll by viewModel.activePoll.collectAsState()
+    val activeDestPoll by viewModel.activeDestPoll.collectAsState()
     val currentMember by viewModel.currentMember.collectAsState()
     val regionLoading by viewModel.regionLoading.collectAsState()
     val tripDestination by viewModel.tripDestination.collectAsState()
@@ -980,7 +968,7 @@ private fun Level1BrowseContent(
             imageUrl = destinationPhotoUrls[destinationCardKey(destination)].orEmpty(),
             currentMember = currentMember,
             tripDestination = tripDestination,
-            activePollType = activePoll?.type,
+            activePollType = activeDestPoll?.type,
             isSubmitting = isSubmitting,
             onDismiss = { selectedDestination = null },
             onSetDestination = {

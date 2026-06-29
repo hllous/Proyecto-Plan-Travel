@@ -34,7 +34,7 @@ class DestinationPhotoResolverImpl @Inject constructor(
                 repository.updateDestinationPhoto(
                     destinationId = destination.id,
                     googlePhotoUrl = googleRef,
-                    displayPhotoUrl = googleRef,
+                    displayPhotoUrl = displayUrl,
                 )
             }
             return displayUrl

@@ -212,6 +212,7 @@ class PollViewModel @Inject constructor(
                 runCatching {
                     repository.addPollCandidate(pollId, place.placeId, place.name, place.photoUrl, place.lat, place.lng)
                 }.onSuccess { reloadCandidates() }
+                    .onFailure { _errorMessage.value = "Error al agregar candidato" }
             } finally {
                 _isSubmitting.value = false
             }
