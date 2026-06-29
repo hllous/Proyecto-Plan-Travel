@@ -948,20 +948,21 @@ private fun HomeRecommendationCard(
 ) {
     val context = LocalContext.current
 
-    ElevatedCard(
+    val secondaryContainer = MaterialTheme.colorScheme.secondaryContainer
+    val onSecondaryContainer = MaterialTheme.colorScheme.onSecondaryContainer
+    Surface(
         onClick = onClick,
         modifier = Modifier.width(130.dp),
-        shape = RoundedCornerShape(18.dp)
+        shape = RoundedCornerShape(18.dp),
+        color = secondaryContainer
     ) {
         Column {
-            val tertiaryContainer = MaterialTheme.colorScheme.tertiaryContainer
-            val primaryContainer = MaterialTheme.colorScheme.primaryContainer
             Box(
                 modifier = Modifier
                     .fillMaxWidth()
                     .height(88.dp)
                     .clip(RoundedCornerShape(topStart = 18.dp, topEnd = 18.dp))
-                    .background(Brush.linearGradient(listOf(tertiaryContainer, primaryContainer)))
+                    .background(Brush.linearGradient(listOf(MaterialTheme.colorScheme.tertiaryContainer, secondaryContainer)))
             ) {
                 AsyncImage(
                     model = item.place.photoUrl.ifBlank { null }?.let { url ->
@@ -998,7 +999,7 @@ private fun HomeRecommendationCard(
                     style = MaterialTheme.typography.bodySmall,
                     fontFamily = FrauncesFamily,
                     fontWeight = FontWeight.SemiBold,
-                    color = MaterialTheme.colorScheme.onSurface,
+                    color = onSecondaryContainer,
                     maxLines = 2,
                     overflow = TextOverflow.Ellipsis,
                     lineHeight = 15.sp
@@ -1012,12 +1013,12 @@ private fun HomeRecommendationCard(
                             Icons.Default.Star,
                             contentDescription = null,
                             modifier = Modifier.size(11.dp),
-                            tint = MaterialTheme.colorScheme.primary
+                            tint = MaterialTheme.colorScheme.secondary
                         )
                         Text(
                             text = "%.1f".format(item.place.rating),
                             style = MaterialTheme.typography.labelSmall,
-                            color = MaterialTheme.colorScheme.onSurfaceVariant,
+                            color = onSecondaryContainer.copy(alpha = 0.7f),
                             fontSize = 10.sp
                         )
                     }
@@ -1035,20 +1036,21 @@ private fun HomeStoredDestinationCard(
 ) {
     val context = LocalContext.current
 
-    ElevatedCard(
+    val primaryContainer = MaterialTheme.colorScheme.primaryContainer
+    val onPrimaryContainer = MaterialTheme.colorScheme.onPrimaryContainer
+    Surface(
         onClick = onClick,
         modifier = Modifier.width(130.dp),
-        shape = RoundedCornerShape(18.dp)
+        shape = RoundedCornerShape(18.dp),
+        color = primaryContainer
     ) {
         Column {
-            val primaryContainer = MaterialTheme.colorScheme.primaryContainer
-            val secondaryContainer = MaterialTheme.colorScheme.secondaryContainer
             Box(
                 modifier = Modifier
                     .fillMaxWidth()
                     .height(88.dp)
                     .clip(RoundedCornerShape(topStart = 18.dp, topEnd = 18.dp))
-                    .background(Brush.linearGradient(listOf(primaryContainer, secondaryContainer)))
+                    .background(Brush.linearGradient(listOf(primaryContainer, MaterialTheme.colorScheme.secondaryContainer)))
             ) {
                 AsyncImage(
                     model = photoUrl?.ifBlank { null }?.let { url ->
@@ -1085,7 +1087,7 @@ private fun HomeStoredDestinationCard(
                     style = MaterialTheme.typography.bodySmall,
                     fontFamily = FrauncesFamily,
                     fontWeight = FontWeight.SemiBold,
-                    color = MaterialTheme.colorScheme.onSurface,
+                    color = onPrimaryContainer,
                     maxLines = 2,
                     overflow = TextOverflow.Ellipsis,
                     lineHeight = 15.sp
@@ -1093,7 +1095,7 @@ private fun HomeStoredDestinationCard(
                 Text(
                     text = destination.province,
                     style = MaterialTheme.typography.labelSmall,
-                    color = MaterialTheme.colorScheme.onSurfaceVariant,
+                    color = onPrimaryContainer.copy(alpha = 0.7f),
                     maxLines = 1,
                     overflow = TextOverflow.Ellipsis
                 )
