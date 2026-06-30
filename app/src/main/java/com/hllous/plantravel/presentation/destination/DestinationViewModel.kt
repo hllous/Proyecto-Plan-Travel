@@ -294,19 +294,17 @@ class DestinationViewModel @Inject constructor(
             val key = destination.photoKey()
             val cached = _destinationPhotoUrls.value[key]
             val dbPhoto = destination.displayPhotoUrl
+            // A resource name ("places/…") is not a displayable URL — it needs resolving.
+            // Full http(s) URLs (Wikipedia or previously resolved Google media URLs) are real.
             val dbPhotoIsReal = !dbPhoto.isNullOrBlank() &&
-                DestinationFallbackImage.regionSlugFromToken(dbPhoto) == null
+                DestinationFallbackImage.regionSlugFromToken(dbPhoto) == null &&
+                dbPhoto.startsWith("http")
             val shouldRetryFallback = cached != null &&
                 DestinationFallbackImage.regionSlugFromToken(cached) != null &&
                 !dbPhotoIsReal
             when {
                 dbPhotoIsReal -> {
-                    val displayUrl = if (dbPhoto!!.startsWith("places/")) {
-                        placesApiClient.resolvePhotoUrl(dbPhoto)
-                    } else {
-                        dbPhoto
-                    }
-                    _destinationPhotoUrls.update { it + (key to displayUrl) }
+                    _destinationPhotoUrls.update { it + (key to dbPhoto!!) }
                 }
 
                 (cached != null && !shouldRetryFallback) || key in photoLoadingDestinationKeys -> Unit

@@ -75,6 +75,7 @@ import com.hllous.plantravel.ui.screens.GroupsScreen
 import com.hllous.plantravel.ui.screens.HomeScreen
 import com.hllous.plantravel.ui.screens.ItineraryScreen
 import com.hllous.plantravel.ui.screens.LoginScreen
+import com.hllous.plantravel.domain.model.PollType
 import com.hllous.plantravel.ui.screens.PollScreen
 import com.hllous.plantravel.presentation.poll.PollViewModel
 import com.hllous.plantravel.ui.screens.ProfileScreen
@@ -441,18 +442,31 @@ fun MainAppContent(
                 )
             }
             composable(
-                route = "poll_detail?pollId={pollId}",
-                arguments = listOf(navArgument("pollId") {
-                    type = NavType.StringType
-                    nullable = true
-                    defaultValue = null
-                })
+                route = "poll_detail?pollId={pollId}&defaultType={defaultType}",
+                arguments = listOf(
+                    navArgument("pollId") {
+                        type = NavType.StringType
+                        nullable = true
+                        defaultValue = null
+                    },
+                    navArgument("defaultType") {
+                        type = NavType.StringType
+                        nullable = true
+                        defaultValue = null
+                    },
+                )
             ) { backStackEntry ->
                 val requestedPollId = backStackEntry.arguments?.getString("pollId")
+                val autoCreateType = when (backStackEntry.arguments?.getString("defaultType")) {
+                    "activity" -> PollType.ACTIVITY
+                    "destination" -> PollType.DESTINATION
+                    else -> null
+                }
                 PollScreen(
                     viewModel = hiltViewModel<PollViewModel>(),
                     navController = navController,
                     requestedPollId = requestedPollId,
+                    autoCreateType = autoCreateType,
                 )
             }
 

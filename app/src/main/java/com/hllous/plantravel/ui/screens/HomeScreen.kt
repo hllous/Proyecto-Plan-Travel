@@ -431,7 +431,7 @@ private fun HomeGroupContent(
             latestActivityPoll = latestActivityPoll,
             activityPollCandidates = activityPollCandidates,
             onNavigateToPoll = { pollId -> navController.navigate("poll_detail?pollId=$pollId") },
-            onCreatePoll = { navController.navigate("poll_detail") },
+            onCreatePoll = { navController.navigate("poll_detail?defaultType=activity") },
         )
 
         // ④ Quick-access buttons (contextual)

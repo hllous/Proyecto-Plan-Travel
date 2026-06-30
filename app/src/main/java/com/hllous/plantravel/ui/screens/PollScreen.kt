@@ -139,6 +139,7 @@ fun PollScreen(
     viewModel: PollViewModel,
     navController: NavHostController,
     requestedPollId: String? = null,
+    autoCreateType: PollType? = null,
 ) {
     val allPolls by viewModel.allPolls.collectAsState()
     val candidatesState by viewModel.candidates.collectAsState()
@@ -151,7 +152,15 @@ fun PollScreen(
     val snackbarHostState = remember { SnackbarHostState() }
     val scope = rememberCoroutineScope()
     var showCreationSheet by rememberSaveable { mutableStateOf(false) }
+    var creationSheetDefaultType by remember { mutableStateOf(PollType.DESTINATION) }
     var showDeleteDialog by rememberSaveable { mutableStateOf(false) }
+
+    LaunchedEffect(autoCreateType) {
+        if (autoCreateType != null && requestedPollId == null) {
+            creationSheetDefaultType = autoCreateType
+            showCreationSheet = true
+        }
+    }
 
     // Level 1 → Level 2 navigation
     var detailPollId by rememberSaveable { mutableStateOf<String?>(null) }
@@ -167,8 +176,10 @@ fun PollScreen(
     var winnerOverlayData by remember { mutableStateOf<WinnerOverlayData?>(null) }
     var showConfirmDestination by remember { mutableStateOf(false) }
 
-    // Keep screenPoll in sync with the Level 2 poll so candidatesState is correct
-    LaunchedEffect(detailPollId) {
+    // Keep screenPoll in sync with the Level 2 poll so candidatesState is correct.
+    // Key on detailPoll (not detailPollId) so the effect re-fires once allPolls loads
+    // and detailPoll resolves from null to the actual poll object.
+    LaunchedEffect(detailPoll) {
         viewModel.setScreenPoll(detailPoll)
     }
 
@@ -180,12 +191,6 @@ fun PollScreen(
     }
 
     val isAdmin = currentMember?.role == MemberRole.ADMIN
-
-    fun onFinalizeTapped() {
-        val willBeTied = isTied
-        viewModel.closePoll()
-        winnerFlowStep = if (willBeTied) WinnerFlowStep.TIE_CHOICE else WinnerFlowStep.MANUAL_SELECT
-    }
 
     fun onWinnerConfirmed(candidateId: String) {
         val cs = candidatesState as? UiState.Success ?: return
@@ -200,6 +205,18 @@ fun PollScreen(
             isDestination = detailPoll?.type == PollType.DESTINATION,
             key = System.currentTimeMillis().toInt(),
         )
+    }
+
+    fun onFinalizeTapped() {
+        val willBeTied = isTied
+        viewModel.closePoll()
+        if (willBeTied) {
+            winnerFlowStep = WinnerFlowStep.TIE_CHOICE
+        } else {
+            val cs = candidatesState as? UiState.Success ?: return
+            val topCandidate = cs.data.maxByOrNull { it.voteCount } ?: return
+            onWinnerConfirmed(topCandidate.candidate.id)
+        }
     }
 
     Scaffold(
@@ -258,7 +275,7 @@ fun PollScreen(
                         detailPollId = poll.id
                         showDeleteDialog = true
                     },
-                    onCreatePoll = { showCreationSheet = true },
+                    onCreatePoll = { creationSheetDefaultType = PollType.DESTINATION; showCreationSheet = true },
                 )
             } else {
                 PollDetailContent(
@@ -292,6 +309,7 @@ fun PollScreen(
                 viewModel.createPoll(type, name, expiresAt)
                 showCreationSheet = false
             },
+            initialType = creationSheetDefaultType,
         )
     }
 
@@ -1210,10 +1228,11 @@ private fun buildConfetti(palette: List<Color>): List<ConfettiPiece> {
 private fun PollCreationBottomSheet(
     onDismiss: () -> Unit,
     onCreate: (type: PollType, name: String, expiresAt: String?) -> Unit,
+    initialType: PollType = PollType.DESTINATION,
 ) {
     val sheetState = rememberModalBottomSheetState(skipPartiallyExpanded = true)
-    var selectedType by rememberSaveable { mutableStateOf(PollType.DESTINATION) }
-    var pollName by rememberSaveable { mutableStateOf("¿A dónde vamos?") }
+    var selectedType by rememberSaveable { mutableStateOf(initialType) }
+    var pollName by rememberSaveable { mutableStateOf(if (initialType == PollType.ACTIVITY) "¿Qué hacemos?" else "¿A dónde vamos?") }
     var showDatePicker by rememberSaveable { mutableStateOf(false) }
     var expiresAt by rememberSaveable { mutableStateOf<String?>(null) }
     val datePickerState = rememberDatePickerState()
