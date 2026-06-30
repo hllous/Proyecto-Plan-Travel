@@ -39,6 +39,18 @@ class GooglePlacesApiClient @Inject constructor(
     )
 
     @Serializable
+    private data class TextSearchWithBiasRequest(
+        val textQuery: String,
+        val locationBias: LocationBias,
+        val languageCode: String = "es",
+        val regionCode: String = "AR",
+        val maxResultCount: Int = 20,
+    )
+
+    @Serializable
+    private data class LocationBias(val circle: Circle)
+
+    @Serializable
     private data class NearbySearchRequest(
         val locationRestriction: LocationRestriction,
         val includedTypes: List<String>,
@@ -140,8 +152,7 @@ class GooglePlacesApiClient @Inject constructor(
         return response.places.map { it.toPlaceResult(it.resolvedPhotoUrl(), it.photoReference()) }
     }
 
-    override suspend fun searchPois(lat: Double, lng: Double, type: String): List<PlaceResult> {
-        val types = poiTypeToGoogleTypes(type)
+    override suspend fun searchPois(lat: Double, lng: Double, types: List<String>): List<PlaceResult> {
         return coroutineScope {
             types
                 .map { singleType -> async { fetchNearby(lat, lng, listOf(singleType)) } }
@@ -150,6 +161,23 @@ class GooglePlacesApiClient @Inject constructor(
                 .distinctBy { it.placeId }
                 .sortedByDescending { it.rating }
         }
+    }
+
+    override suspend fun searchNearby(query: String, lat: Double, lng: Double): List<PlaceResult> {
+        val response: PlacesResponse = httpClient.post("$BASE_URL:searchText") {
+            header("X-Goog-Api-Key", apiKey)
+            header("X-Goog-FieldMask", FIELD_MASK)
+            contentType(ContentType.Application.Json)
+            setBody(
+                TextSearchWithBiasRequest(
+                    textQuery = query,
+                    locationBias = LocationBias(
+                        circle = Circle(center = LatLng(lat, lng), radius = 5000.0)
+                    ),
+                )
+            )
+        }.body()
+        return response.places.map { it.toPlaceResult(it.resolvedPhotoUrl(), it.photoReference()) }
     }
 
     private suspend fun fetchNearby(lat: Double, lng: Double, includedTypes: List<String>): List<PlaceResult> {
@@ -169,11 +197,4 @@ class GooglePlacesApiClient @Inject constructor(
         return response.places.map { it.toPlaceResult(it.resolvedPhotoUrl(), it.photoReference()) }
     }
 
-    private fun poiTypeToGoogleTypes(type: String): List<String> = when (type) {
-        "Alojamiento" -> listOf("lodging")
-        "Gastronomía" -> listOf("restaurant", "bar", "cafe")
-        "Actividades" -> listOf("tourist_attraction", "amusement_park", "museum")
-        "Naturaleza" -> listOf("national_park", "park", "hiking_area")
-        else -> listOf("tourist_attraction")
-    }
 }

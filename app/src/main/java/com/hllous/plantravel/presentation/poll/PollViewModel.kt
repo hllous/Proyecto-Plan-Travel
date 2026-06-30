@@ -15,9 +15,12 @@ import com.hllous.plantravel.presentation.group.SelectedGroupHolder
 import dagger.hilt.android.lifecycle.HiltViewModel
 import javax.inject.Inject
 import kotlinx.coroutines.ExperimentalCoroutinesApi
+import kotlinx.coroutines.flow.MutableSharedFlow
 import kotlinx.coroutines.flow.MutableStateFlow
+import kotlinx.coroutines.flow.SharedFlow
 import kotlinx.coroutines.flow.SharingStarted
 import kotlinx.coroutines.flow.StateFlow
+import kotlinx.coroutines.flow.asSharedFlow
 import kotlinx.coroutines.flow.asStateFlow
 import kotlinx.coroutines.flow.catch
 import kotlinx.coroutines.flow.combine
@@ -26,6 +29,8 @@ import kotlinx.coroutines.flow.flowOf
 import kotlinx.coroutines.flow.map
 import kotlinx.coroutines.flow.stateIn
 import kotlinx.coroutines.launch
+
+data class WinnerSelectedEvent(val name: String, val placeId: String)
 
 data class PollCandidateUiModel(
     val candidate: PollCandidate,
@@ -46,6 +51,8 @@ class PollViewModel @Inject constructor(
     private val _candidateReloadTrigger = MutableStateFlow(0)
     private val _errorMessage = MutableStateFlow<String?>(null)
     val errorMessage: StateFlow<String?> = _errorMessage.asStateFlow()
+    private val _winnerSelectedEvent = MutableSharedFlow<WinnerSelectedEvent>(extraBufferCapacity = 1)
+    val winnerSelectedEvent: SharedFlow<WinnerSelectedEvent> = _winnerSelectedEvent.asSharedFlow()
     private val _isSubmitting = MutableStateFlow(false)
     val isSubmitting: StateFlow<Boolean> = _isSubmitting.asStateFlow()
 
@@ -266,6 +273,9 @@ class PollViewModel @Inject constructor(
         val winner = (candidates.value as? UiState.Success)
             ?.data?.firstOrNull { it.candidate.id == candidateId }
             ?.candidate ?: return
+        if (activePoll.type == PollType.ACTIVITY) {
+            _winnerSelectedEvent.tryEmit(WinnerSelectedEvent(winner.name, winner.placeId))
+        }
         viewModelScope.launch {
             _isSubmitting.value = true
             try {

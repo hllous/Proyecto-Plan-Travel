@@ -459,12 +459,12 @@ private fun HomeGroupContent(
                         onClick = { navController.navigateSingleTopTo("destinations") }
                     )
                     HomeActionButton(
-                        emoji = "📨",
-                        label = "Invitar\npersona",
+                        emoji = "📅",
+                        label = "Itinerario",
                         containerColor = MaterialTheme.colorScheme.primaryContainer,
                         contentColor = MaterialTheme.colorScheme.onPrimaryContainer,
                         modifier = Modifier.weight(1f),
-                        onClick = { navController.navigateSingleTopTo("groups") }
+                        onClick = { navController.navigate("itinerary") }
                     )
                 } else {
                     HomeActionButton(

@@ -142,4 +142,23 @@ class ItineraryViewModelTest {
         assertTrue(remaining.isEmpty())
         job.cancel()
     }
+
+    // ── Test 6: createEvent from poll candidate draft persists name + placeId ──
+
+    @Test
+    fun createEventFromPollCandidateDraftPersistsNameAndPlaceId() {
+        val repo = FakeTravelRepository()
+        val holder = SelectedGroupHolder().also { it.selectedGroupId.value = "group-1" }
+        val vm = viewModel(repo = repo, holder = holder)
+        val job = CoroutineScope(UnconfinedTestDispatcher()).launch { vm.events.collect {} }
+
+        vm.createEvent(name = "Teatro Colón", date = "2025-07-01", placeId = "place-teatro-colon")
+
+        val state = vm.events.value
+        assertTrue(state is UiState.Success)
+        val event = (state as UiState.Success).data[0].events[0]
+        assertEquals("Teatro Colón", event.name)
+        assertEquals("place-teatro-colon", event.placeId)
+        job.cancel()
+    }
 }

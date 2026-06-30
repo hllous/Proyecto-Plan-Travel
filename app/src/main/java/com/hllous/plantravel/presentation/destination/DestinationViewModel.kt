@@ -3,6 +3,7 @@ package com.hllous.plantravel.presentation.destination
 import android.util.Log
 import androidx.lifecycle.ViewModel
 import androidx.lifecycle.viewModelScope
+import com.hllous.plantravel.data.destination.CuratedDestinations
 import com.hllous.plantravel.data.destination.DestinationFallbackImage
 import com.hllous.plantravel.data.destination.DestinationTextNormalizer
 import com.hllous.plantravel.data.destination.ProvinceRegionMapper
@@ -78,6 +79,8 @@ class DestinationViewModel @Inject constructor(
 
     private val _poisByCategory = MutableStateFlow<UiState<RankedRecommendations>>(UiState.Loading)
     val poisByCategory: StateFlow<UiState<RankedRecommendations>> = _poisByCategory.asStateFlow()
+    private val _nearbyResults = MutableStateFlow<UiState<RankedRecommendations>?>(null)
+    val nearbyResults: StateFlow<UiState<RankedRecommendations>?> = _nearbyResults.asStateFlow()
 
     private val _homeFeed = MutableStateFlow<UiState<List<HomeFeedItem>>>(UiState.Loading)
     val homeFeed: StateFlow<UiState<List<HomeFeedItem>>> = _homeFeed.asStateFlow()
@@ -167,7 +170,12 @@ class DestinationViewModel @Inject constructor(
             _regionLoading.value = true
             try {
                 val destinations = repository.browseDestinations(region)
-                _regionDestinations.value = destinations
+                val curatedNames = CuratedDestinations.byRegion[region].orEmpty()
+                    .map { DestinationTextNormalizer.normalize(it) }
+                val curatedEntries = curatedNames.mapNotNull { n ->
+                    destinations.firstOrNull { it.normalizedName == n }
+                }
+                _regionDestinations.value = ranker.mergeWithCurated(curatedEntries, destinations)
                 loadPhotosFor(destinations)
             } finally {
                 _regionLoading.value = false
@@ -509,12 +517,17 @@ class DestinationViewModel @Inject constructor(
         _lastLoadedFeedPlaceId = dest.placeId
         viewModelScope.launch {
             _homeFeed.value = UiState.Loading
-            val categories = listOf("Alojamiento", "Gastronomía", "Actividades", "Naturaleza")
+            val homeFeedCategories = listOf(
+                "Alojamiento" to listOf("lodging"),
+                "Gastronomía" to listOf("restaurant", "bar", "cafe"),
+                "Actividades" to listOf("tourist_attraction", "amusement_park", "museum"),
+                "Naturaleza" to listOf("national_park", "park", "hiking_area"),
+            )
             val seenPlaceIds = mutableSetOf<String>()
             val result = mutableListOf<HomeFeedItem>()
-            val placesByCategory = categories.map { cat ->
+            val placesByCategory = homeFeedCategories.map { (cat, types) ->
                 async {
-                    cat to runCatching { placesApiClient.searchPois(dest.lat, dest.lng, cat) }
+                    cat to runCatching { placesApiClient.searchPois(dest.lat, dest.lng, types) }
                         .getOrDefault(emptyList())
                 }
             }.awaitAll()
@@ -539,14 +552,39 @@ class DestinationViewModel @Inject constructor(
         _pendingCategory.value = null
     }
 
+    private fun poiCategoryToTypes(category: String): List<String> = when (category) {
+        "Alojamiento"       -> listOf("lodging")
+        "Gastronomía"       -> listOf("restaurant", "bar", "cafe")
+        "Turismo"           -> listOf("tourist_attraction", "amusement_park", "zoo")
+        "Museos y Arte"     -> listOf("museum", "art_gallery", "cultural_center")
+        "Teatro y Cultura"  -> listOf("performing_arts_theater", "historical_landmark", "library")
+        "Naturaleza"        -> listOf("national_park", "park", "hiking_area")
+        else                -> listOf("tourist_attraction")
+    }
+
     fun selectPoiCategory(category: String) {
         val dest = tripDestination.value as? TripDestinationState.Set ?: return
         _poisByCategory.value = UiState.Loading
+        _nearbyResults.value = null
+        val types = poiCategoryToTypes(category)
         viewModelScope.launch {
-            val result = runCatching { placesApiClient.searchPois(dest.lat, dest.lng, category) }
+            val result = runCatching { placesApiClient.searchPois(dest.lat, dest.lng, types) }
             _poisByCategory.value = result.fold(
                 onSuccess = { UiState.Success(ranker.rank(it)) },
                 onFailure = { UiState.Error(it.message ?: "Error al cargar recomendaciones") },
+            )
+        }
+    }
+
+    fun searchNearby(query: String) {
+        if (query.isBlank()) { _nearbyResults.value = null; return }
+        val dest = tripDestination.value as? TripDestinationState.Set ?: return
+        _nearbyResults.value = UiState.Loading
+        viewModelScope.launch {
+            val result = runCatching { placesApiClient.searchNearby(query, dest.lat, dest.lng) }
+            _nearbyResults.value = result.fold(
+                onSuccess = { UiState.Success(ranker.rank(it)) },
+                onFailure = { UiState.Error(it.message ?: "Error en la búsqueda") },
             )
         }
     }

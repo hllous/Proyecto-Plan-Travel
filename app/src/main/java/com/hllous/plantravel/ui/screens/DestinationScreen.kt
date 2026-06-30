@@ -38,6 +38,7 @@ import androidx.compose.foundation.verticalScroll
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.automirrored.filled.ArrowBack
 import androidx.compose.material.icons.filled.Close
+import androidx.compose.material.icons.filled.Explore
 import androidx.compose.material.icons.filled.Hotel
 import androidx.compose.material.icons.filled.HowToVote
 import androidx.compose.material.icons.filled.Image
@@ -45,10 +46,12 @@ import androidx.compose.material.icons.filled.Info
 import androidx.compose.material.icons.filled.LocalActivity
 import androidx.compose.material.icons.filled.LocationOn
 import androidx.compose.material.icons.filled.Map
+import androidx.compose.material.icons.filled.Museum
 import androidx.compose.material.icons.filled.Park
 import androidx.compose.material.icons.filled.Restaurant
 import androidx.compose.material.icons.filled.Search
 import androidx.compose.material.icons.filled.Star
+import androidx.compose.material.icons.filled.Theaters
 import androidx.compose.material3.AlertDialog
 import androidx.compose.material3.Button
 import androidx.compose.material3.Card
@@ -83,8 +86,12 @@ import androidx.compose.runtime.collectAsState
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
+import androidx.compose.runtime.rememberCoroutineScope
 import androidx.compose.runtime.saveable.rememberSaveable
 import androidx.compose.runtime.setValue
+import kotlinx.coroutines.Job
+import kotlinx.coroutines.delay
+import kotlinx.coroutines.launch
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
@@ -120,11 +127,13 @@ private data class PoiCategory(val label: String, val icon: ImageVector)
 private val POI_CATEGORIES = listOf(
     PoiCategory("Alojamiento", Icons.Default.Hotel),
     PoiCategory("Gastronomía", Icons.Default.Restaurant),
-    PoiCategory("Actividades", Icons.Default.LocalActivity),
+    PoiCategory("Turismo", Icons.Default.Explore),
+    PoiCategory("Museos y Arte", Icons.Default.Museum),
+    PoiCategory("Teatro y Cultura", Icons.Default.Theaters),
     PoiCategory("Naturaleza", Icons.Default.Park),
 )
 internal const val POLL_DESTINATION_PREFERRED_CATEGORY_KEY = "poll_destination_preferred_category"
-internal const val POLL_DESTINATION_ACTIVITIES_CATEGORY = "Actividades"
+internal const val POLL_DESTINATION_ACTIVITIES_CATEGORY = "Turismo"
 internal const val DESTINATIONS_BOTTOM_NAV_LEVEL2_KEY = "destinations_bottom_nav_level2"
 
 @OptIn(ExperimentalMaterial3Api::class)
@@ -195,6 +204,7 @@ private fun Level2Content(
     initialCategory: String,
 ) {
     val poisByCategory by viewModel.poisByCategory.collectAsState()
+    val nearbyResults by viewModel.nearbyResults.collectAsState()
     val activePoll by viewModel.activePoll.collectAsState()
     val activeActivityPoll by viewModel.activeActivityPoll.collectAsState()
     val currentMember by viewModel.currentMember.collectAsState()
@@ -203,6 +213,9 @@ private fun Level2Content(
 
     var selectedCategory by rememberSaveable(destination.placeId, initialCategory) { mutableStateOf(initialCategory) }
     var selectedPoi by remember { mutableStateOf<PlaceResult?>(null) }
+    var searchQuery by rememberSaveable(destination.placeId) { mutableStateOf("") }
+    val searchScope = rememberCoroutineScope()
+    var debounceJob by remember { mutableStateOf<Job?>(null) }
 
     LaunchedEffect(destination.placeId, initialCategory) {
         selectedCategory = initialCategory
@@ -254,6 +267,33 @@ private fun Level2Content(
                 .fillMaxSize()
                 .padding(innerPadding),
         ) {
+            // ── Free-text search ─────────────────────────────────────────────
+            OutlinedTextField(
+                value = searchQuery,
+                onValueChange = { q ->
+                    searchQuery = q
+                    debounceJob?.cancel()
+                    debounceJob = searchScope.launch {
+                        delay(400)
+                        viewModel.searchNearby(q)
+                    }
+                },
+                placeholder = { Text("Buscar actividad…") },
+                leadingIcon = { Icon(Icons.Default.Search, contentDescription = null) },
+                trailingIcon = if (searchQuery.isNotBlank()) {
+                    {
+                        IconButton(onClick = {
+                            searchQuery = ""
+                            viewModel.searchNearby("")
+                        }) { Icon(Icons.Default.Close, contentDescription = "Limpiar") }
+                    }
+                } else null,
+                singleLine = true,
+                modifier = Modifier
+                    .fillMaxWidth()
+                    .padding(horizontal = 16.dp, vertical = 8.dp),
+            )
+
             // ── Category chip row ─────────────────────────────────────────────
             LazyRow(
                 contentPadding = PaddingValues(horizontal = 16.dp, vertical = 8.dp),
@@ -286,7 +326,8 @@ private fun Level2Content(
             HorizontalDivider()
 
             // ── Results ───────────────────────────────────────────────────────
-            when (val state = poisByCategory) {
+            val activeState = if (searchQuery.isNotBlank()) nearbyResults ?: UiState.Loading else poisByCategory
+            when (val state = activeState) {
                 is UiState.Loading -> {
                     Box(
                         modifier = Modifier.fillMaxSize(),

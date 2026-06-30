@@ -1,6 +1,7 @@
 package com.hllous.plantravel.domain.places
 
 import com.hllous.plantravel.domain.model.PlaceResult
+import com.hllous.plantravel.domain.model.StoredDestination
 import org.junit.Assert.assertEquals
 import org.junit.Assert.assertTrue
 import org.junit.Test
@@ -82,5 +83,36 @@ class PlaceRecommendationRankerTest {
 
         assertEquals(listOf(qualifies), result.top)
         assertEquals(setOf("b", "c"), result.others.map { it.placeId }.toSet())
+    }
+
+    // ── mergeWithCurated ──────────────────────────────────────────────────────
+
+    private fun dest(name: String) = StoredDestination(
+        id = name, source = "geonames", sourceId = name,
+        name = name, normalizedName = name.lowercase(),
+        province = "Río Negro", region = "Patagonia", countryCode = "AR",
+        lat = 0.0, lng = 0.0, population = 1000,
+    )
+
+    @Test
+    fun mergeWithCurated_curatedNamesAlwaysFirst() {
+        val curated = listOf(dest("Bariloche"), dest("El Bolsón"))
+        val api = listOf(dest("Ushuaia"), dest("El Calafate"), dest("Bariloche"))
+
+        val result = ranker.mergeWithCurated(curated, api)
+
+        assertEquals("Bariloche", result[0].name)
+        assertEquals("El Bolsón", result[1].name)
+    }
+
+    @Test
+    fun mergeWithCurated_deduplicatesByNormalizedName() {
+        val curated = listOf(dest("Bariloche"))
+        val api = listOf(dest("Bariloche"), dest("Ushuaia"))
+
+        val result = ranker.mergeWithCurated(curated, api)
+
+        assertEquals(2, result.size)
+        assertEquals(listOf("Bariloche", "Ushuaia"), result.map { it.name })
     }
 }

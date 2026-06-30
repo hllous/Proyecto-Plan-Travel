@@ -37,6 +37,8 @@ import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.automirrored.filled.ArrowBack
+import androidx.compose.material.icons.filled.CalendarMonth
+import androidx.compose.material.icons.filled.Check
 import androidx.compose.material.icons.filled.Delete
 import androidx.compose.material.icons.filled.EmojiEvents
 import androidx.compose.material.icons.filled.HowToVote
@@ -100,6 +102,7 @@ import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import androidx.compose.ui.window.Dialog
+import android.net.Uri
 import androidx.navigation.NavHostController
 import coil3.compose.AsyncImage
 import coil3.request.ImageRequest
@@ -109,9 +112,11 @@ import com.hllous.plantravel.domain.model.Poll
 import com.hllous.plantravel.domain.model.PollState
 import com.hllous.plantravel.domain.model.PollType
 import com.hllous.plantravel.presentation.UiState
+import com.hllous.plantravel.presentation.itinerary.ItineraryEventDraft
 import com.hllous.plantravel.presentation.poll.PollCandidateUiModel
 import com.hllous.plantravel.presentation.poll.PollViewModel
 import com.hllous.plantravel.ui.theme.FrauncesFamily
+import kotlinx.serialization.json.Json
 import java.time.Instant
 import java.time.ZoneOffset
 import kotlin.math.sin
@@ -175,6 +180,7 @@ fun PollScreen(
     var pendingWinner by remember { mutableStateOf<PollCandidateUiModel?>(null) }
     var winnerOverlayData by remember { mutableStateOf<WinnerOverlayData?>(null) }
     var showConfirmDestination by remember { mutableStateOf(false) }
+    var showAddToItinerary by remember { mutableStateOf(false) }
 
     // Keep screenPoll in sync with the Level 2 poll so candidatesState is correct.
     // Key on detailPoll (not detailPollId) so the effect re-fires once allPolls loads
@@ -295,6 +301,15 @@ fun PollScreen(
                         pendingWinner = winner
                         showConfirmDestination = true
                     },
+                    onAddToItinerary = { uiModel ->
+                        val draft = ItineraryEventDraft(
+                            name = uiModel.candidate.name,
+                            description = null,
+                            placeId = uiModel.candidate.placeId,
+                        )
+                        val draftJson = Uri.encode(Json.encodeToString(draft))
+                        navController.navigate("itinerary?draft=$draftJson")
+                    },
                 )
             }
         }
@@ -371,10 +386,10 @@ fun PollScreen(
             onDismiss = {
                 winnerOverlayData = null
                 val pw = pendingWinner
-                if (data.isDestination && pw != null) {
-                    showConfirmDestination = true
-                } else {
-                    pendingWinner = null
+                when {
+                    data.isDestination && pw != null -> showConfirmDestination = true
+                    !data.isDestination && pw != null -> showAddToItinerary = true
+                    else -> pendingWinner = null
                 }
             },
         )
@@ -425,6 +440,40 @@ fun PollScreen(
             dismissButton = {
                 TextButton(onClick = { showConfirmDestination = false; pendingWinner = null }) {
                     Text("No por ahora")
+                }
+            },
+        )
+    }
+
+    if (showAddToItinerary) {
+        val pw = pendingWinner
+        AlertDialog(
+            onDismissRequest = { showAddToItinerary = false; pendingWinner = null },
+            containerColor = MaterialTheme.colorScheme.surface,
+            titleContentColor = MaterialTheme.colorScheme.onSurface,
+            textContentColor = MaterialTheme.colorScheme.onSurfaceVariant,
+            title = { Text("¿Agregar al itinerario?") },
+            text = {
+                Text("¿Querés agregar ${pw?.candidate?.name ?: "el ganador"} al itinerario del viaje?")
+            },
+            confirmButton = {
+                Button(onClick = {
+                    if (pw != null) {
+                        val draft = ItineraryEventDraft(
+                            name = pw.candidate.name,
+                            description = null,
+                            placeId = pw.candidate.placeId,
+                        )
+                        val draftJson = Uri.encode(Json.encodeToString(draft))
+                        navController.navigate("itinerary?draft=$draftJson")
+                    }
+                    showAddToItinerary = false
+                    pendingWinner = null
+                }) { Text("Agregar") }
+            },
+            dismissButton = {
+                TextButton(onClick = { showAddToItinerary = false; pendingWinner = null }) {
+                    Text("Ahora no")
                 }
             },
         )
@@ -652,6 +701,7 @@ private fun PollDetailContent(
     modifier: Modifier = Modifier,
     onToggleVote: (String) -> Unit,
     onSetAsDestination: (() -> Unit)? = null,
+    onAddToItinerary: ((PollCandidateUiModel) -> Unit)? = null,
 ) {
     val isClosed = poll.state == PollState.CLOSED
 
@@ -731,7 +781,9 @@ private fun PollDetailContent(
                         uiModel = uiModel,
                         isWinner = uiModel.candidate.placeId == poll.winnerPlaceId,
                         votingEnabled = !isClosed && !isSubmitting,
+                        isActivityPoll = poll.type == PollType.ACTIVITY,
                         onToggleVote = { onToggleVote(uiModel.candidate.id) },
+                        onAddToItinerary = { onAddToItinerary?.invoke(uiModel) },
                     )
                 }
             }
@@ -746,7 +798,9 @@ private fun PollCandidateCard(
     uiModel: PollCandidateUiModel,
     isWinner: Boolean,
     votingEnabled: Boolean,
+    isActivityPoll: Boolean = false,
     onToggleVote: () -> Unit,
+    onAddToItinerary: () -> Unit = {},
 ) {
     val candidate = uiModel.candidate
     val context = LocalContext.current
@@ -826,6 +880,26 @@ private fun PollCandidateCard(
                     progress = { uiModel.voteProgress },
                     modifier = Modifier.fillMaxWidth(),
                 )
+                if (isActivityPoll) {
+                    var added by remember(uiModel.candidate.id) { mutableStateOf(false) }
+                    TextButton(
+                        onClick = {
+                            if (!added) {
+                                added = true
+                                onAddToItinerary()
+                            }
+                        },
+                        modifier = Modifier.fillMaxWidth(),
+                    ) {
+                        Icon(
+                            imageVector = if (added) Icons.Default.Check else Icons.Default.CalendarMonth,
+                            contentDescription = null,
+                            modifier = Modifier.size(16.dp),
+                        )
+                        Spacer(modifier = Modifier.width(4.dp))
+                        Text(if (added) "Agregado al itinerario" else "+ Itinerario")
+                    }
+                }
             }
         }
     }

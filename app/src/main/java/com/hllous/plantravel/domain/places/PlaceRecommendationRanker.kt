@@ -2,6 +2,7 @@ package com.hllous.plantravel.domain.places
 
 import com.hllous.plantravel.domain.model.PlaceResult
 import com.hllous.plantravel.domain.model.RankedRecommendations
+import com.hllous.plantravel.domain.model.StoredDestination
 import kotlin.math.ln
 
 private const val RATING_THRESHOLD = 4.2
@@ -25,4 +26,13 @@ class PlaceRecommendationRanker @javax.inject.Inject constructor() {
 
     private fun PlaceResult.score() =
         if (reviewCount > 0) rating * ln(reviewCount.toDouble()) else 0.0
+
+    fun mergeWithCurated(
+        curated: List<StoredDestination>,
+        api: List<StoredDestination>,
+    ): List<StoredDestination> {
+        val curatedNames = curated.map { it.normalizedName }.toSet()
+        val apiFiltered = api.filterNot { it.normalizedName in curatedNames }
+        return curated + apiFiltered
+    }
 }

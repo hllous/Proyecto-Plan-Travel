@@ -390,7 +390,7 @@ class DestinationViewModelTest {
 
         assertEquals(-41.1335, places.lastSearchedLat!!, 0.0001)
         assertEquals(-71.3103, places.lastSearchedLng!!, 0.0001)
-        assertEquals("Alojamiento", places.lastSearchedType)
+        assertEquals(listOf("lodging"), places.lastSearchedTypes)
 
         val state = vm.poisByCategory.value
         assertTrue(state is UiState.Success)
@@ -407,7 +407,7 @@ class DestinationViewModelTest {
         vm.selectPoiCategory("Naturaleza")
         advanceUntilIdle()
 
-        assertNull(places.lastSearchedType)
+        assertNull(places.lastSearchedTypes)
         assertTrue(vm.poisByCategory.value is UiState.Loading)
     }
 
@@ -443,14 +443,14 @@ class DestinationViewModelTest {
             tripDestinationLat = -41.1335,
             tripDestinationLng = -71.3103,
         )
-        val startedTypes = mutableListOf<String>()
+        var searchCallCount = 0
         var inFlight = 0
         var maxInFlight = 0
         val releaseSearches = Channel<Unit>(capacity = 4)
         val places = FakePlacesApiClient(
             poiResults = listOf(fakePlace),
-            beforeSearchPois = { type ->
-                startedTypes += type
+            beforeSearchPois = { _ ->
+                searchCallCount++
                 inFlight++
                 maxInFlight = maxOf(maxInFlight, inFlight)
                 releaseSearches.receive()
@@ -469,7 +469,7 @@ class DestinationViewModelTest {
         vm.loadHomeFeed()
         advanceUntilIdle()
 
-        assertEquals(4, startedTypes.distinct().size)
+        assertEquals(4, searchCallCount)
         assertTrue(maxInFlight > 1)
 
         repeat(4) { releaseSearches.trySend(Unit) }
@@ -790,5 +790,93 @@ class DestinationViewModelTest {
 
         assertFalse(navigateCalled)
         assertEquals(0, repo.addPollCandidateCallCount)
+    }
+
+    // ── Curated destinations ──────────────────────────────────────────────────
+
+    @Test
+    fun selectRegion_prependsCuratedEntries() = runTest {
+        // Esquel has higher population than Bariloche in DB → default sort puts Esquel first.
+        // Curated list has Bariloche first → merged result must put Bariloche first.
+        val repo = FakeTravelRepository(
+            initialDestinations = listOf(
+                storedDestination("esq", "Esquel", "Patagonia", "Chubut", population = 45000),
+                storedDestination("bar", "Bariloche", "Patagonia", "Río Negro", population = 135000),
+                storedDestination("bol", "El Bolsón", "Patagonia", "Río Negro", population = 20000),
+            ),
+        )
+        val vm = viewModel(repo = repo, photoResolver = FakeDestinationPhotoResolver())
+
+        vm.selectRegion("Patagonia")
+        advanceUntilIdle()
+
+        val names = vm.regionDestinations.value.map { it.name }
+        // Bariloche and El Bolsón are in CuratedDestinations for Patagonia → must appear first in that order
+        assertEquals("Bariloche", names[0])
+        assertEquals("El Bolsón", names[1])
+    }
+
+    @Test
+    fun deduplication_curatedNameAppearsOnlyOnce() = runTest {
+        val repo = FakeTravelRepository(
+            initialDestinations = listOf(
+                storedDestination("bar", "Bariloche", "Patagonia", "Río Negro", population = 135000),
+                storedDestination("ushu", "Ushuaia", "Patagonia", "Tierra del Fuego", population = 82615),
+            ),
+        )
+        val vm = viewModel(repo = repo, photoResolver = FakeDestinationPhotoResolver())
+
+        vm.selectRegion("Patagonia")
+        advanceUntilIdle()
+
+        val ids = vm.regionDestinations.value.map { it.id }
+        assertEquals(ids.distinct(), ids)
+        assertEquals(1, ids.count { it == "bar" })
+    }
+
+    // ── Chip expansion ────────────────────────────────────────────────────────
+
+    @Test
+    fun selectTurismoChip_callsSearchPoisWithTurismoTypes() = runTest {
+        val group = TravelGroup(
+            id = "group-1", name = "Viaje",
+            tripDestinationPlaceId = "dest-1", tripDestinationName = "Bariloche",
+            tripDestinationLat = -41.1, tripDestinationLng = -71.3,
+        )
+        val repo = FakeTravelRepository(initialGroups = listOf(group))
+        val places = FakePlacesApiClient()
+        val holder = SelectedGroupHolder().also { it.selectedGroupId.value = "group-1" }
+        val vm = viewModel(repo = repo, places = places, holder = holder)
+        backgroundScope.launch { vm.tripDestination.collect {} }
+        advanceUntilIdle()
+
+        vm.selectPoiCategory("Turismo")
+        advanceUntilIdle()
+
+        assertEquals(listOf("tourist_attraction", "amusement_park", "zoo"), places.lastSearchedTypes)
+    }
+
+    // ── Level 2 search bar ────────────────────────────────────────────────────
+
+    @Test
+    fun searchNearby_callsSearchNearbyWithCoordinates() = runTest {
+        val group = TravelGroup(
+            id = "group-1", name = "Viaje",
+            tripDestinationPlaceId = "dest-1", tripDestinationName = "Bariloche",
+            tripDestinationLat = -41.1, tripDestinationLng = -71.3,
+        )
+        val repo = FakeTravelRepository(initialGroups = listOf(group))
+        val places = FakePlacesApiClient()
+        val holder = SelectedGroupHolder().also { it.selectedGroupId.value = "group-1" }
+        val vm = viewModel(repo = repo, places = places, holder = holder)
+        backgroundScope.launch { vm.tripDestination.collect {} }
+        advanceUntilIdle()
+
+        vm.searchNearby("museo")
+        advanceUntilIdle()
+
+        assertEquals("museo", places.lastNearbyQuery)
+        assertEquals(-41.1, places.lastNearbyLat!!, 0.001)
+        assertEquals(-71.3, places.lastNearbyLng!!, 0.001)
     }
 }

@@ -17,6 +17,8 @@ import kotlinx.coroutines.ExperimentalCoroutinesApi
 import kotlinx.coroutines.flow.flow
 import kotlinx.coroutines.launch
 import kotlinx.coroutines.test.UnconfinedTestDispatcher
+import kotlinx.coroutines.test.advanceUntilIdle
+import kotlinx.coroutines.test.runTest
 import org.junit.Assert.assertEquals
 import org.junit.Assert.assertFalse
 import org.junit.Assert.assertNotNull
@@ -461,5 +463,69 @@ class PollViewModelTest {
         assertEquals(0f, uiCandidates[0].voteProgress, 0.001f)
         assertEquals(0f, uiCandidates[1].voteProgress, 0.001f)
         job.cancel()
+    }
+
+    // ── Test 7: selectWinner on ACTIVITY poll emits WinnerSelectedEvent ────────
+
+    @Test
+    fun selectWinnerOnActivityPollEmitsWinnerSelectedEvent() {
+        val repo = FakeTravelRepository()
+        val holder = SelectedGroupHolder().also { it.selectedGroupId.value = "group-1" }
+        val activityPoll = Poll(
+            id = "act-poll-1",
+            groupId = "group-1",
+            type = PollType.ACTIVITY,
+            state = PollState.OPEN,
+        )
+        repo.simulatePollUpdate("group-1", activityPoll)
+        val candidate = PollCandidate(
+            id = "cand-museo", pollId = "act-poll-1", placeId = "place-museo",
+            name = "Museo Nacional", photoUrl = "", addedByMemberId = "m1",
+        )
+        repo.simulateCandidatesUpdate("act-poll-1", listOf(candidate))
+
+        val testScope = CoroutineScope(UnconfinedTestDispatcher())
+        val vm = viewModel(repo = repo, holder = holder)
+        val candidatesJob = testScope.launch { vm.candidates.collect {} }
+
+        val events = mutableListOf<com.hllous.plantravel.presentation.poll.WinnerSelectedEvent>()
+        val eventsJob = testScope.launch { vm.winnerSelectedEvent.collect { events.add(it) } }
+
+        // FakeTravelRepository.observeActivePoll only returns DESTINATION polls, so set directly
+        vm.setScreenPoll(activityPoll)
+
+        vm.selectWinner("cand-museo")
+
+        assertEquals(1, events.size)
+        assertEquals("Museo Nacional", events[0].name)
+        assertEquals("place-museo", events[0].placeId)
+        candidatesJob.cancel()
+        eventsJob.cancel()
+    }
+
+    // ── Test 8: selectWinner on DESTINATION poll does NOT emit WinnerSelectedEvent
+
+    @Test
+    fun selectWinnerOnDestinationPollDoesNotEmitWinnerSelectedEvent() = runTest {
+        val repo = FakeTravelRepository()
+        val holder = SelectedGroupHolder().also { it.selectedGroupId.value = "group-1" }
+        repo.simulatePollUpdate("group-1", openPoll) // openPoll is DESTINATION type
+        val candidate = PollCandidate(
+            id = "cand-dest", pollId = "poll-1", placeId = "place-bariloche",
+            name = "Bariloche", photoUrl = "", addedByMemberId = "m1",
+        )
+        repo.simulateCandidatesUpdate("poll-1", listOf(candidate))
+
+        val vm = viewModel(repo = repo, holder = holder)
+        backgroundScope.launch { vm.candidates.collect {} }
+
+        val events = mutableListOf<com.hllous.plantravel.presentation.poll.WinnerSelectedEvent>()
+        backgroundScope.launch { vm.winnerSelectedEvent.collect { events.add(it) } }
+        advanceUntilIdle()
+
+        vm.selectWinner("cand-dest")
+        advanceUntilIdle()
+
+        assertEquals(0, events.size)
     }
 }
