@@ -1,6 +1,7 @@
 package com.hllous.plantravel.presentation
 
 import com.hllous.plantravel.FakeSessionProvider
+import com.hllous.plantravel.FakePlacesApiClient
 import com.hllous.plantravel.FakeTravelRepository
 import com.hllous.plantravel.MainDispatcherRule
 import com.hllous.plantravel.domain.model.ItineraryEvent
@@ -36,11 +37,12 @@ class ItineraryViewModelTest {
 
     private fun viewModel(
         repo: FakeTravelRepository = FakeTravelRepository(),
+        places: FakePlacesApiClient = FakePlacesApiClient(),
         session: FakeSessionProvider = FakeSessionProvider(userId = "user-1"),
         holder: SelectedGroupHolder = SelectedGroupHolder().also { it.selectedGroupId.value = "group-1" },
     ) = ItineraryViewModel(
         repository = repo,
-        sessionProvider = session,
+        placesApiClient = places,
         selectedGroupHolder = holder,
     )
 

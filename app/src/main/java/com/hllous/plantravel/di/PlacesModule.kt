@@ -2,7 +2,9 @@ package com.hllous.plantravel.di
 
 import com.hllous.plantravel.BuildConfig
 import com.hllous.plantravel.data.destination.DestinationPhotoResolverImpl
+import com.hllous.plantravel.data.places.CachedPlacesApiClient
 import com.hllous.plantravel.data.places.GooglePlacesApiClient
+import com.hllous.plantravel.data.places.PlaceSessionCache
 import com.hllous.plantravel.domain.destination.DestinationPhotoResolver
 import com.hllous.plantravel.domain.places.PlacesApiClient
 import dagger.Binds
@@ -24,7 +26,12 @@ abstract class PlacesModule {
 
     @Binds
     @Singleton
-    abstract fun bindPlacesApiClient(impl: GooglePlacesApiClient): PlacesApiClient
+    abstract fun bindPlacesApiClient(impl: CachedPlacesApiClient): PlacesApiClient
+
+    @Binds
+    @Singleton
+    @Named("remotePlacesApiClient")
+    abstract fun bindRemotePlacesApiClient(impl: GooglePlacesApiClient): PlacesApiClient
 
     @Binds
     @Singleton
@@ -42,5 +49,9 @@ abstract class PlacesModule {
         @Provides
         @Named("placesApiKey")
         fun providePlacesApiKey(): String = BuildConfig.GOOGLE_PLACES_API_KEY
+
+        @Provides
+        @Singleton
+        fun providePlaceSessionCache(): PlaceSessionCache = PlaceSessionCache(maxEntries = 100)
     }
 }

@@ -122,6 +122,9 @@ import com.hllous.plantravel.domain.model.StoredDestination
 import com.hllous.plantravel.presentation.UiState
 import com.hllous.plantravel.presentation.destination.DestinationViewModel
 import com.hllous.plantravel.presentation.destination.TripDestinationState
+import com.hllous.plantravel.ui.components.PlaceRecommendationBottomSheet
+import com.hllous.plantravel.ui.components.PlaceSheetAction
+import com.hllous.plantravel.ui.components.PlaceSheetActionStyle
 import com.hllous.plantravel.ui.theme.FrauncesFamily
 
 private val REGIONS = listOf("Patagonia", "Cuyo", "Noroeste", "Litoral", "Buenos Aires", "Córdoba")
@@ -378,35 +381,47 @@ private fun Level2Content(
 
     // ── POI bottom sheet ──────────────────────────────────────────────────────
     selectedPoi?.let { poi ->
-        PoiBottomSheet(
+        PlaceRecommendationBottomSheet(
             place = poi,
-            activePollType = activeActivityPoll?.type,
             onDismiss = { selectedPoi = null },
-            onAddToItinerary = {
-                val draft = ItineraryEventDraft(
-                    name = poi.name,
-                    description = poi.address,
-                    placeId = poi.placeId,
+            actions = buildList {
+                add(
+                    PlaceSheetAction(label = "Añadir al itinerario", onClick = {
+                        val draft = ItineraryEventDraft(
+                            name = poi.name,
+                            description = poi.address,
+                            placeId = poi.placeId,
+                        )
+                        val draftJson = Uri.encode(Json.encodeToString(draft))
+                        navController.navigate("itinerary?draft=$draftJson")
+                        selectedPoi = null
+                    }),
                 )
-                val draftJson = Uri.encode(Json.encodeToString(draft))
-                navController.navigate("itinerary?draft=$draftJson")
-                selectedPoi = null
-            },
-            onAddToPoll = {
-                viewModel.addPoiToPoll(poi) {
-                    selectedPoi = null
-                    navController.navigate("poll_detail")
-                }
-            },
-            onCreatePoll = {
-                viewModel.createPollWithPoi(poi) {
-                    selectedPoi = null
-                    navController.navigate("poll_detail")
-                }
-            },
-            onViewPoll = {
-                selectedPoi = null
-                navController.navigate("poll_detail")
+                add(
+                    when (activeActivityPoll?.type) {
+                        PollType.ACTIVITY -> PlaceSheetAction(
+                            label = "Añadir a encuesta",
+                            onClick = {
+                                viewModel.addPoiToPoll(poi) {
+                                    selectedPoi = null
+                                    navController.navigate("poll_detail")
+                                }
+                            },
+                            style = PlaceSheetActionStyle.Outlined,
+                        )
+
+                        else -> PlaceSheetAction(
+                            label = "Crear encuesta de actividades",
+                            onClick = {
+                                viewModel.createPollWithPoi(poi) {
+                                    selectedPoi = null
+                                    navController.navigate("poll_detail")
+                                }
+                            },
+                            style = PlaceSheetActionStyle.Outlined,
+                        )
+                    },
+                )
             },
         )
     }
@@ -532,231 +547,6 @@ private fun PoiGridCard(
                         style = MaterialTheme.typography.labelSmall,
                         color = Color.White,
                     )
-                }
-            }
-        }
-    }
-}
-
-@OptIn(ExperimentalMaterial3Api::class)
-@Composable
-private fun PoiBottomSheet(
-    place: PlaceResult,
-    activePollType: PollType?,
-    onDismiss: () -> Unit,
-    onAddToItinerary: () -> Unit,
-    onAddToPoll: () -> Unit,
-    onCreatePoll: () -> Unit,
-    onViewPoll: () -> Unit,
-) {
-    val context = LocalContext.current
-    val sheetState = rememberModalBottomSheetState(skipPartiallyExpanded = true)
-
-    ModalBottomSheet(
-        onDismissRequest = onDismiss,
-        sheetState = sheetState,
-    ) {
-        Column(
-            modifier = Modifier
-                .fillMaxWidth()
-                .padding(bottom = 32.dp),
-        ) {
-            DestinationImage(
-                imageUrl = place.photoUrl,
-                contentDescription = place.name,
-                title = place.name,
-                icon = Icons.Default.Map,
-                modifier = Modifier
-                    .fillMaxWidth()
-                    .height(220.dp)
-                    .padding(horizontal = 16.dp)
-                    .clip(RoundedCornerShape(16.dp)),
-            )
-
-            Spacer(modifier = Modifier.height(16.dp))
-
-            Column(modifier = Modifier.padding(horizontal = 24.dp)) {
-                Text(
-                    text = place.name,
-                    style = MaterialTheme.typography.headlineSmall,
-                    fontFamily = FrauncesFamily,
-                    fontWeight = FontWeight.SemiBold,
-                )
-
-                Spacer(modifier = Modifier.height(8.dp))
-
-                Row(verticalAlignment = Alignment.CenterVertically) {
-                    Icon(
-                        Icons.Default.Star,
-                        contentDescription = null,
-                        tint = MaterialTheme.colorScheme.primary,
-                        modifier = Modifier.size(16.dp),
-                    )
-                    Spacer(modifier = Modifier.width(4.dp))
-                    Text(
-                        text = "%.1f".format(place.rating),
-                        style = MaterialTheme.typography.bodyLarge,
-                        fontWeight = FontWeight.Medium,
-                    )
-                    Spacer(modifier = Modifier.width(8.dp))
-                    Text(
-                        text = "(${place.reviewCount} reseñas)",
-                        style = MaterialTheme.typography.bodyMedium,
-                        color = MaterialTheme.colorScheme.onSurfaceVariant,
-                    )
-                }
-
-                if (place.address.isNotBlank()) {
-                    Spacer(modifier = Modifier.height(6.dp))
-                    Row(verticalAlignment = Alignment.CenterVertically) {
-                        Icon(
-                            Icons.Default.LocationOn,
-                            contentDescription = null,
-                            tint = MaterialTheme.colorScheme.onSurfaceVariant,
-                            modifier = Modifier.size(14.dp),
-                        )
-                        Spacer(modifier = Modifier.width(4.dp))
-                        Text(
-                            text = place.address,
-                            style = MaterialTheme.typography.bodySmall,
-                            color = MaterialTheme.colorScheme.onSurfaceVariant,
-                            maxLines = 2,
-                            overflow = TextOverflow.Ellipsis,
-                        )
-                    }
-                }
-
-                if (place.reviews.isNotEmpty()) {
-                    Spacer(modifier = Modifier.height(20.dp))
-                    val pagerState = rememberPagerState { place.reviews.size }
-                    Row(
-                        modifier = Modifier.fillMaxWidth(),
-                        horizontalArrangement = Arrangement.SpaceBetween,
-                        verticalAlignment = Alignment.CenterVertically,
-                    ) {
-                        Text(
-                            text = "Reseñas",
-                            style = MaterialTheme.typography.titleMedium,
-                            fontWeight = FontWeight.SemiBold,
-                        )
-                        if (place.reviews.size > 1) {
-                            Row(horizontalArrangement = Arrangement.spacedBy(4.dp)) {
-                                repeat(place.reviews.size) { i ->
-                                    Box(
-                                        modifier = Modifier
-                                            .size(if (i == pagerState.currentPage) 7.dp else 5.dp)
-                                            .clip(CircleShape)
-                                            .background(
-                                                if (i == pagerState.currentPage)
-                                                    MaterialTheme.colorScheme.primary
-                                                else
-                                                    MaterialTheme.colorScheme.outlineVariant
-                                            )
-                                    )
-                                }
-                            }
-                        }
-                    }
-                    Spacer(modifier = Modifier.height(12.dp))
-                    HorizontalPager(
-                        state = pagerState,
-                        modifier = Modifier.fillMaxWidth(),
-                        beyondViewportPageCount = 0,
-                    ) { page ->
-                        val review = place.reviews[page]
-                        Column(modifier = Modifier.fillMaxWidth()) {
-                            Row(
-                                modifier = Modifier.fillMaxWidth(),
-                                horizontalArrangement = Arrangement.SpaceBetween,
-                                verticalAlignment = Alignment.CenterVertically,
-                            ) {
-                                Text(
-                                    text = review.authorName,
-                                    style = MaterialTheme.typography.bodyMedium,
-                                    fontWeight = FontWeight.Medium,
-                                    modifier = Modifier.weight(1f),
-                                    maxLines = 1,
-                                    overflow = TextOverflow.Ellipsis,
-                                )
-                                Spacer(modifier = Modifier.width(8.dp))
-                                Text(
-                                    text = review.relativeTime,
-                                    style = MaterialTheme.typography.bodySmall,
-                                    color = MaterialTheme.colorScheme.onSurfaceVariant,
-                                )
-                            }
-                            Spacer(modifier = Modifier.height(2.dp))
-                            Row(verticalAlignment = Alignment.CenterVertically) {
-                                repeat(5) { i ->
-                                    Icon(
-                                        Icons.Default.Star,
-                                        contentDescription = null,
-                                        tint = if (i < review.rating) MaterialTheme.colorScheme.primary
-                                               else MaterialTheme.colorScheme.outlineVariant,
-                                        modifier = Modifier.size(13.dp),
-                                    )
-                                }
-                            }
-                            if (review.text.isNotBlank()) {
-                                Spacer(modifier = Modifier.height(4.dp))
-                                Text(
-                                    text = review.text,
-                                    style = MaterialTheme.typography.bodySmall,
-                                    color = MaterialTheme.colorScheme.onSurfaceVariant,
-                                    maxLines = 3,
-                                    overflow = TextOverflow.Ellipsis,
-                                )
-                            }
-                        }
-                    }
-                }
-
-                Spacer(modifier = Modifier.height(24.dp))
-
-                Button(
-                    onClick = onAddToItinerary,
-                    modifier = Modifier.fillMaxWidth(),
-                ) {
-                    Text("Añadir al itinerario")
-                }
-
-                Spacer(modifier = Modifier.height(8.dp))
-
-                when (activePollType) {
-                    PollType.ACTIVITY -> {
-                        OutlinedButton(
-                            onClick = onAddToPoll,
-                            modifier = Modifier.fillMaxWidth(),
-                        ) {
-                            Text("Añadir a encuesta")
-                        }
-                    }
-                    else -> {
-                        OutlinedButton(
-                            onClick = onCreatePoll,
-                            modifier = Modifier.fillMaxWidth(),
-                        ) {
-                            Text("Crear encuesta de actividades")
-                        }
-                    }
-                }
-
-                Spacer(modifier = Modifier.height(8.dp))
-
-                TextButton(
-                    onClick = {
-                        val uri = Uri.parse("geo:${place.lat},${place.lng}?q=${Uri.encode(place.name)}")
-                        context.startActivity(Intent(Intent.ACTION_VIEW, uri))
-                    },
-                    modifier = Modifier.fillMaxWidth(),
-                ) {
-                    Icon(
-                        Icons.Default.Map,
-                        contentDescription = null,
-                        modifier = Modifier.size(16.dp),
-                    )
-                    Spacer(modifier = Modifier.width(8.dp))
-                    Text("Ver en Maps")
                 }
             }
         }

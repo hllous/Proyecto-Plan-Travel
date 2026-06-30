@@ -5,6 +5,7 @@ import com.hllous.plantravel.domain.model.PlaceReview
 import com.hllous.plantravel.domain.places.PlacesApiClient
 import io.ktor.client.HttpClient
 import io.ktor.client.call.body
+import io.ktor.client.request.get
 import io.ktor.client.request.header
 import io.ktor.client.request.post
 import io.ktor.client.request.setBody
@@ -21,10 +22,11 @@ import javax.inject.Singleton
 
 private const val BASE_URL = "https://places.googleapis.com/v1/places"
 private const val FIELD_MASK = "places.id,places.displayName,places.rating,places.userRatingCount,places.photos,places.formattedAddress,places.location,places.primaryType,places.types,places.reviews"
+private const val DETAIL_FIELD_MASK = "id,displayName,rating,userRatingCount,photos,formattedAddress,location,primaryType,types,reviews"
 private const val PHOTO_WIDTH = 800
 
 @Singleton
-class GooglePlacesApiClient @Inject constructor(
+open class GooglePlacesApiClient @Inject constructor(
     private val httpClient: HttpClient,
     @Named("placesApiKey") private val apiKey: String,
 ) : PlacesApiClient {
@@ -142,7 +144,7 @@ class GooglePlacesApiClient @Inject constructor(
 
     // ─── PlacesApiClient ──────────────────────────────────────────────────────
 
-    override suspend fun searchDestinations(region: String): List<PlaceResult> {
+    override open suspend fun searchDestinations(region: String): List<PlaceResult> {
         val response: PlacesResponse = httpClient.post("$BASE_URL:searchText") {
             header("X-Goog-Api-Key", apiKey)
             header("X-Goog-FieldMask", FIELD_MASK)
@@ -152,7 +154,7 @@ class GooglePlacesApiClient @Inject constructor(
         return response.places.map { it.toPlaceResult(it.resolvedPhotoUrl(), it.photoReference()) }
     }
 
-    override suspend fun searchPois(lat: Double, lng: Double, types: List<String>): List<PlaceResult> {
+    override open suspend fun searchPois(lat: Double, lng: Double, types: List<String>): List<PlaceResult> {
         return coroutineScope {
             types
                 .map { singleType -> async { fetchNearby(lat, lng, listOf(singleType)) } }
@@ -163,7 +165,7 @@ class GooglePlacesApiClient @Inject constructor(
         }
     }
 
-    override suspend fun searchNearby(query: String, lat: Double, lng: Double): List<PlaceResult> {
+    override open suspend fun searchNearby(query: String, lat: Double, lng: Double): List<PlaceResult> {
         val response: PlacesResponse = httpClient.post("$BASE_URL:searchText") {
             header("X-Goog-Api-Key", apiKey)
             header("X-Goog-FieldMask", FIELD_MASK)
@@ -179,6 +181,20 @@ class GooglePlacesApiClient @Inject constructor(
         }.body()
         return response.places.map { it.toPlaceResult(it.resolvedPhotoUrl(), it.photoReference()) }
     }
+
+    override open suspend fun fetchPlaceDetails(placeId: String): PlaceResult {
+        val response: PlaceDto = httpClient.get("$BASE_URL/$placeId") {
+            header("X-Goog-Api-Key", apiKey)
+            header("X-Goog-FieldMask", DETAIL_FIELD_MASK)
+        }.body()
+        return response.toPlaceResult(response.resolvedPhotoUrl(), response.photoReference())
+    }
+
+    override fun getCachedPlace(placeId: String): PlaceResult? = null
+
+    override fun isCachedPlaceDetailed(placeId: String): Boolean = false
+
+    override fun rememberPlace(place: PlaceResult, hasFullDetails: Boolean): PlaceResult = place
 
     private suspend fun fetchNearby(lat: Double, lng: Double, includedTypes: List<String>): List<PlaceResult> {
         val response: PlacesResponse = httpClient.post("$BASE_URL:searchNearby") {

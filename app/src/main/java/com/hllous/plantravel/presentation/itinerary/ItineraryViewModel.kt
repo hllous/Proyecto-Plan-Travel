@@ -2,11 +2,11 @@ package com.hllous.plantravel.presentation.itinerary
 
 import androidx.lifecycle.ViewModel
 import androidx.lifecycle.viewModelScope
-import com.hllous.plantravel.domain.auth.SessionProvider
 import com.hllous.plantravel.domain.model.GroupMember
 import com.hllous.plantravel.domain.model.ItineraryEvent
 import com.hllous.plantravel.domain.model.PlaceResult
 import com.hllous.plantravel.domain.model.PollCandidate
+import com.hllous.plantravel.domain.places.PlacesApiClient
 import com.hllous.plantravel.domain.repository.TravelRepository
 import kotlinx.serialization.Serializable
 import com.hllous.plantravel.presentation.UiState
@@ -43,7 +43,7 @@ data class ItineraryEventDraft(
 @OptIn(ExperimentalCoroutinesApi::class)
 class ItineraryViewModel @Inject constructor(
     private val repository: TravelRepository,
-    private val sessionProvider: SessionProvider,
+    private val placesApiClient: PlacesApiClient,
     private val selectedGroupHolder: SelectedGroupHolder,
 ) : ViewModel() {
 
@@ -52,6 +52,8 @@ class ItineraryViewModel @Inject constructor(
     val isSubmitting: StateFlow<Boolean> = _isSubmitting.asStateFlow()
     private val _message = MutableStateFlow<String?>(null)
     val message: StateFlow<String?> = _message.asStateFlow()
+    private val _selectedPlaceDetails = MutableStateFlow<UiState<PlaceResult>?>(null)
+    val selectedPlaceDetails: StateFlow<UiState<PlaceResult>?> = _selectedPlaceDetails.asStateFlow()
 
     val events: StateFlow<UiState<List<ItineraryEventByDay>>> = _reloadTrigger
         .flatMapLatest {
@@ -85,6 +87,23 @@ class ItineraryViewModel @Inject constructor(
                         arrays.toList().flatten()
                     }
                 }
+        }
+        .map { candidates ->
+            candidates.onEach { candidate ->
+                placesApiClient.rememberPlace(
+                    PlaceResult(
+                        placeId = candidate.placeId,
+                        name = candidate.name,
+                        photoUrl = candidate.photoUrl,
+                        rating = 0.0,
+                        reviewCount = 0,
+                        address = "",
+                        lat = candidate.lat,
+                        lng = candidate.lng,
+                    ),
+                )
+            }
+            candidates
         }
         .catch { emit(emptyList()) }
         .stateIn(viewModelScope, SharingStarted.WhileSubscribed(5000), emptyList())
@@ -155,12 +174,39 @@ class ItineraryViewModel @Inject constructor(
         _message.value = null
     }
 
+    fun loadPlaceDetails(place: PlaceResult?) {
+        if (place == null || place.placeId.isBlank()) {
+            _selectedPlaceDetails.value = null
+            return
+        }
+        placesApiClient.rememberPlace(place)
+        val cached = placesApiClient.getCachedPlace(place.placeId)
+        if (cached != null && placesApiClient.isCachedPlaceDetailed(place.placeId)) {
+            _selectedPlaceDetails.value = UiState.Success(cached)
+            return
+        }
+        _selectedPlaceDetails.value = UiState.Loading
+        viewModelScope.launch {
+            _selectedPlaceDetails.value = runCatching { placesApiClient.fetchPlaceDetails(place.placeId) }.fold(
+                onSuccess = { UiState.Success(it) },
+                onFailure = { UiState.Error(it.message ?: "Error al cargar la actividad") },
+            )
+        }
+    }
+
+    fun clearSelectedPlaceDetails() {
+        _selectedPlaceDetails.value = null
+    }
+
     fun buildEventFromPoi(place: PlaceResult): ItineraryEventDraft = ItineraryEventDraft(
         name = place.name,
         description = place.address,
         placeId = place.placeId,
         date = null,
     )
+
+    fun getCachedPlace(placeId: String?): PlaceResult? =
+        placeId?.takeIf { it.isNotBlank() }?.let(placesApiClient::getCachedPlace)
 
     fun reloadEvents() {
         _reloadTrigger.value++

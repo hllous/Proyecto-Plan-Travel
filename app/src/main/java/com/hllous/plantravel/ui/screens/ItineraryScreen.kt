@@ -3,7 +3,6 @@ package com.hllous.plantravel.ui.screens
 import androidx.compose.foundation.Canvas
 import androidx.compose.foundation.background
 import androidx.compose.foundation.clickable
-import androidx.compose.foundation.combinedClickable
 import androidx.compose.foundation.gestures.detectDragGesturesAfterLongPress
 import androidx.compose.foundation.horizontalScroll
 import androidx.compose.foundation.interaction.MutableInteractionSource
@@ -14,6 +13,8 @@ import androidx.compose.foundation.layout.PaddingValues
 import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.Spacer
 import androidx.compose.foundation.layout.WindowInsets
+import androidx.compose.foundation.layout.ExperimentalLayoutApi
+import androidx.compose.foundation.layout.isImeVisible
 import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.height
@@ -23,6 +24,7 @@ import androidx.compose.foundation.layout.offset
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.layout.width
+import androidx.compose.foundation.layout.imePadding
 import androidx.compose.foundation.lazy.LazyColumn
 import androidx.compose.foundation.lazy.LazyRow
 import androidx.compose.foundation.lazy.items
@@ -32,6 +34,7 @@ import androidx.compose.foundation.rememberScrollState
 import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.foundation.text.KeyboardOptions
+import androidx.compose.foundation.verticalScroll
 import android.content.Intent
 import android.net.Uri
 import coil3.compose.AsyncImage
@@ -68,6 +71,7 @@ import androidx.compose.material3.DatePicker
 import androidx.compose.material3.DatePickerDialog
 import androidx.compose.material3.ExperimentalMaterial3Api
 import androidx.compose.material3.FilterChip
+import androidx.compose.material3.FilterChipDefaults
 import androidx.compose.material3.FloatingActionButton
 import androidx.compose.material3.Icon
 import androidx.compose.material3.IconButton
@@ -75,6 +79,7 @@ import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.ModalBottomSheet
 import androidx.compose.material3.OutlinedButton
 import androidx.compose.material3.OutlinedTextField
+import androidx.compose.material3.OutlinedTextFieldDefaults
 import androidx.compose.material3.Scaffold
 import androidx.compose.material3.SnackbarHost
 import androidx.compose.material3.SnackbarHostState
@@ -82,6 +87,7 @@ import androidx.compose.material3.Surface
 import androidx.compose.material3.Text
 import androidx.compose.material3.TextButton
 import androidx.compose.material3.TopAppBar
+import androidx.compose.material3.ModalBottomSheetProperties
 import androidx.compose.material3.rememberDatePickerState
 import androidx.compose.material3.rememberModalBottomSheetState
 import androidx.compose.runtime.Composable
@@ -99,9 +105,12 @@ import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.graphics.vector.ImageVector
 import androidx.compose.ui.hapticfeedback.HapticFeedbackType
 import androidx.compose.ui.input.pointer.pointerInput
+import androidx.compose.ui.focus.onFocusChanged
 import androidx.compose.ui.platform.LocalDensity
 import androidx.compose.ui.platform.LocalHapticFeedback
 import androidx.compose.ui.platform.LocalContext
+import androidx.compose.ui.platform.LocalFocusManager
+import androidx.compose.ui.platform.LocalSoftwareKeyboardController
 import androidx.compose.ui.text.TextRange
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.input.KeyboardType
@@ -110,6 +119,7 @@ import androidx.compose.ui.text.style.TextAlign
 import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.zIndex
+import androidx.activity.compose.BackHandler
 import kotlin.math.roundToInt
 import androidx.navigation.NavHostController
 import com.hllous.plantravel.domain.model.GroupMember
@@ -120,6 +130,8 @@ import com.hllous.plantravel.presentation.UiState
 import com.hllous.plantravel.presentation.itinerary.ItineraryEventByDay
 import com.hllous.plantravel.presentation.itinerary.ItineraryEventDraft
 import com.hllous.plantravel.presentation.itinerary.ItineraryViewModel
+import com.hllous.plantravel.ui.components.PlaceRecommendationBottomSheet
+import com.hllous.plantravel.ui.components.PlaceRecommendationPreviewCard
 import com.hllous.plantravel.ui.theme.FrauncesFamily
 import java.time.Instant
 import java.time.LocalDate
@@ -134,6 +146,7 @@ private val StorageDateFormatter = DateTimeFormatter.ISO_LOCAL_DATE
 private const val TimelineStartHour = 0
 private const val TimelineEndHour = 23
 private val TimelineHourHeight = 56.dp
+private val TimelineHourAnchorOffset = 8.dp
 private val GanttLabelColumnWidth = 144.dp
 private val GanttDayCellWidth = 44.dp
 private data class TimelineDaySection(
@@ -184,11 +197,13 @@ fun ItineraryScreen(
     val message by viewModel.message.collectAsState()
     val activityCandidates by viewModel.activityCandidates.collectAsState()
     val members by viewModel.members.collectAsState()
+    val selectedPlaceDetails by viewModel.selectedPlaceDetails.collectAsState()
 
     val snackbarHostState = remember { SnackbarHostState() }
     var showSheet by rememberSaveable { mutableStateOf(false) }
     var editingEvent by remember { mutableStateOf<ItineraryEvent?>(null) }
     var pendingDeleteEvent by remember { mutableStateOf<ItineraryEvent?>(null) }
+    var placeSheetFallback by remember { mutableStateOf<PlaceResult?>(null) }
 
     LaunchedEffect(message) {
         message?.let {
@@ -277,6 +292,11 @@ fun ItineraryScreen(
                             events = events,
                             members = members,
                             activityCandidates = activityCandidates,
+                            onOpenPlaceDetails = { place ->
+                                placeSheetFallback = place
+                                viewModel.loadPlaceDetails(place)
+                            },
+                            cachedPlaceLookup = viewModel::getCachedPlace,
                             onEditEvent = { event ->
                                 editingEvent = event
                                 showSheet = true
@@ -350,6 +370,21 @@ fun ItineraryScreen(
             },
         )
     }
+
+    placeSheetFallback?.let { fallbackPlace ->
+        val state = selectedPlaceDetails
+        val displayedPlace = (state as? UiState.Success)?.data ?: fallbackPlace
+        val isLoadingDetails = state == UiState.Loading
+
+        ItineraryPlaceBottomSheet(
+            place = displayedPlace,
+            isLoading = isLoadingDetails,
+            onDismiss = {
+                placeSheetFallback = null
+                viewModel.clearSelectedPlaceDetails()
+            },
+        )
+    }
 }
 
 @Composable
@@ -380,6 +415,8 @@ private fun ItineraryList(
     events: List<ItineraryEvent>,
     members: List<GroupMember>,
     activityCandidates: List<PollCandidate>,
+    onOpenPlaceDetails: (PlaceResult) -> Unit,
+    cachedPlaceLookup: (String?) -> PlaceResult?,
     onEditEvent: (ItineraryEvent) -> Unit,
     onMoveEvent: (ItineraryEvent, String, String?) -> Unit,
     onDeleteEvent: (ItineraryEvent) -> Unit,
@@ -433,6 +470,10 @@ private fun ItineraryList(
                 item(key = "spans-${day.date}") {
                     ActiveSpanStrip(
                         spans = day.spans,
+                        members = members,
+                        activityCandidates = activityCandidates,
+                        onOpenPlaceDetails = onOpenPlaceDetails,
+                        cachedPlaceLookup = cachedPlaceLookup,
                         onEditEvent = onEditEvent,
                         onDeleteEvent = onDeleteEvent,
                     )
@@ -443,6 +484,10 @@ private fun ItineraryList(
                 item(key = "notime-${day.date}") {
                     NoTimeEventsSection(
                         events = day.noTimeEvents,
+                        members = members,
+                        activityCandidates = activityCandidates,
+                        onOpenPlaceDetails = onOpenPlaceDetails,
+                        cachedPlaceLookup = cachedPlaceLookup,
                         onEditEvent = onEditEvent,
                         onDeleteEvent = onDeleteEvent,
                     )
@@ -456,6 +501,8 @@ private fun ItineraryList(
                         members = members,
                         activityCandidates = activityCandidates,
                         condensed = isCollapsed,
+                        onOpenPlaceDetails = onOpenPlaceDetails,
+                        cachedPlaceLookup = cachedPlaceLookup,
                         onEditEvent = onEditEvent,
                         onMoveEvent = onMoveEvent,
                         onDeleteEvent = onDeleteEvent,
@@ -699,6 +746,10 @@ private fun DateSectionHeader(
 @Composable
 private fun ActiveSpanStrip(
     spans: List<ActiveSpanEvent>,
+    members: List<GroupMember>,
+    activityCandidates: List<PollCandidate>,
+    onOpenPlaceDetails: (PlaceResult) -> Unit,
+    cachedPlaceLookup: (String?) -> PlaceResult?,
     onEditEvent: (ItineraryEvent) -> Unit,
     onDeleteEvent: (ItineraryEvent) -> Unit,
 ) {
@@ -711,17 +762,20 @@ private fun ActiveSpanStrip(
     ) {
         spans.forEach { span ->
             val event = span.event
-            var showActions by remember(event.id) { mutableStateOf(false) }
+            var showBubble by remember(event.id) { mutableStateOf(false) }
+            val creator = remember(event.id, members) { members.firstOrNull { it.id == event.createdByMemberId } }
+            val relatedPlace = remember(event.id, event.placeId, event.description, activityCandidates, cachedPlaceLookup) {
+                resolveItineraryPlace(event, activityCandidates, cachedPlaceLookup)
+            }
             Card(
                 colors = CardDefaults.cardColors(containerColor = MaterialTheme.colorScheme.tertiaryContainer),
                 shape = RoundedCornerShape(12.dp),
                 modifier = Modifier
                     .fillMaxWidth()
-                    .combinedClickable(
+                    .clickable(
                         interactionSource = remember { MutableInteractionSource() },
                         indication = null,
-                        onClick = {},
-                        onLongClick = { showActions = true },
+                        onClick = { showBubble = !showBubble },
                     ),
             ) {
                 Row(
@@ -776,16 +830,17 @@ private fun ActiveSpanStrip(
                     }
                 }
             }
-            if (showActions) {
-                EventActionsDialog(
-                    eventName = event.name,
-                    onDismiss = { showActions = false },
+            if (showBubble) {
+                EventInfoBubble(
+                    event = event,
+                    creator = creator,
+                    relatedPlace = relatedPlace,
+                    onOpenPlace = { relatedPlace?.let(onOpenPlaceDetails) },
                     onEdit = {
-                        showActions = false
                         onEditEvent(event)
                     },
                     onDelete = {
-                        showActions = false
+                        showBubble = false
                         onDeleteEvent(event)
                     },
                 )
@@ -797,6 +852,10 @@ private fun ActiveSpanStrip(
 @Composable
 private fun NoTimeEventsSection(
     events: List<ItineraryEvent>,
+    members: List<GroupMember>,
+    activityCandidates: List<PollCandidate>,
+    onOpenPlaceDetails: (PlaceResult) -> Unit,
+    cachedPlaceLookup: (String?) -> PlaceResult?,
     onEditEvent: (ItineraryEvent) -> Unit,
     onDeleteEvent: (ItineraryEvent) -> Unit,
 ) {
@@ -814,17 +873,20 @@ private fun NoTimeEventsSection(
             modifier = Modifier.padding(horizontal = 4.dp),
         )
         events.forEach { event ->
-            var showActions by remember(event.id) { mutableStateOf(false) }
+            var showBubble by remember(event.id) { mutableStateOf(false) }
+            val creator = remember(event.id, members) { members.firstOrNull { it.id == event.createdByMemberId } }
+            val relatedPlace = remember(event.id, event.placeId, event.description, activityCandidates, cachedPlaceLookup) {
+                resolveItineraryPlace(event, activityCandidates, cachedPlaceLookup)
+            }
             Card(
                 colors = CardDefaults.cardColors(containerColor = MaterialTheme.colorScheme.surfaceVariant),
                 shape = RoundedCornerShape(14.dp),
                 modifier = Modifier
                     .fillMaxWidth()
-                    .combinedClickable(
+                    .clickable(
                         interactionSource = remember { MutableInteractionSource() },
                         indication = null,
-                        onClick = {},
-                        onLongClick = { showActions = true },
+                        onClick = { showBubble = !showBubble },
                     ),
             ) {
                 Row(
@@ -859,16 +921,17 @@ private fun NoTimeEventsSection(
                     }
                 }
             }
-            if (showActions) {
-                EventActionsDialog(
-                    eventName = event.name,
-                    onDismiss = { showActions = false },
+            if (showBubble) {
+                EventInfoBubble(
+                    event = event,
+                    creator = creator,
+                    relatedPlace = relatedPlace,
+                    onOpenPlace = { relatedPlace?.let(onOpenPlaceDetails) },
                     onEdit = {
-                        showActions = false
                         onEditEvent(event)
                     },
                     onDelete = {
-                        showActions = false
+                        showBubble = false
                         onDeleteEvent(event)
                     },
                 )
@@ -883,13 +946,15 @@ private fun TimedEventsTimeline(
     members: List<GroupMember>,
     activityCandidates: List<PollCandidate>,
     condensed: Boolean,
+    onOpenPlaceDetails: (PlaceResult) -> Unit,
+    cachedPlaceLookup: (String?) -> PlaceResult?,
     onEditEvent: (ItineraryEvent) -> Unit,
     onMoveEvent: (ItineraryEvent, String, String?) -> Unit,
     onDeleteEvent: (ItineraryEvent) -> Unit,
 ) {
     val bounds = remember(day.timedEvents, condensed) { timelineBoundsForDay(day.timedEvents, condensed) }
     val totalHours = (bounds.last - bounds.first + 1).coerceAtLeast(1)
-    val timelineHeight = TimelineHourHeight * totalHours
+    val timelineHeight = TimelineHourAnchorOffset + (TimelineHourHeight * totalHours)
     val gridLineColor = MaterialTheme.colorScheme.outlineVariant
     val connectorColor = MaterialTheme.colorScheme.primary
     val connectorLineColor = connectorColor.copy(alpha = 0.45f)
@@ -898,6 +963,7 @@ private fun TimedEventsTimeline(
     val density = LocalDensity.current
     val hapticFeedback = LocalHapticFeedback.current
     val hourHeightPx = with(density) { TimelineHourHeight.toPx() }
+    val hourAnchorOffsetPx = with(density) { TimelineHourAnchorOffset.toPx() }
 
     Row(
         modifier = Modifier
@@ -919,7 +985,7 @@ private fun TimedEventsTimeline(
                         text = "%02d:00".format(hour),
                         style = MaterialTheme.typography.labelSmall,
                         color = MaterialTheme.colorScheme.onSurfaceVariant,
-                        modifier = Modifier.padding(top = 2.dp, end = 8.dp),
+                        modifier = Modifier.padding(end = 8.dp),
                     )
                 }
             }
@@ -932,7 +998,7 @@ private fun TimedEventsTimeline(
         ) {
             Canvas(modifier = Modifier.matchParentSize()) {
                 repeat(totalHours + 1) { index ->
-                    val y = index * TimelineHourHeight.toPx()
+                    val y = hourAnchorOffsetPx + (index * TimelineHourHeight.toPx())
                     drawLine(
                         color = gridLineColor,
                         start = Offset(0f, y),
@@ -946,24 +1012,25 @@ private fun TimedEventsTimeline(
                 val topOffset = eventTopOffset(event, bounds.first)
                 val cardMinHeight = if (event.description.isNullOrBlank()) 64.dp else 82.dp
                 val topOffsetPx = with(density) { topOffset.toPx() }
-                val pinOffsetPx = 0f
-                val cardBaseOffsetPx = topOffsetPx.coerceAtLeast(0f)
+                // pinOffset = cardMinHeight/2 + bubbleR(6) + stemLen(16) = cardMinHeight/2 + 22dp
+                // → bottom of stem (plain line, no arrow) lands exactly on the event's grid line
+                val pinOffsetPx = with(density) { (cardMinHeight / 2 + 22.dp).toPx() }
+                val cardBaseOffsetPx = (topOffsetPx - pinOffsetPx).coerceAtLeast(0f)
                 val cardBaseOffset = with(density) { cardBaseOffsetPx.toDp() }
                 val timelineHeightPx = with(density) { timelineHeight.toPx() }
                 var dragOffsetPx by remember(event.id) { mutableStateOf(0f) }
                 var isDragging by remember(event.id) { mutableStateOf(false) }
                 var dragPreviewMinutes by remember(event.id) { mutableStateOf<Int?>(null) }
                 var showBubble by remember(event.id) { mutableStateOf(false) }
-                var showPlaceSheet by remember(event.id) { mutableStateOf(false) }
                 val creator = remember(event.id, members) { members.firstOrNull { it.id == event.createdByMemberId } }
-                val relatedPlace = remember(event.id, event.placeId, event.description, activityCandidates) {
-                    resolveItineraryPlace(event, activityCandidates)
+                val relatedPlace = remember(event.id, event.placeId, event.description, activityCandidates, cachedPlaceLookup) {
+                    resolveItineraryPlace(event, activityCandidates, cachedPlaceLookup)
                 }
                 val draggableState = remember(event.id, day.date, topOffsetPx, timelineHeightPx, hapticFeedback) {
                     object {
                         private fun previewMinutesFor(offsetPx: Float): Int =
                             snapMinutesToQuarterHour(
-                                (bounds.first * 60) + ((((cardBaseOffsetPx + pinOffsetPx + offsetPx) / hourHeightPx) * 60f).roundToInt())
+                                (bounds.first * 60) + (((((cardBaseOffsetPx + pinOffsetPx + offsetPx) - hourAnchorOffsetPx) / hourHeightPx) * 60f).roundToInt())
                             )
 
                         fun applyDelta(delta: Float) {
@@ -999,53 +1066,42 @@ private fun TimedEventsTimeline(
                     }
                 }
                 val previewOffset = dragPreviewMinutes?.let { previewMinutes ->
-                    ((((previewMinutes - (bounds.first * 60)).coerceAtLeast(0)) / 60f) * TimelineHourHeight.value).dp
+                    TimelineHourAnchorOffset + ((((previewMinutes - (bounds.first * 60)).coerceAtLeast(0)) / 60f) * TimelineHourHeight.value).dp
                 }
                 if (isDragging && previewOffset != null && dragPreviewMinutes != null) {
+                    // Badge floats above the guide line
                     Box(
                         modifier = Modifier
                             .fillMaxWidth()
-                            .offset(y = (previewOffset - 24.dp).coerceAtLeast(0.dp))
+                            .offset(y = (previewOffset - 28.dp).coerceAtLeast(0.dp))
+                            .padding(end = 6.dp)
+                            .zIndex(3f),
+                        contentAlignment = Alignment.CenterEnd,
+                    ) {
+                        Surface(
+                            shape = RoundedCornerShape(999.dp),
+                            color = MaterialTheme.colorScheme.tertiaryContainer,
+                        ) {
+                            Text(
+                                text = minutesToTimeString(dragPreviewMinutes!!),
+                                style = MaterialTheme.typography.labelMedium,
+                                color = MaterialTheme.colorScheme.onTertiaryContainer,
+                                fontWeight = FontWeight.SemiBold,
+                                modifier = Modifier.padding(horizontal = 10.dp, vertical = 5.dp),
+                            )
+                        }
+                    }
+                    // Guide line at EXACTLY previewOffset — aligned with background grid lines
+                    Canvas(
+                        modifier = Modifier
+                            .fillMaxWidth()
+                            .height(8.dp)
+                            .offset(y = previewOffset - 4.dp)
                             .zIndex(3f),
                     ) {
-                        Column(
-                            modifier = Modifier
-                                .fillMaxWidth()
-                                .padding(horizontal = 6.dp),
-                            verticalArrangement = Arrangement.spacedBy(4.dp),
-                        ) {
-                            Surface(
-                                shape = RoundedCornerShape(999.dp),
-                                color = MaterialTheme.colorScheme.tertiaryContainer,
-                                modifier = Modifier.align(Alignment.End),
-                            ) {
-                                Text(
-                                    text = minutesToTimeString(dragPreviewMinutes!!),
-                                    style = MaterialTheme.typography.labelMedium,
-                                    color = MaterialTheme.colorScheme.onTertiaryContainer,
-                                    fontWeight = FontWeight.SemiBold,
-                                    modifier = Modifier.padding(horizontal = 10.dp, vertical = 5.dp),
-                                )
-                            }
-                            Canvas(
-                                modifier = Modifier
-                                    .fillMaxWidth()
-                                    .height(18.dp),
-                            ) {
-                                val lineY = 6.dp.toPx()
-                                drawCircle(
-                                    color = dragGuideColor,
-                                    radius = 4.dp.toPx(),
-                                    center = Offset(6.dp.toPx(), lineY),
-                                )
-                                drawLine(
-                                    color = dragGuideColor,
-                                    start = Offset(10.dp.toPx(), lineY),
-                                    end = Offset(size.width, lineY),
-                                    strokeWidth = 2.dp.toPx(),
-                                )
-                            }
-                        }
+                        val lineY = 4.dp.toPx()
+                        drawCircle(color = dragGuideColor, radius = 4.dp.toPx(), center = Offset(6.dp.toPx(), lineY))
+                        drawLine(color = dragGuideColor, start = Offset(10.dp.toPx(), lineY), end = Offset(size.width, lineY), strokeWidth = 2.dp.toPx())
                     }
                 }
                 Box(
@@ -1066,31 +1122,19 @@ private fun TimedEventsTimeline(
                                     .width(20.dp)
                                     .height(cardMinHeight),
                             ) {
-                                val y = 8.dp.toPx()
-                                val pinHeadRadius = 6.dp.toPx()
                                 val pinCenterX = 6.dp.toPx()
-                                drawCircle(
-                                    color = connectorColor,
-                                    radius = pinHeadRadius,
-                                    center = Offset(pinCenterX, y),
-                                )
-                                drawCircle(
-                                    color = pinHighlightColor,
-                                    radius = 2.dp.toPx(),
-                                    center = Offset(pinCenterX - 1.dp.toPx(), y - 1.dp.toPx()),
-                                )
-                                drawLine(
-                                    color = connectorColor,
-                                    start = Offset(pinCenterX, y + pinHeadRadius - 1.dp.toPx()),
-                                    end = Offset(pinCenterX + 2.dp.toPx(), y + 24.dp.toPx()),
-                                    strokeWidth = 1.5.dp.toPx(),
-                                )
-                                drawLine(
-                                    color = connectorLineColor,
-                                    start = Offset(pinCenterX + pinHeadRadius, y),
-                                    end = Offset(size.width, y),
-                                    strokeWidth = 2.dp.toPx(),
-                                )
+                                val bubbleR  = 6.dp.toPx()
+                                val stemLen  = 16.dp.toPx()
+                                val bubbleCY = size.height / 2f            // card center
+                                // stem end = grid line (pinOffset = cardMinHeight/2 + bubbleR + stemLen)
+                                val stemEndY = bubbleCY + bubbleR + stemLen
+                                // bubble at card center
+                                drawCircle(color = connectorColor, radius = bubbleR, center = Offset(pinCenterX, bubbleCY))
+                                drawCircle(color = pinHighlightColor, radius = 2.dp.toPx(), center = Offset(pinCenterX - 1.dp.toPx(), bubbleCY - 1.dp.toPx()))
+                                // horizontal connector at card center level
+                                drawLine(color = connectorLineColor, start = Offset(pinCenterX + bubbleR, bubbleCY), end = Offset(size.width, bubbleCY), strokeWidth = 2.dp.toPx())
+                                // stem: plain vertical line from bubble bottom to grid line
+                                drawLine(color = connectorColor, start = Offset(pinCenterX, bubbleCY + bubbleR - 1.dp.toPx()), end = Offset(pinCenterX, stemEndY), strokeWidth = 1.5.dp.toPx())
                             }
                             Card(
                                 colors = CardDefaults.cardColors(
@@ -1193,25 +1237,18 @@ private fun TimedEventsTimeline(
                         }
 
                         if (showBubble) {
-                            EventInfoBubble(
-                                event = event,
-                                creator = creator,
-                                relatedPlace = relatedPlace,
-                                onOpenPlace = { showPlaceSheet = true },
-                                onEdit = {
-                                    showBubble = false
-                                    onEditEvent(event)
+                                EventInfoBubble(
+                                    event = event,
+                                    creator = creator,
+                                    relatedPlace = relatedPlace,
+                                    onOpenPlace = { relatedPlace?.let(onOpenPlaceDetails) },
+                                    onEdit = {
+                                        onEditEvent(event)
+                                    },
+                                    onDelete = {
+                                        showBubble = false
+                                        onDeleteEvent(event)
                                 },
-                                onDelete = {
-                                    showBubble = false
-                                    onDeleteEvent(event)
-                                },
-                            )
-                        }
-                        if (showPlaceSheet && relatedPlace != null) {
-                            ItineraryPlaceBottomSheet(
-                                place = relatedPlace,
-                                onDismiss = { showPlaceSheet = false },
                             )
                         }
                     }
@@ -1428,277 +1465,23 @@ private fun ItineraryPlacePreviewCard(
     place: PlaceResult,
     onClick: () -> Unit,
 ) {
-    val context = LocalContext.current
-    Surface(
-        shape = RoundedCornerShape(16.dp),
-        color = MaterialTheme.colorScheme.primaryContainer,
-        modifier = Modifier
-            .fillMaxWidth()
-            .clickable(onClick = onClick),
-    ) {
-        Row(
-            modifier = Modifier
-                .fillMaxWidth()
-                .padding(12.dp),
-            horizontalArrangement = Arrangement.spacedBy(12.dp),
-            verticalAlignment = Alignment.CenterVertically,
-        ) {
-            if (place.photoUrl.isNotBlank()) {
-                AsyncImage(
-                    model = ImageRequest.Builder(context)
-                        .data(place.photoUrl)
-                        .allowHardware(false)
-                        .build(),
-                    contentDescription = place.name,
-                    modifier = Modifier
-                        .size(68.dp)
-                        .background(MaterialTheme.colorScheme.surfaceVariant, RoundedCornerShape(12.dp)),
-                )
-            } else {
-                Box(
-                    modifier = Modifier
-                        .size(68.dp)
-                        .background(MaterialTheme.colorScheme.surfaceVariant, RoundedCornerShape(12.dp)),
-                    contentAlignment = Alignment.Center,
-                ) {
-                    Icon(
-                        imageVector = Icons.Default.LocationOn,
-                        contentDescription = null,
-                        tint = MaterialTheme.colorScheme.onSurfaceVariant,
-                    )
-                }
-            }
-            Column(
-                modifier = Modifier.weight(1f),
-                verticalArrangement = Arrangement.spacedBy(4.dp),
-            ) {
-                Text(
-                    text = "Actividad",
-                    style = MaterialTheme.typography.labelSmall,
-                    color = MaterialTheme.colorScheme.onPrimaryContainer.copy(alpha = 0.8f),
-                    fontWeight = FontWeight.SemiBold,
-                )
-                Text(
-                    text = place.name,
-                    style = MaterialTheme.typography.titleSmall,
-                    color = MaterialTheme.colorScheme.onPrimaryContainer,
-                    fontWeight = FontWeight.SemiBold,
-                    maxLines = 2,
-                    overflow = TextOverflow.Ellipsis,
-                )
-                if (place.address.isNotBlank()) {
-                    Text(
-                        text = place.address,
-                        style = MaterialTheme.typography.bodySmall,
-                        color = MaterialTheme.colorScheme.onPrimaryContainer.copy(alpha = 0.84f),
-                        maxLines = 2,
-                        overflow = TextOverflow.Ellipsis,
-                    )
-                }
-            }
-            Icon(
-                imageVector = Icons.Default.Info,
-                contentDescription = "Ver detalle de la actividad",
-                tint = MaterialTheme.colorScheme.onPrimaryContainer,
-            )
-        }
-    }
+    PlaceRecommendationPreviewCard(place = place, onClick = onClick)
 }
 
-@OptIn(ExperimentalMaterial3Api::class)
 @Composable
 private fun ItineraryPlaceBottomSheet(
     place: PlaceResult,
+    isLoading: Boolean,
     onDismiss: () -> Unit,
 ) {
-    val context = LocalContext.current
-    val sheetState = rememberModalBottomSheetState(skipPartiallyExpanded = true)
-    ModalBottomSheet(
-        onDismissRequest = onDismiss,
-        sheetState = sheetState,
-    ) {
-        Column(
-            modifier = Modifier
-                .fillMaxWidth()
-                .padding(bottom = 32.dp),
-        ) {
-            if (place.photoUrl.isNotBlank()) {
-                AsyncImage(
-                    model = ImageRequest.Builder(context)
-                        .data(place.photoUrl)
-                        .allowHardware(false)
-                        .build(),
-                    contentDescription = place.name,
-                    modifier = Modifier
-                        .fillMaxWidth()
-                        .height(220.dp)
-                        .padding(horizontal = 16.dp)
-                        .background(MaterialTheme.colorScheme.surfaceVariant, RoundedCornerShape(16.dp)),
-                )
-            }
-
-            Spacer(modifier = Modifier.height(16.dp))
-
-            Column(modifier = Modifier.padding(horizontal = 24.dp)) {
-                Text(
-                    text = place.name,
-                    style = MaterialTheme.typography.headlineSmall,
-                    fontFamily = FrauncesFamily,
-                    fontWeight = FontWeight.SemiBold,
-                )
-
-                if (place.rating != 0.0) {
-                    Spacer(modifier = Modifier.height(8.dp))
-                    Row(verticalAlignment = Alignment.CenterVertically) {
-                        Icon(
-                            Icons.Default.Star,
-                            contentDescription = null,
-                            tint = MaterialTheme.colorScheme.primary,
-                            modifier = Modifier.size(16.dp),
-                        )
-                        Spacer(modifier = Modifier.width(4.dp))
-                        Text(
-                            text = "%.1f".format(place.rating),
-                            style = MaterialTheme.typography.bodyLarge,
-                            fontWeight = FontWeight.Medium,
-                        )
-                        Spacer(modifier = Modifier.width(8.dp))
-                        Text(
-                            text = "(${place.reviewCount} reseñas)",
-                            style = MaterialTheme.typography.bodyMedium,
-                            color = MaterialTheme.colorScheme.onSurfaceVariant,
-                        )
-                    }
-                }
-
-                if (place.address.isNotBlank()) {
-                    Spacer(modifier = Modifier.height(6.dp))
-                    Row(verticalAlignment = Alignment.CenterVertically) {
-                        Icon(
-                            Icons.Default.LocationOn,
-                            contentDescription = null,
-                            tint = MaterialTheme.colorScheme.onSurfaceVariant,
-                            modifier = Modifier.size(14.dp),
-                        )
-                        Spacer(modifier = Modifier.width(4.dp))
-                        Text(
-                            text = place.address,
-                            style = MaterialTheme.typography.bodySmall,
-                            color = MaterialTheme.colorScheme.onSurfaceVariant,
-                            maxLines = 2,
-                            overflow = TextOverflow.Ellipsis,
-                        )
-                    }
-                }
-
-                if (place.reviews.isNotEmpty()) {
-                    Spacer(modifier = Modifier.height(20.dp))
-                    val pagerState = rememberPagerState { place.reviews.size }
-                    Row(
-                        modifier = Modifier.fillMaxWidth(),
-                        horizontalArrangement = Arrangement.SpaceBetween,
-                        verticalAlignment = Alignment.CenterVertically,
-                    ) {
-                        Text(
-                            text = "Reseñas",
-                            style = MaterialTheme.typography.titleMedium,
-                            fontWeight = FontWeight.SemiBold,
-                        )
-                        if (place.reviews.size > 1) {
-                            Row(horizontalArrangement = Arrangement.spacedBy(4.dp)) {
-                                repeat(place.reviews.size) { i ->
-                                    Box(
-                                        modifier = Modifier
-                                            .size(if (i == pagerState.currentPage) 7.dp else 5.dp)
-                                            .background(
-                                                if (i == pagerState.currentPage)
-                                                    MaterialTheme.colorScheme.primary
-                                                else
-                                                    MaterialTheme.colorScheme.outlineVariant,
-                                                CircleShape,
-                                            )
-                                    )
-                                }
-                            }
-                        }
-                    }
-                    Spacer(modifier = Modifier.height(12.dp))
-                    HorizontalPager(
-                        state = pagerState,
-                        modifier = Modifier.fillMaxWidth(),
-                        beyondViewportPageCount = 0,
-                    ) { page ->
-                        val review = place.reviews[page]
-                        Column(modifier = Modifier.fillMaxWidth()) {
-                            Row(
-                                modifier = Modifier.fillMaxWidth(),
-                                horizontalArrangement = Arrangement.SpaceBetween,
-                                verticalAlignment = Alignment.CenterVertically,
-                            ) {
-                                Text(
-                                    text = review.authorName,
-                                    style = MaterialTheme.typography.bodyMedium,
-                                    fontWeight = FontWeight.Medium,
-                                    modifier = Modifier.weight(1f),
-                                    maxLines = 1,
-                                    overflow = TextOverflow.Ellipsis,
-                                )
-                                Spacer(modifier = Modifier.width(8.dp))
-                                Text(
-                                    text = review.relativeTime,
-                                    style = MaterialTheme.typography.bodySmall,
-                                    color = MaterialTheme.colorScheme.onSurfaceVariant,
-                                )
-                            }
-                            Spacer(modifier = Modifier.height(2.dp))
-                            Row(verticalAlignment = Alignment.CenterVertically) {
-                                repeat(5) { i ->
-                                    Icon(
-                                        Icons.Default.Star,
-                                        contentDescription = null,
-                                        tint = if (i < review.rating) MaterialTheme.colorScheme.primary
-                                               else MaterialTheme.colorScheme.outlineVariant,
-                                        modifier = Modifier.size(13.dp),
-                                    )
-                                }
-                            }
-                            if (review.text.isNotBlank()) {
-                                Spacer(modifier = Modifier.height(4.dp))
-                                Text(
-                                    text = review.text,
-                                    style = MaterialTheme.typography.bodySmall,
-                                    color = MaterialTheme.colorScheme.onSurfaceVariant,
-                                    maxLines = 3,
-                                    overflow = TextOverflow.Ellipsis,
-                                )
-                            }
-                        }
-                    }
-                }
-
-                Spacer(modifier = Modifier.height(24.dp))
-
-                TextButton(
-                    onClick = {
-                        val uri = Uri.parse("geo:${place.lat},${place.lng}?q=${Uri.encode(place.name)}")
-                        context.startActivity(Intent(Intent.ACTION_VIEW, uri))
-                    },
-                    modifier = Modifier.fillMaxWidth(),
-                ) {
-                    Icon(
-                        Icons.Default.Map,
-                        contentDescription = null,
-                        modifier = Modifier.size(16.dp),
-                    )
-                    Spacer(modifier = Modifier.width(8.dp))
-                    Text("Ver en Maps")
-                }
-            }
-        }
-    }
+    PlaceRecommendationBottomSheet(
+        place = place,
+        onDismiss = onDismiss,
+        isLoading = isLoading,
+    )
 }
 
-@OptIn(ExperimentalMaterial3Api::class)
+@OptIn(ExperimentalMaterial3Api::class, ExperimentalLayoutApi::class)
 @Composable
 private fun EventBottomSheet(
     editingEvent: ItineraryEvent?,
@@ -1709,6 +1492,9 @@ private fun EventBottomSheet(
 ) {
     val isEditing = editingEvent != null
     val sheetState = rememberModalBottomSheetState(skipPartiallyExpanded = true)
+    val scrollState = rememberScrollState()
+    val focusManager = LocalFocusManager.current
+    val keyboardController = LocalSoftwareKeyboardController.current
     val initialTimeValue = remember(editingEvent?.id, initialDraft?.placeId) {
         val text = normalizeTimeForDisplay(editingEvent?.timeOfDay)
         TextFieldValue(text = text, selection = TextRange(text.length))
@@ -1724,6 +1510,8 @@ private fun EventBottomSheet(
     var selectedEndDate by rememberSaveable { mutableStateOf(editingEvent?.endDate) }
     var showDatePicker by rememberSaveable { mutableStateOf(false) }
     var showEndDatePicker by rememberSaveable { mutableStateOf(false) }
+    var focusedField by remember { mutableStateOf<String?>(null) }
+    var pendingBackExitFromInput by remember { mutableStateOf(false) }
 
     val datePickerState = rememberDatePickerState(
         initialSelectedDateMillis = selectedDate?.let {
@@ -1741,14 +1529,43 @@ private fun EventBottomSheet(
     )
 
     val isValid = name.isNotBlank() && selectedDate != null
+    val imeVisible = WindowInsets.isImeVisible
+
+    BackHandler {
+        when {
+            showEndDatePicker -> showEndDatePicker = false
+            showDatePicker -> showDatePicker = false
+            imeVisible || focusedField != null || pendingBackExitFromInput -> {
+                keyboardController?.hide()
+                focusManager.clearFocus(force = true)
+                focusedField = null
+                pendingBackExitFromInput = false
+            }
+            else -> onDismiss()
+        }
+    }
 
     ModalBottomSheet(
-        onDismissRequest = onDismiss,
+        onDismissRequest = {
+            keyboardController?.hide()
+            focusManager.clearFocus(force = true)
+            focusedField = null
+            pendingBackExitFromInput = false
+            onDismiss()
+        },
         sheetState = sheetState,
+        properties = ModalBottomSheetProperties(
+            shouldDismissOnBackPress = false,
+        ),
+        containerColor = MaterialTheme.colorScheme.surface,
+        contentColor = MaterialTheme.colorScheme.onSurface,
+        tonalElevation = 2.dp,
     ) {
         Column(
             modifier = Modifier
                 .fillMaxWidth()
+                .verticalScroll(scrollState)
+                .imePadding()
                 .padding(horizontal = 24.dp)
                 .padding(bottom = 32.dp),
             verticalArrangement = Arrangement.spacedBy(12.dp),
@@ -1758,6 +1575,7 @@ private fun EventBottomSheet(
                 style = MaterialTheme.typography.titleLarge,
                 fontFamily = FrauncesFamily,
                 fontWeight = FontWeight.Medium,
+                color = MaterialTheme.colorScheme.primary,
             )
 
             Spacer(modifier = Modifier.height(4.dp))
@@ -1782,6 +1600,11 @@ private fun EventBottomSheet(
                                         selectedPlaceId = candidate.placeId
                                     }
                                 },
+                                colors = FilterChipDefaults.filterChipColors(
+                                    selectedContainerColor = MaterialTheme.colorScheme.secondaryContainer,
+                                    selectedLabelColor = MaterialTheme.colorScheme.onSecondaryContainer,
+                                    selectedLeadingIconColor = MaterialTheme.colorScheme.onSecondaryContainer,
+                                ),
                                 label = { Text(candidate.name) },
                             )
                         }
@@ -1794,7 +1617,19 @@ private fun EventBottomSheet(
                 onValueChange = { name = it },
                 label = { Text("Nombre *") },
                 singleLine = true,
-                modifier = Modifier.fillMaxWidth(),
+                colors = atlasEditorTextFieldColors(),
+                modifier = Modifier
+                    .fillMaxWidth()
+                    .onFocusChanged { state ->
+                        focusedField = when {
+                            state.isFocused -> {
+                                pendingBackExitFromInput = true
+                                "name"
+                            }
+                            focusedField == "name" -> null
+                            else -> focusedField
+                        }
+                    },
             )
 
             OutlinedTextField(
@@ -1803,6 +1638,7 @@ private fun EventBottomSheet(
                 label = { Text("Fecha *") },
                 placeholder = { Text("Seleccioná una fecha") },
                 readOnly = true,
+                colors = atlasEditorTextFieldColors(),
                 modifier = Modifier.fillMaxWidth(),
                 trailingIcon = {
                     IconButton(onClick = { showDatePicker = true }) {
@@ -1818,6 +1654,7 @@ private fun EventBottomSheet(
                     label = { Text("Fecha de salida (opcional)") },
                     placeholder = { Text("Seleccioná fecha de salida") },
                     readOnly = true,
+                    colors = atlasEditorTextFieldColors(),
                     modifier = Modifier.fillMaxWidth(),
                     trailingIcon = {
                         IconButton(onClick = { showEndDatePicker = true }) {
@@ -1834,7 +1671,19 @@ private fun EventBottomSheet(
                 placeholder = { Text("HH:MM") },
                 singleLine = true,
                 keyboardOptions = KeyboardOptions(keyboardType = KeyboardType.Number),
-                modifier = Modifier.fillMaxWidth(),
+                colors = atlasEditorTextFieldColors(),
+                modifier = Modifier
+                    .fillMaxWidth()
+                    .onFocusChanged { state ->
+                        focusedField = when {
+                            state.isFocused -> {
+                                pendingBackExitFromInput = true
+                                "time"
+                            }
+                            focusedField == "time" -> null
+                            else -> focusedField
+                        }
+                    },
             )
 
             OutlinedTextField(
@@ -1843,7 +1692,19 @@ private fun EventBottomSheet(
                 label = { Text("Descripción (opcional)") },
                 minLines = 2,
                 maxLines = 4,
-                modifier = Modifier.fillMaxWidth(),
+                colors = atlasEditorTextFieldColors(),
+                modifier = Modifier
+                    .fillMaxWidth()
+                    .onFocusChanged { state ->
+                        focusedField = when {
+                            state.isFocused -> {
+                                pendingBackExitFromInput = true
+                                "description"
+                            }
+                            focusedField == "description" -> null
+                            else -> focusedField
+                        }
+                    },
             )
 
             Spacer(modifier = Modifier.height(4.dp))
@@ -1853,7 +1714,13 @@ private fun EventBottomSheet(
                 horizontalArrangement = Arrangement.spacedBy(12.dp),
             ) {
                 OutlinedButton(
-                    onClick = onDismiss,
+                    onClick = {
+                        keyboardController?.hide()
+                        focusManager.clearFocus(force = true)
+                        focusedField = null
+                        pendingBackExitFromInput = false
+                        onDismiss()
+                    },
                     modifier = Modifier.weight(1f),
                 ) {
                     Text("Cancelar")
@@ -1942,6 +1809,24 @@ private fun EventBottomSheet(
     }
 }
 
+@Composable
+private fun atlasEditorTextFieldColors() = OutlinedTextFieldDefaults.colors(
+    focusedBorderColor = MaterialTheme.colorScheme.primary,
+    unfocusedBorderColor = MaterialTheme.colorScheme.outline,
+    focusedLabelColor = MaterialTheme.colorScheme.primary,
+    unfocusedLabelColor = MaterialTheme.colorScheme.onSurfaceVariant,
+    focusedTextColor = MaterialTheme.colorScheme.onSurface,
+    unfocusedTextColor = MaterialTheme.colorScheme.onSurface,
+    cursorColor = MaterialTheme.colorScheme.primary,
+    focusedContainerColor = MaterialTheme.colorScheme.surface,
+    unfocusedContainerColor = MaterialTheme.colorScheme.surface,
+    disabledContainerColor = MaterialTheme.colorScheme.surfaceVariant,
+    focusedTrailingIconColor = MaterialTheme.colorScheme.primary,
+    unfocusedTrailingIconColor = MaterialTheme.colorScheme.onSurfaceVariant,
+    focusedPlaceholderColor = MaterialTheme.colorScheme.onSurfaceVariant,
+    unfocusedPlaceholderColor = MaterialTheme.colorScheme.onSurfaceVariant,
+)
+
 private fun buildTimelineDays(events: List<ItineraryEvent>): List<TimelineDaySection> {
     val uniqueEvents = events.distinctBy(ItineraryEvent::id)
     val allDates = uniqueEvents
@@ -1993,8 +1878,10 @@ internal fun timelineBoundsForDay(
     if (!condensed) return TimelineStartHour..TimelineEndHour
     val minutes = timedEvents.mapNotNull { it.timeOfDay?.let(::timeToMinutes) }
     if (minutes.isEmpty()) return TimelineStartHour..TimelineEndHour
-    val startHour = (minutes.minOrNull()!! / 60).coerceIn(TimelineStartHour, TimelineEndHour)
-    val endHour = ((minutes.maxOrNull()!! / 60) + 1).coerceIn(startHour, TimelineEndHour)
+    val rawStartHour = (minutes.minOrNull()!! / 60).coerceIn(TimelineStartHour, TimelineEndHour)
+    val rawEndHour = ((minutes.maxOrNull()!! / 60) + 1).coerceIn(rawStartHour, TimelineEndHour)
+    val startHour = (rawStartHour - 1).coerceAtLeast(TimelineStartHour)
+    val endHour = (rawEndHour + 1).coerceAtMost(TimelineEndHour)
     return startHour..endHour
 }
 
@@ -2059,23 +1946,29 @@ private fun snapMinutesToQuarterHour(totalMinutes: Int): Int =
     ((totalMinutes / 15f).roundToInt() * 15).coerceIn(0, (23 * 60) + 45)
 
 private fun eventTopOffset(event: ItineraryEvent, startHour: Int) =
-    (((event.timeOfDay?.let(::timeToMinutes) ?: startHour * 60) - startHour * 60) / 60f * TimelineHourHeight.value).dp
+    TimelineHourAnchorOffset +
+        (((event.timeOfDay?.let(::timeToMinutes) ?: startHour * 60) - startHour * 60) / 60f * TimelineHourHeight.value).dp
 
 private fun condensedTimelineLabel(day: TimelineDaySection): String {
     if (day.timedEvents.isEmpty()) return "Sin horarios"
-    val bounds = timelineBoundsForDay(day.timedEvents, condensed = true)
-    return "%02d:00-%02d:00".format(bounds.first, bounds.last)
+    val minutes = day.timedEvents.mapNotNull { it.timeOfDay?.let(::timeToMinutes) }
+    if (minutes.isEmpty()) return "Sin horarios"
+    val startHour = (minutes.minOrNull()!! / 60).coerceIn(TimelineStartHour, TimelineEndHour)
+    val endHour = ((minutes.maxOrNull()!! / 60) + 1).coerceIn(startHour, TimelineEndHour)
+    return "%02d:00-%02d:00".format(startHour, endHour)
 }
 
 private fun resolveItineraryPlace(
     event: ItineraryEvent,
     activityCandidates: List<PollCandidate>,
+    cachedPlaceLookup: (String?) -> PlaceResult?,
 ): PlaceResult? {
+    val cached = cachedPlaceLookup(event.placeId)
     val candidate = event.placeId?.let { placeId ->
         activityCandidates.firstOrNull { it.placeId == placeId }
     }
-    if (candidate != null) {
-        return PlaceResult(
+    val fallback = if (candidate != null) {
+        PlaceResult(
             placeId = candidate.placeId,
             name = candidate.name,
             photoUrl = candidate.photoUrl,
@@ -2085,8 +1978,8 @@ private fun resolveItineraryPlace(
             lat = candidate.lat,
             lng = candidate.lng,
         )
-    }
-    return event.placeId?.let { placeId ->
+    } else {
+        event.placeId?.let { placeId ->
         PlaceResult(
             placeId = placeId,
             name = event.name,
@@ -2098,6 +1991,8 @@ private fun resolveItineraryPlace(
             lng = 0.0,
         )
     }
+    }
+    return com.hllous.plantravel.domain.places.mergePlaceResults(cached, fallback)
 }
 
 private fun activityDescriptorFor(event: ItineraryEvent): ActivityDescriptor {
