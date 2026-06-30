@@ -946,8 +946,8 @@ private fun TimedEventsTimeline(
                 val topOffset = eventTopOffset(event, bounds.first)
                 val cardMinHeight = if (event.description.isNullOrBlank()) 64.dp else 82.dp
                 val topOffsetPx = with(density) { topOffset.toPx() }
-                val pinOffsetPx = with(density) { 12.dp.toPx() }
-                val cardBaseOffsetPx = (topOffsetPx - pinOffsetPx).coerceAtLeast(0f)
+                val pinOffsetPx = 0f
+                val cardBaseOffsetPx = topOffsetPx.coerceAtLeast(0f)
                 val cardBaseOffset = with(density) { cardBaseOffsetPx.toDp() }
                 val timelineHeightPx = with(density) { timelineHeight.toPx() }
                 var dragOffsetPx by remember(event.id) { mutableStateOf(0f) }
@@ -1066,7 +1066,7 @@ private fun TimedEventsTimeline(
                                     .width(20.dp)
                                     .height(cardMinHeight),
                             ) {
-                                val y = 12.dp.toPx()
+                                val y = 8.dp.toPx()
                                 val pinHeadRadius = 6.dp.toPx()
                                 val pinCenterX = 6.dp.toPx()
                                 drawCircle(
@@ -1082,7 +1082,7 @@ private fun TimedEventsTimeline(
                                 drawLine(
                                     color = connectorColor,
                                     start = Offset(pinCenterX, y + pinHeadRadius - 1.dp.toPx()),
-                                    end = Offset(pinCenterX + 2.dp.toPx(), y + 28.dp.toPx()),
+                                    end = Offset(pinCenterX + 2.dp.toPx(), y + 24.dp.toPx()),
                                     strokeWidth = 1.5.dp.toPx(),
                                 )
                                 drawLine(
