@@ -3,8 +3,10 @@ package com.hllous.plantravel.presentation.itinerary
 import androidx.lifecycle.ViewModel
 import androidx.lifecycle.viewModelScope
 import com.hllous.plantravel.domain.auth.SessionProvider
+import com.hllous.plantravel.domain.model.GroupMember
 import com.hllous.plantravel.domain.model.ItineraryEvent
 import com.hllous.plantravel.domain.model.PlaceResult
+import com.hllous.plantravel.domain.model.PollCandidate
 import com.hllous.plantravel.domain.repository.TravelRepository
 import kotlinx.serialization.Serializable
 import com.hllous.plantravel.presentation.UiState
@@ -17,6 +19,7 @@ import kotlinx.coroutines.flow.SharingStarted
 import kotlinx.coroutines.flow.StateFlow
 import kotlinx.coroutines.flow.asStateFlow
 import kotlinx.coroutines.flow.catch
+import kotlinx.coroutines.flow.combine
 import kotlinx.coroutines.flow.flatMapLatest
 import kotlinx.coroutines.flow.flowOf
 import kotlinx.coroutines.flow.map
@@ -71,6 +74,28 @@ class ItineraryViewModel @Inject constructor(
                 .catch { emit(UiState.Error(it.message ?: "Error al cargar itinerario")) }
         }
         .stateIn(viewModelScope, SharingStarted.WhileSubscribed(5000), UiState.Loading)
+
+    val activityCandidates: StateFlow<List<PollCandidate>> = selectedGroupHolder.selectedGroupId
+        .flatMapLatest { groupId ->
+            if (groupId == null) flowOf(emptyList())
+            else repository.observeActiveActivityPolls(groupId)
+                .flatMapLatest { polls ->
+                    if (polls.isEmpty()) flowOf(emptyList())
+                    else combine(polls.map { repository.observePollCandidates(it.id) }) { arrays ->
+                        arrays.toList().flatten()
+                    }
+                }
+        }
+        .catch { emit(emptyList()) }
+        .stateIn(viewModelScope, SharingStarted.WhileSubscribed(5000), emptyList())
+
+    val members: StateFlow<List<GroupMember>> = selectedGroupHolder.selectedGroupId
+        .flatMapLatest { groupId ->
+            if (groupId == null) flowOf(emptyList())
+            else repository.observeMembers(groupId)
+        }
+        .catch { emit(emptyList()) }
+        .stateIn(viewModelScope, SharingStarted.WhileSubscribed(5000), emptyList())
 
     fun createEvent(
         name: String,
