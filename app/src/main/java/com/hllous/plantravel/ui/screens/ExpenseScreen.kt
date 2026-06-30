@@ -1172,8 +1172,8 @@ private fun ExpenseGroupStateChip(state: ExpenseGroupState) {
     val (label, containerColor, contentColor) = when (state) {
         ExpenseGroupState.Open -> Triple(
             "Abierto",
-            MaterialTheme.colorScheme.secondaryContainer,
-            MaterialTheme.colorScheme.onSecondaryContainer,
+            MaterialTheme.colorScheme.primaryContainer,
+            MaterialTheme.colorScheme.onPrimaryContainer,
         )
         ExpenseGroupState.Finalized -> Triple(
             "Finalizado",

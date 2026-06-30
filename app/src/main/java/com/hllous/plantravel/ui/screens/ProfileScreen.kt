@@ -29,6 +29,7 @@ import androidx.compose.material.icons.filled.Phone
 import androidx.compose.material3.Button
 import androidx.compose.material3.ButtonDefaults
 import androidx.compose.material3.CircularProgressIndicator
+import androidx.compose.material3.CardDefaults
 import androidx.compose.material3.ElevatedCard
 import androidx.compose.material3.Icon
 import androidx.compose.material3.IconButton
@@ -148,12 +149,12 @@ fun ProfileScreen(
                 Spacer(Modifier.height(8.dp))
                 Surface(
                     shape = RoundedCornerShape(50),
-                    color = MaterialTheme.colorScheme.tertiaryContainer
+                    color = MaterialTheme.colorScheme.primaryContainer
                 ) {
                     Text(
                         text = "✈ Miembro activo",
                         style = MaterialTheme.typography.labelMedium,
-                        color = MaterialTheme.colorScheme.onTertiaryContainer,
+                        color = MaterialTheme.colorScheme.onPrimaryContainer,
                         modifier = Modifier.padding(horizontal = 12.dp, vertical = 4.dp)
                     )
                 }
@@ -175,7 +176,10 @@ fun ProfileScreen(
                     .padding(horizontal = 20.dp, vertical = 24.dp)
                     .navigationBarsPadding()
             ) {
-                ElevatedCard(modifier = Modifier.fillMaxWidth()) {
+                ElevatedCard(
+                    modifier = Modifier.fillMaxWidth(),
+                    colors = CardDefaults.elevatedCardColors(containerColor = MaterialTheme.colorScheme.surface),
+                ) {
                     Column(modifier = Modifier.padding(16.dp)) {
                         ProfileInfoRow(
                             icon = { Icon(Icons.Default.Person, contentDescription = null, modifier = Modifier.size(20.dp)) },
@@ -200,7 +204,10 @@ fun ProfileScreen(
                 Spacer(Modifier.height(16.dp))
 
                 // Group mini-card with 4dp left primaryContainer accent
-                ElevatedCard(modifier = Modifier.fillMaxWidth()) {
+                ElevatedCard(
+                    modifier = Modifier.fillMaxWidth(),
+                    colors = CardDefaults.elevatedCardColors(containerColor = MaterialTheme.colorScheme.surface),
+                ) {
                     Row(
                         Modifier
                             .fillMaxWidth()
@@ -254,7 +261,10 @@ fun ProfileScreen(
                 Spacer(Modifier.height(16.dp))
 
                 // Unified profile edit form
-                ElevatedCard(modifier = Modifier.fillMaxWidth()) {
+                ElevatedCard(
+                    modifier = Modifier.fillMaxWidth(),
+                    colors = CardDefaults.elevatedCardColors(containerColor = MaterialTheme.colorScheme.surface),
+                ) {
                     Column(modifier = Modifier.padding(16.dp)) {
                         Text(
                             text = "Editar perfil",
