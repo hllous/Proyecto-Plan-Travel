@@ -37,7 +37,9 @@ import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.foundation.verticalScroll
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.automirrored.filled.ArrowBack
+import androidx.compose.material.icons.filled.CalendarMonth
 import androidx.compose.material.icons.filled.Close
+import androidx.compose.material.icons.filled.SwapHoriz
 import androidx.compose.material.icons.filled.Explore
 import androidx.compose.material.icons.filled.Hotel
 import androidx.compose.material.icons.filled.HowToVote
@@ -246,10 +248,22 @@ private fun Level2Content(
                 },
                 actions = {
                     TextButton(onClick = { navController.navigate("itinerary") }) {
-                        Text("Ver itinerario")
+                        Icon(
+                            Icons.Default.CalendarMonth,
+                            contentDescription = null,
+                            modifier = Modifier.size(16.dp),
+                        )
+                        Spacer(Modifier.width(4.dp))
+                        Text("Itinerario")
                     }
                     TextButton(onClick = onChangeDestination) {
-                        Text("Cambiar")
+                        Icon(
+                            Icons.Default.SwapHoriz,
+                            contentDescription = null,
+                            modifier = Modifier.size(16.dp),
+                        )
+                        Spacer(Modifier.width(4.dp))
+                        Text("Destino")
                     }
                 },
             )
@@ -479,7 +493,7 @@ private fun PoiGridCard(
             Text(
                 text = place.name,
                 style = MaterialTheme.typography.labelLarge,
-                color = MaterialTheme.colorScheme.onPrimary,
+                color = Color.White,
                 maxLines = 2,
                 overflow = TextOverflow.Ellipsis,
                 modifier = Modifier
@@ -516,7 +530,7 @@ private fun PoiGridCard(
                     Text(
                         text = "%.1f".format(place.rating),
                         style = MaterialTheme.typography.labelSmall,
-                        color = MaterialTheme.colorScheme.onPrimary,
+                        color = Color.White,
                     )
                 }
             }

@@ -43,6 +43,7 @@ import androidx.compose.material.icons.automirrored.filled.ArrowBack
 import androidx.compose.material.icons.filled.AccessTime
 import androidx.compose.material.icons.filled.Add
 import androidx.compose.material.icons.filled.CalendarMonth
+import androidx.compose.material.icons.filled.Close
 import androidx.compose.material.icons.filled.Delete
 import androidx.compose.material.icons.filled.DirectionsCar
 import androidx.compose.material.icons.filled.ExpandLess
@@ -387,6 +388,7 @@ private fun ItineraryList(
     val multiDayEvents = remember(events) { events.filter(::isMultiDayEvent).sortedBy(ItineraryEvent::date) }
     val dayKeys = remember(timelineDays) { timelineDays.map { it.date.format(StorageDateFormatter) } }
     var expandedDays by rememberSaveable(dayKeys) { mutableStateOf(emptySet<String>()) }
+    var showHintBanner by rememberSaveable { mutableStateOf(true) }
 
     LazyColumn(
         modifier = Modifier
@@ -395,8 +397,10 @@ private fun ItineraryList(
         contentPadding = PaddingValues(bottom = 96.dp),
         verticalArrangement = Arrangement.spacedBy(0.dp),
     ) {
-        item(key = "hint-banner") {
-            TimelineHintBanner()
+        if (showHintBanner) {
+            item(key = "hint-banner") {
+                TimelineHintBanner(onDismiss = { showHintBanner = false })
+            }
         }
 
         if (multiDayEvents.isNotEmpty()) {
@@ -467,12 +471,12 @@ private fun ItineraryList(
 }
 
 @Composable
-private fun TimelineHintBanner() {
+private fun TimelineHintBanner(onDismiss: () -> Unit) {
     Row(
         modifier = Modifier
             .fillMaxWidth()
             .background(MaterialTheme.colorScheme.surfaceVariant)
-            .padding(horizontal = 16.dp, vertical = 8.dp),
+            .padding(start = 16.dp, end = 4.dp, top = 8.dp, bottom = 8.dp),
         horizontalArrangement = Arrangement.spacedBy(8.dp),
         verticalAlignment = Alignment.CenterVertically,
     ) {
@@ -486,7 +490,16 @@ private fun TimelineHintBanner() {
             text = "Tocá una tarjeta para ver el detalle. Mantené presionado y arrastrá para mover el horario. Tocá el encabezado del día para expandirlo.",
             style = MaterialTheme.typography.bodySmall,
             color = MaterialTheme.colorScheme.onSurfaceVariant,
+            modifier = Modifier.weight(1f),
         )
+        IconButton(onClick = onDismiss, modifier = Modifier.size(32.dp)) {
+            Icon(
+                imageVector = Icons.Default.Close,
+                contentDescription = "Cerrar tutorial",
+                tint = MaterialTheme.colorScheme.onSurfaceVariant,
+                modifier = Modifier.size(16.dp),
+            )
+        }
     }
 }
 
@@ -877,7 +890,7 @@ private fun TimedEventsTimeline(
     val bounds = remember(day.timedEvents, condensed) { timelineBoundsForDay(day.timedEvents, condensed) }
     val totalHours = (bounds.last - bounds.first + 1).coerceAtLeast(1)
     val timelineHeight = TimelineHourHeight * totalHours
-    val gridLineColor = MaterialTheme.colorScheme.outlineVariant.copy(alpha = 0.7f)
+    val gridLineColor = MaterialTheme.colorScheme.outlineVariant
     val connectorColor = MaterialTheme.colorScheme.primary
     val connectorLineColor = connectorColor.copy(alpha = 0.45f)
     val pinHighlightColor = MaterialTheme.colorScheme.onPrimaryContainer
@@ -924,6 +937,7 @@ private fun TimedEventsTimeline(
                         color = gridLineColor,
                         start = Offset(0f, y),
                         end = Offset(size.width, y),
+                        strokeWidth = 1.5.dp.toPx(),
                     )
                 }
             }
@@ -932,7 +946,7 @@ private fun TimedEventsTimeline(
                 val topOffset = eventTopOffset(event, bounds.first)
                 val cardMinHeight = if (event.description.isNullOrBlank()) 64.dp else 82.dp
                 val topOffsetPx = with(density) { topOffset.toPx() }
-                val pinOffsetPx = with(density) { (cardMinHeight / 2).toPx() }
+                val pinOffsetPx = with(density) { 12.dp.toPx() }
                 val cardBaseOffsetPx = (topOffsetPx - pinOffsetPx).coerceAtLeast(0f)
                 val cardBaseOffset = with(density) { cardBaseOffsetPx.toDp() }
                 val timelineHeightPx = with(density) { timelineHeight.toPx() }
@@ -1052,7 +1066,7 @@ private fun TimedEventsTimeline(
                                     .width(20.dp)
                                     .height(cardMinHeight),
                             ) {
-                                val y = size.height / 2f
+                                val y = 12.dp.toPx()
                                 val pinHeadRadius = 6.dp.toPx()
                                 val pinCenterX = 6.dp.toPx()
                                 drawCircle(
@@ -1068,7 +1082,7 @@ private fun TimedEventsTimeline(
                                 drawLine(
                                     color = connectorColor,
                                     start = Offset(pinCenterX, y + pinHeadRadius - 1.dp.toPx()),
-                                    end = Offset(pinCenterX + 2.dp.toPx(), y + 16.dp.toPx()),
+                                    end = Offset(pinCenterX + 2.dp.toPx(), y + 28.dp.toPx()),
                                     strokeWidth = 1.5.dp.toPx(),
                                 )
                                 drawLine(

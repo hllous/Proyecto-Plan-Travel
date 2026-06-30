@@ -25,11 +25,15 @@ import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.foundation.verticalScroll
 import androidx.compose.material.icons.Icons
+import androidx.compose.material.icons.filled.AccountBalanceWallet
 import androidx.compose.material.icons.filled.Add
 import androidx.compose.material.icons.automirrored.filled.KeyboardArrowRight
+import androidx.compose.material.icons.filled.CalendarMonth
 import androidx.compose.material.icons.filled.DarkMode
 import androidx.compose.material.icons.filled.LightMode
 import androidx.compose.material.icons.filled.Link
+import androidx.compose.material.icons.filled.LocalActivity
+import androidx.compose.material.icons.filled.LocationOn
 import androidx.compose.material.icons.filled.QrCode
 import androidx.compose.material.icons.filled.Star
 import androidx.compose.material3.CircularProgressIndicator
@@ -442,7 +446,7 @@ private fun HomeGroupContent(
                 modifier = Modifier.fillMaxWidth()
             ) {
                 HomeActionButton(
-                    emoji = "💸",
+                    icon = Icons.Default.AccountBalanceWallet,
                     label = "Agregar\ngasto",
                     containerColor = MaterialTheme.colorScheme.tertiaryContainer,
                     contentColor = MaterialTheme.colorScheme.onTertiaryContainer,
@@ -451,7 +455,7 @@ private fun HomeGroupContent(
                 )
                 if (tripDestSet == null) {
                     HomeActionButton(
-                        emoji = "📍",
+                        icon = Icons.Default.LocationOn,
                         label = "Ver\ndestinos",
                         containerColor = MaterialTheme.colorScheme.secondaryContainer,
                         contentColor = MaterialTheme.colorScheme.onSecondaryContainer,
@@ -459,7 +463,7 @@ private fun HomeGroupContent(
                         onClick = { navController.navigateSingleTopTo("destinations") }
                     )
                     HomeActionButton(
-                        emoji = "📅",
+                        icon = Icons.Default.CalendarMonth,
                         label = "Itinerario",
                         containerColor = MaterialTheme.colorScheme.primaryContainer,
                         contentColor = MaterialTheme.colorScheme.onPrimaryContainer,
@@ -468,7 +472,7 @@ private fun HomeGroupContent(
                     )
                 } else {
                     HomeActionButton(
-                        emoji = "🗺️",
+                        icon = Icons.Default.LocalActivity,
                         label = "Actividades",
                         containerColor = MaterialTheme.colorScheme.secondaryContainer,
                         contentColor = MaterialTheme.colorScheme.onSecondaryContainer,
@@ -476,7 +480,7 @@ private fun HomeGroupContent(
                         onClick = { navController.navigateSingleTopTo("destinations") }
                     )
                     HomeActionButton(
-                        emoji = "📅",
+                        icon = Icons.Default.CalendarMonth,
                         label = "Itinerario",
                         containerColor = MaterialTheme.colorScheme.primaryContainer,
                         contentColor = MaterialTheme.colorScheme.onPrimaryContainer,
@@ -910,7 +914,7 @@ private fun HomeSectionLabel(text: String) {
 
 @Composable
 private fun HomeActionButton(
-    emoji: String,
+    icon: ImageVector,
     label: String,
     containerColor: Color,
     contentColor: Color,
@@ -928,7 +932,12 @@ private fun HomeActionButton(
             horizontalAlignment = Alignment.CenterHorizontally,
             verticalArrangement = Arrangement.spacedBy(5.dp)
         ) {
-            Text(emoji, fontSize = 22.sp)
+            Icon(
+                imageVector = icon,
+                contentDescription = null,
+                tint = contentColor,
+                modifier = Modifier.size(24.dp),
+            )
             Text(
                 text = label,
                 style = MaterialTheme.typography.labelSmall,
