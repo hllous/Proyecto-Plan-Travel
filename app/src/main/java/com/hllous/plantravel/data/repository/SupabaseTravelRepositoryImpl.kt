@@ -1,5 +1,6 @@
 package com.hllous.plantravel.data.repository
 
+import com.hllous.plantravel.data.AppForegroundSignal
 import com.hllous.plantravel.data.destination.DestinationTextNormalizer
 import com.hllous.plantravel.domain.model.ConsumeInviteFailure
 import com.hllous.plantravel.domain.model.DestinationDraft
@@ -51,6 +52,7 @@ import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.SharedFlow
 import kotlinx.coroutines.flow.SharingStarted
 import kotlinx.coroutines.flow.channelFlow
+import kotlinx.coroutines.flow.combine
 import kotlinx.coroutines.flow.flatMapLatest
 import kotlinx.coroutines.flow.flow
 import kotlinx.coroutines.flow.map
@@ -84,7 +86,8 @@ internal fun isMissingExpenseGroupsPaidByMemberIdColumnError(message: String?): 
 
 @Singleton
 class SupabaseTravelRepositoryImpl @Inject constructor(
-    private val supabase: SupabaseClient
+    private val supabase: SupabaseClient,
+    private val appForegroundSignal: AppForegroundSignal,
 ) : TravelRepository {
 
     // ─── DTOs ───────────────────────────────────────────────────────────────
@@ -677,7 +680,7 @@ class SupabaseTravelRepositoryImpl @Inject constructor(
 
     @OptIn(ExperimentalCoroutinesApi::class)
     private val observeGroupsSharedFlow: SharedFlow<List<TravelGroup>> =
-        _observeGroupsVersion
+        combine(_observeGroupsVersion, appForegroundSignal.ticks) { _, _ -> Unit }
             .flatMapLatest { createObserveGroupsChannelFlow() }
             .shareIn(repositoryScope, SharingStarted.WhileSubscribed(5000), replay = 1)
 
@@ -699,7 +702,7 @@ class SupabaseTravelRepositoryImpl @Inject constructor(
     @OptIn(ExperimentalCoroutinesApi::class)
     override fun observeMembers(groupId: String): Flow<List<GroupMember>> =
         observeMembersSharedFlows.getOrPut(groupId) {
-            membersVersion(groupId)
+            combine(membersVersion(groupId), appForegroundSignal.ticks) { _, _ -> Unit }
                 .flatMapLatest { createObserveMembersChannelFlow(groupId) }
                 .shareIn(repositoryScope, SharingStarted.WhileSubscribed(5000), replay = 1)
         }
@@ -810,7 +813,11 @@ class SupabaseTravelRepositoryImpl @Inject constructor(
 
     // ─── Stubs (implemented in subsequent slices) ─────────────────────────────
 
-    override fun observeInvites(groupId: String): Flow<List<InviteToken>> = channelFlow {
+    @OptIn(ExperimentalCoroutinesApi::class)
+    override fun observeInvites(groupId: String): Flow<List<InviteToken>> =
+        appForegroundSignal.ticks.flatMapLatest { createObserveInvitesChannelFlow(groupId) }
+
+    private fun createObserveInvitesChannelFlow(groupId: String): Flow<List<InviteToken>> = channelFlow {
         send(fetchInvites(groupId))
 
         val pgChannel = supabase.channel("invites-$groupId-${UUID.randomUUID()}")
@@ -926,7 +933,11 @@ class SupabaseTravelRepositoryImpl @Inject constructor(
         sendBroadcast("groups-broadcast-$groupId", "group_list_changed")
     }
 
-    override fun observeItineraryEvents(groupId: String): Flow<List<ItineraryEvent>> = channelFlow {
+    @OptIn(ExperimentalCoroutinesApi::class)
+    override fun observeItineraryEvents(groupId: String): Flow<List<ItineraryEvent>> =
+        appForegroundSignal.ticks.flatMapLatest { createObserveItineraryEventsChannelFlow(groupId) }
+
+    private fun createObserveItineraryEventsChannelFlow(groupId: String): Flow<List<ItineraryEvent>> = channelFlow {
         send(fetchItineraryEvents(groupId))
 
         val pgChannel = supabase.channel("itinerary-events-$groupId-${UUID.randomUUID()}")
@@ -991,7 +1002,11 @@ class SupabaseTravelRepositoryImpl @Inject constructor(
         sendBroadcast("itinerary-events-broadcast-$groupId", "itinerary_event_changed")
     }
 
-    override fun observeActivePoll(groupId: String): Flow<Poll?> = channelFlow {
+    @OptIn(ExperimentalCoroutinesApi::class)
+    override fun observeActivePoll(groupId: String): Flow<Poll?> =
+        appForegroundSignal.ticks.flatMapLatest { createObserveActivePollChannelFlow(groupId) }
+
+    private fun createObserveActivePollChannelFlow(groupId: String): Flow<Poll?> = channelFlow {
         send(fetchActivePoll(groupId))
 
         val pgChannel = supabase.channel("group-polls-$groupId-${UUID.randomUUID()}")
@@ -1013,7 +1028,11 @@ class SupabaseTravelRepositoryImpl @Inject constructor(
         }
     }
 
-    override fun observeAllPolls(groupId: String): Flow<List<Poll>> = channelFlow {
+    @OptIn(ExperimentalCoroutinesApi::class)
+    override fun observeAllPolls(groupId: String): Flow<List<Poll>> =
+        appForegroundSignal.ticks.flatMapLatest { createObserveAllPollsChannelFlow(groupId) }
+
+    private fun createObserveAllPollsChannelFlow(groupId: String): Flow<List<Poll>> = channelFlow {
         send(fetchAllPolls(groupId))
 
         val pgChannel = supabase.channel("group-polls-all-$groupId-${UUID.randomUUID()}")
@@ -1032,7 +1051,11 @@ class SupabaseTravelRepositoryImpl @Inject constructor(
         }
     }
 
-    override fun observeActiveActivityPolls(groupId: String): Flow<List<Poll>> = channelFlow {
+    @OptIn(ExperimentalCoroutinesApi::class)
+    override fun observeActiveActivityPolls(groupId: String): Flow<List<Poll>> =
+        appForegroundSignal.ticks.flatMapLatest { createObserveActiveActivityPollsChannelFlow(groupId) }
+
+    private fun createObserveActiveActivityPollsChannelFlow(groupId: String): Flow<List<Poll>> = channelFlow {
         send(fetchActiveActivityPolls(groupId))
 
         val pgChannel = supabase.channel("group-polls-activity-$groupId-${UUID.randomUUID()}")
@@ -1150,7 +1173,11 @@ class SupabaseTravelRepositoryImpl @Inject constructor(
         sendBroadcast("group-polls-broadcast-$groupId", "poll_changed")
     }
 
-    override fun observePollCandidates(pollId: String): Flow<List<PollCandidate>> = channelFlow {
+    @OptIn(ExperimentalCoroutinesApi::class)
+    override fun observePollCandidates(pollId: String): Flow<List<PollCandidate>> =
+        appForegroundSignal.ticks.flatMapLatest { createObservePollCandidatesChannelFlow(pollId) }
+
+    private fun createObservePollCandidatesChannelFlow(pollId: String): Flow<List<PollCandidate>> = channelFlow {
         // poll_votes.member_id references group_members(id), not auth.users.id.
         // Resolved lazily: if null at startup (poll not yet committed), retry on each event.
         var currentMemberId = currentMemberIdForPoll(pollId)
@@ -1252,7 +1279,11 @@ class SupabaseTravelRepositoryImpl @Inject constructor(
             }
     }
 
-    override fun observeExpenseGroups(groupId: String): Flow<List<ExpenseGroup>> = channelFlow {
+    @OptIn(ExperimentalCoroutinesApi::class)
+    override fun observeExpenseGroups(groupId: String): Flow<List<ExpenseGroup>> =
+        appForegroundSignal.ticks.flatMapLatest { createObserveExpenseGroupsChannelFlow(groupId) }
+
+    private fun createObserveExpenseGroupsChannelFlow(groupId: String): Flow<List<ExpenseGroup>> = channelFlow {
         send(fetchExpenseGroups(groupId))
 
         val pgChannel = supabase.channel("expense-groups-$groupId-${UUID.randomUUID()}")
@@ -1343,7 +1374,11 @@ class SupabaseTravelRepositoryImpl @Inject constructor(
         sendBroadcast("expense-groups-broadcast-$groupId", "expense_group_changed")
     }
 
-    override fun observeExpenseItems(expenseGroupId: String): Flow<List<ExpenseItem>> = channelFlow {
+    @OptIn(ExperimentalCoroutinesApi::class)
+    override fun observeExpenseItems(expenseGroupId: String): Flow<List<ExpenseItem>> =
+        appForegroundSignal.ticks.flatMapLatest { createObserveExpenseItemsChannelFlow(expenseGroupId) }
+
+    private fun createObserveExpenseItemsChannelFlow(expenseGroupId: String): Flow<List<ExpenseItem>> = channelFlow {
         send(fetchExpenseItems(expenseGroupId))
 
         val pgChannel = supabase.channel("expense-items-$expenseGroupId-${UUID.randomUUID()}")
@@ -1370,7 +1405,11 @@ class SupabaseTravelRepositoryImpl @Inject constructor(
         }
     }
 
-    override fun observeAssignments(expenseGroupId: String): Flow<List<ItemAssignment>> = channelFlow {
+    @OptIn(ExperimentalCoroutinesApi::class)
+    override fun observeAssignments(expenseGroupId: String): Flow<List<ItemAssignment>> =
+        appForegroundSignal.ticks.flatMapLatest { createObserveAssignmentsChannelFlow(expenseGroupId) }
+
+    private fun createObserveAssignmentsChannelFlow(expenseGroupId: String): Flow<List<ItemAssignment>> = channelFlow {
         send(fetchAssignments(expenseGroupId))
 
         // item_assignments has no expense_group_id column; re-fetch via expense items on every change.
