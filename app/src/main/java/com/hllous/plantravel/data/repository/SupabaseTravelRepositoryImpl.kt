@@ -888,7 +888,9 @@ class SupabaseTravelRepositoryImpl @Inject constructor(
 
         supabase.from("group_members")
             .insert(InsertMemberDto(groupId = token.groupId, userId = userId, role = MemberRole.USER.name))
-        supabase.from("invite_tokens").delete { filter { eq("code", code) } }
+
+        // Invite token is NOT deleted here: it must remain valid for other members to join
+        // with the same code/QR until it expires (24h) or is explicitly revoked via deleteInvite.
 
         // Trigger the joiner's own observeGroups broadcast fallback so their group list updates
         // without relying on the Postgres Change self-echo (which RLS may block).
